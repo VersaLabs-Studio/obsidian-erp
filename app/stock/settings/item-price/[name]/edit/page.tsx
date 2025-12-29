@@ -116,7 +116,7 @@ function EditItemPriceContent({ priceName }: { priceName: string }) {
   const { data: optionsData } = useItemPriceOptionsQuery();
   const updateMutation = useUpdateItemPriceMutation();
 
-  const price = priceData?.item_price;
+  const price = priceData?.data?.item_price;
   const options = optionsData?.data;
   const priceLists = options?.price_lists || [];
   const customers = options?.customers || [];

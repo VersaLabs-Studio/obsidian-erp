@@ -1,7 +1,10 @@
-/* Pana ERP v1.3 - Premium Fluid Theme with Enhanced Animations */
+/* Pana ERP v3.0 - Premium Fluid Theme with Dark Mode Support */
 /* Font: Plus Jakarta Sans - Modern, Clean, Premium (used by Vercel, Linear) */
 @import "tailwindcss";
 
+/* ============================================================================
+   LIGHT THEME (Default)
+   ============================================================================ */
 @theme inline {
   /* Font Family */
   --font-sans: var(--font-jakarta), system-ui, -apple-system, BlinkMacSystemFont,
@@ -68,6 +71,65 @@
   --shadow-xl: 0 32px 64px -12px rgb(0 0 0 / 0.08);
 }
 
+/* ============================================================================
+   DARK THEME (Applied via .dark class on html)
+   ============================================================================ */
+.dark {
+  /* Core Palette - Inverted for Dark Mode */
+  --color-background: oklch(0.12 0.02 240);
+  --color-foreground: oklch(0.92 0.01 240);
+
+  /* Card & Surface - Slightly elevated from background */
+  --color-card: oklch(0.16 0.02 240);
+  --color-card-foreground: oklch(0.92 0.01 240);
+
+  --color-popover: oklch(0.18 0.02 240);
+  --color-popover-foreground: oklch(0.92 0.01 240);
+
+  /* Primary - Light text on dark for better contrast */
+  --color-primary: oklch(0.92 0.01 240);
+  --color-primary-foreground: oklch(0.12 0.02 240);
+
+  /* Secondary - Darker surface */
+  --color-secondary: oklch(0.2 0.02 240);
+  --color-secondary-foreground: oklch(0.85 0.01 240);
+
+  /* Muted */
+  --color-muted: oklch(0.2 0.02 240);
+  --color-muted-foreground: oklch(0.55 0.02 240);
+
+  /* Accent */
+  --color-accent: oklch(0.22 0.02 240);
+  --color-accent-foreground: oklch(0.92 0.01 240);
+
+  /* Destructive - Same hue, adjusted for dark bg */
+  --color-destructive: oklch(0.55 0.18 25);
+  --color-destructive-foreground: oklch(1 0 0);
+
+  /* Borders - Subtle for dark mode */
+  --color-border: oklch(0.25 0.02 240);
+  --color-input: oklch(0.25 0.02 240);
+  --color-ring: oklch(0.7 0.02 240);
+
+  /* Sidebar - Dark variant */
+  --color-sidebar: oklch(0.14 0.02 240);
+  --color-sidebar-foreground: oklch(0.75 0.02 240);
+  --color-sidebar-primary: oklch(0.92 0.01 240);
+  --color-sidebar-primary-foreground: oklch(0.12 0.02 240);
+  --color-sidebar-accent: oklch(0.2 0.02 240);
+  --color-sidebar-accent-foreground: oklch(0.92 0.01 240);
+  --color-sidebar-border: oklch(0.25 0.02 240 / 0.3);
+
+  /* Shadows - Darker for dark mode */
+  --shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.15);
+  --shadow-sm: 0 4px 6px -1px rgb(0 0 0 / 0.2), 0 2px 4px -2px rgb(0 0 0 / 0.15);
+  --shadow-md: 0 12px 24px -8px rgb(0 0 0 / 0.3),
+    0 4px 8px -4px rgb(0 0 0 / 0.2);
+  --shadow-lg: 0 20px 32px -8px rgb(0 0 0 / 0.4),
+    0 8px 16px -8px rgb(0 0 0 / 0.25);
+  --shadow-xl: 0 32px 64px -12px rgb(0 0 0 / 0.5);
+}
+
 /* Base Styles */
 @layer base {
   html {
@@ -85,13 +147,45 @@
 
 /* Animations & Utilities */
 @layer utilities {
-  /* Scrollbar */
+  /* Scrollbar Hide */
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
   .scrollbar-hide {
     -ms-overflow-style: none;
     scrollbar-width: none;
+  }
+
+  /* Custom Scrollbar - Premium Thin Style */
+  .custom-scrollbar {
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border) transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+    border-radius: 3px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 3px;
+    transition: background 0.2s ease;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: var(--color-muted-foreground);
+  }
+
+  /* Theme Transition - Smooth color transitions when toggling themes */
+  .theme-transition {
+    transition: background-color 0.3s ease, color 0.3s ease,
+      border-color 0.3s ease, box-shadow 0.3s ease;
   }
 
   /* Custom Keyframes */

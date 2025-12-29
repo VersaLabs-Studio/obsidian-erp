@@ -1,5 +1,6 @@
 // app/stock/item/page.tsx
-// Pana ERP v1.3 - Items List Page (Production-Ready Template)
+// Pana ERP v3.0 - Items List Page (Schema-Driven Architecture)
+
 "use client";
 
 import { useState, useMemo } from "react";
@@ -12,14 +13,27 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { Plus, MoreHorizontal, Edit2, Trash2, Eye, Search } from "lucide-react";
+import { Plus, MoreHorizontal, Edit2, Trash2, Eye } from "lucide-react";
 import { useRouter } from "next/navigation";
+
+// v3.0: Import from generated types
+import { Item } from "@/types/doctype-types";
+
+// v3.0: Use generic hooks instead of custom hooks
 import {
-  useItemsQuery,
-  useDeleteItemMutation,
-  useItemOptionsQuery,
-} from "@/hooks/data/useItemsQuery";
-import { Item } from "@/types/item";
+  useFrappeList,
+  useFrappeDelete,
+  useFrappeOptions,
+} from "@/hooks/generic";
+
+// v3.0: Use smart components
+import {
+  StatusBadge,
+  EmptyState,
+  LoadingState,
+  ConfirmDialog,
+} from "@/components/smart";
+
 import { cn } from "@/lib/utils";
 import { ListToolbar } from "@/components/ui/list-toolbar";
 import { useExport } from "@/hooks/useExport";
@@ -37,6 +51,10 @@ interface ItemRowProps {
 }
 
 function ItemRow({ item, index, onView, onEdit, onDelete }: ItemRowProps) {
+  // Safe access to item_name with fallback
+  const displayName = item.item_name || item.item_code || "Unnamed Item";
+  const initials = displayName.substring(0, 2).toUpperCase();
+
   return (
     <div
       className="group relative flex items-center justify-between p-4 mb-2 bg-card hover:bg-white hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-0.5 transition-all duration-300 rounded-2xl cursor-pointer animate-slide-up"
@@ -44,12 +62,12 @@ function ItemRow({ item, index, onView, onEdit, onDelete }: ItemRowProps) {
       onClick={onView}
     >
       <div className="flex items-center gap-4 min-w-0">
-        <div className="h-10 w-10 rounded-full bg-secondary/50 flex items-center justify-center text-xs font-bold text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors">
-          {item.item_name.substring(0, 2).toUpperCase()}
+        <div className="h-10 w-10 rounded-full bg-secondary/50 flex items-center justify-center text-xs font-bold text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors shrink-0">
+          {initials}
         </div>
         <div className="flex flex-col min-w-0">
           <span className="font-bold text-foreground text-sm truncate">
-            {item.item_name}
+            {displayName}
           </span>
           <span className="text-xs text-muted-foreground font-mono">
             {item.item_code}
@@ -62,7 +80,9 @@ function ItemRow({ item, index, onView, onEdit, onDelete }: ItemRowProps) {
           <span className="text-[10px] uppercase font-semibold text-muted-foreground/50">
             Group
           </span>
-          <span className="font-medium text-foreground">{item.item_group}</span>
+          <span className="font-medium text-foreground truncate">
+            {item.item_group}
+          </span>
         </div>
         <div className="flex flex-col items-end w-20">
           <span className="text-[10px] uppercase font-semibold text-muted-foreground/50">
@@ -72,17 +92,9 @@ function ItemRow({ item, index, onView, onEdit, onDelete }: ItemRowProps) {
         </div>
       </div>
 
-      <div className="flex items-center gap-3 pl-4 border-l border-transparent sm:border-border/40">
-        <div
-          className={cn(
-            "px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide",
-            item.disabled
-              ? "bg-destructive/10 text-destructive"
-              : "bg-emerald-500/10 text-emerald-600"
-          )}
-        >
-          {item.disabled ? "Inactive" : "Active"}
-        </div>
+      <div className="flex items-center gap-3 pl-4 border-l border-transparent sm:border-border/40 shrink-0">
+        {/* v3.0: Use StatusBadge smart component */}
+        <StatusBadge status={item.disabled ? "disabled" : "active"} size="sm" />
 
         <div onClick={(e) => e.stopPropagation()}>
           <DropdownMenu>
@@ -122,40 +134,6 @@ function ItemRow({ item, index, onView, onEdit, onDelete }: ItemRowProps) {
 }
 
 // ============================================================================
-// Empty State Component
-// ============================================================================
-
-function EmptyState({ hasFilters }: { hasFilters: boolean }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-20 text-center animate-scale-in">
-      <div className="h-16 w-16 bg-secondary rounded-full flex items-center justify-center mb-4">
-        <Search className="h-6 w-6 text-muted-foreground" />
-      </div>
-      <h3 className="font-semibold text-lg">No Items Found</h3>
-      <p className="text-muted-foreground">
-        {hasFilters
-          ? "Try adjusting your search or filters."
-          : "Get started by creating your first item."}
-      </p>
-    </div>
-  );
-}
-
-// ============================================================================
-// Loading State Component
-// ============================================================================
-
-function LoadingState() {
-  return (
-    <div className="space-y-4">
-      {[1, 2, 3].map((i) => (
-        <div key={i} className="h-20 bg-card/40 rounded-2xl animate-pulse" />
-      ))}
-    </div>
-  );
-}
-
-// ============================================================================
 // Main Page Component
 // ============================================================================
 
@@ -165,15 +143,36 @@ export default function ItemsListPage() {
   const [groupFilter, setGroupFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
 
-  const { data: itemsData, isLoading } = useItemsQuery();
-  const { data: optionsData } = useItemOptionsQuery();
-  const deleteMutation = useDeleteItemMutation();
+  // v3.0: Use generic useFrappeList hook with generated Item type
+  const { data: items = [], isLoading } = useFrappeList<Item>("Item", {
+    fields: [
+      "name",
+      "item_code",
+      "item_name",
+      "item_group",
+      "stock_uom",
+      "brand",
+      "is_stock_item",
+      "disabled",
+      "modified",
+    ],
+    orderBy: { field: "modified", order: "desc" },
+    limit: 100,
+  });
+
+  // v3.0: Use generic useFrappeOptions hook for dropdowns
+  const { data: itemGroupOptions = [] } = useFrappeOptions("Item Group", {
+    limit: 100,
+  });
+
+  // v3.0: Use generic delete mutation
+  const deleteMutation = useFrappeDelete("Item", {
+    successMessage: "Item deleted successfully",
+  });
+
   const { exportData, isExporting } = useExport();
 
-  const items = itemsData?.data?.items || [];
-  const itemGroups = optionsData?.data?.item_groups || [];
-
-  // Filter items based on search and filters
+  // Filter items based on search and filters (client-side for responsiveness)
   const filteredItems = useMemo(() => {
     let result = items;
 
@@ -182,7 +181,7 @@ export default function ItemsListPage() {
       const q = searchQuery.toLowerCase();
       result = result.filter(
         (i) =>
-          i.item_name.toLowerCase().includes(q) ||
+          i.item_name?.toLowerCase().includes(q) ||
           i.item_code.toLowerCase().includes(q)
       );
     }
@@ -208,7 +207,7 @@ export default function ItemsListPage() {
   const handleExport = async (format: "csv" | "pdf") => {
     const exportItems = filteredItems.map((item) => ({
       item_code: item.item_code,
-      item_name: item.item_name,
+      item_name: item.item_name || "",
       item_group: item.item_group,
       stock_uom: item.stock_uom,
       status: item.disabled ? "Inactive" : "Active",
@@ -223,18 +222,43 @@ export default function ItemsListPage() {
     });
   };
 
-  // Handle delete
-  const handleDelete = (item: Item) => {
-    if (confirm(`Are you sure you want to delete "${item.item_name}"?`)) {
-      deleteMutation.mutate(item.name);
+  // v3.0: State for delete confirmation dialog
+  const [deleteTarget, setDeleteTarget] = useState<Item | null>(null);
+
+  // Handle delete with dialog
+  const handleDeleteConfirm = async () => {
+    if (deleteTarget) {
+      try {
+        await deleteMutation.mutateAsync(deleteTarget.name);
+      } catch (error) {
+        console.error("Failed to delete item:", error);
+      }
     }
+    setDeleteTarget(null);
   };
 
   const hasFilters =
     Boolean(searchQuery) || groupFilter !== "all" || statusFilter !== "all";
 
+  // Build item groups from options
+  const itemGroups = itemGroupOptions.map((opt) => opt.value);
+
   return (
     <div className="space-y-6">
+      {/* v3.0: Delete Confirmation Dialog */}
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title="Delete Item"
+        description={`Are you sure you want to delete "${
+          deleteTarget?.item_name || deleteTarget?.item_code
+        }"? This action cannot be undone.`}
+        confirmText="Delete"
+        variant="destructive"
+        onConfirm={handleDeleteConfirm}
+        loading={deleteMutation.isPending}
+      />
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-slide-up">
         <div>
@@ -286,9 +310,29 @@ export default function ItemsListPage() {
       {/* Items List */}
       <div className="min-h-[400px]">
         {isLoading ? (
-          <LoadingState />
+          // v3.0: Use LoadingState smart component
+          <LoadingState rows={5} variant="list" />
         ) : filteredItems.length === 0 ? (
-          <EmptyState hasFilters={hasFilters} />
+          // v3.0: Use EmptyState smart component
+          <EmptyState
+            title="No Items Found"
+            description={
+              hasFilters
+                ? "Try adjusting your search or filters."
+                : "Get started by creating your first item."
+            }
+            variant={hasFilters ? "no-results" : "no-data"}
+            action={
+              !hasFilters && (
+                <Button
+                  onClick={() => router.push("/stock/item/new")}
+                  className="rounded-full"
+                >
+                  <Plus className="h-4 w-4 mr-2" /> Create First Item
+                </Button>
+              )
+            }
+          />
         ) : (
           <div className="pb-10">
             {filteredItems.map((item, idx) => (
@@ -297,16 +341,14 @@ export default function ItemsListPage() {
                 item={item}
                 index={idx}
                 onView={() =>
-                  router.push(
-                    `/stock/item/${encodeURIComponent(item.item_name)}`
-                  )
+                  router.push(`/stock/item/${encodeURIComponent(item.name)}`)
                 }
                 onEdit={() =>
                   router.push(
-                    `/stock/item/${encodeURIComponent(item.item_name)}/edit`
+                    `/stock/item/${encodeURIComponent(item.name)}/edit`
                   )
                 }
-                onDelete={() => handleDelete(item)}
+                onDelete={() => setDeleteTarget(item)}
               />
             ))}
           </div>

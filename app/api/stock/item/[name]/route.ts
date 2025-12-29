@@ -1,42 +1,29 @@
-// api/stock/item/[name]/route.ts
-import { NextRequest, NextResponse } from 'next/server';
-import { frappeClient } from '@/lib/frappe-client';
-// import { handleApiRequest, withEndpointLogging } from '@/lib/api-template';
-// import { Item } from '@/types/item';
+// app/api/stock/item/[name]/route.ts
+// Pana ERP v3.0 - Single Item API Routes (Factory Pattern)
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ name: string }> }
-) {
-  try {
-    // Await the params before using its properties
-    const { name } = await params;
-    const decodedName = decodeURIComponent(name);
-    console.log("API: Looking for item with name:", decodedName);
-    
-    // Fetch item by item_name
-    const items = await frappeClient.db.getDocList('Item', {
-      fields: ['name', 'item_code', 'item_name', 'stock_uom', 'item_group', 'brand', 'is_stock_item', 'is_fixed_asset', 'disabled', 'modified'],
-      filters: [['item_name', '=', decodedName]],
-      limit: 1,
-    });
+import {
+  createGetHandler,
+  createUpdateHandler,
+  createDeleteHandler,
+} from "@/lib/api-factory";
+import { ItemUpdateSchema } from "@/lib/schemas/doctype-schemas";
 
-    console.log("API: Found items:", items);
+/**
+ * GET /api/stock/item/[name]
+ * Fetch a single item by name/ID
+ */
+export const GET = createGetHandler("Item");
 
-    if (items.length === 0) {
-      return NextResponse.json(
-        { error: `Item with name ${decodedName} not found` },
-        { status: 404 }
-      );
-    }
+/**
+ * PUT /api/stock/item/[name]
+ * Update an item
+ *
+ * Body: ItemUpdateRequest (validated with Zod)
+ */
+export const PUT = createUpdateHandler("Item", ItemUpdateSchema);
 
-    // Return the expected format
-    return NextResponse.json({ item: items[0] });
-  } catch (error) {
-    console.error("API Error:", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
-    );
-  }
-}
+/**
+ * DELETE /api/stock/item/[name]
+ * Delete an item
+ */
+export const DELETE = createDeleteHandler("Item");

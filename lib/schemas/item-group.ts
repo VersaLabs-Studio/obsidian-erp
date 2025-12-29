@@ -5,7 +5,7 @@ import { ItemGroup } from "@/types/item-group";
 export const itemGroupFormSchema = z.object({
   item_group_name: z.string().min(1, "Item group name is required"),
   parent_item_group: z.string().min(1, "Parent item group is required"),
-  is_group: z.boolean().default(false),
+  is_group: z.boolean(),
   default_price_list: z.string().optional(),
   default_warehouse: z.string().optional(),
   default_buying_cost_center: z.string().optional(),
@@ -35,7 +35,9 @@ export const defaultItemGroupFormValues: ItemGroupFormData = {
 };
 
 // Convert form (boolean) to Frappe API (0/1)
-export function formToFrappe(data: ItemGroupFormData): Record<string, string | number> {
+export function formToFrappe(
+  data: ItemGroupFormData
+): Record<string, string | number> {
   return {
     ...data,
     is_group: data.is_group ? 1 : 0,

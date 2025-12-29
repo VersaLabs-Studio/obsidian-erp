@@ -23,7 +23,7 @@ interface AccountingOptions {
     account_type: string;
     root_type: string;
   }>;
-  expenseTypes: Array<{ name: string; description: string }>;
+  expenseTypes?: Array<{ name: string; description: string }>; // Optional - Expense Claim Type may not be available
   paymentMethods: Array<{ name: string; mode_of_payment: string }>;
 }
 
@@ -57,7 +57,15 @@ export async function GET(request: NextRequest) {
       // Fetch items
       const items = await frappeClient.call.get("frappe.client.get_list", {
         doctype: "Item",
-        fields: ["name", "item_code", "item_name", "description", "stock_uom", "standard_rate", "is_stock_item"],
+        fields: [
+          "name",
+          "item_code",
+          "item_name",
+          "description",
+          "stock_uom",
+          "standard_rate",
+          "is_stock_item",
+        ],
         filters: [["disabled", "=", 0]],
         limit: 1000,
       });
@@ -84,59 +92,69 @@ export async function GET(request: NextRequest) {
       // });
 
       // Fetch payment methods
-      const paymentMethods = await frappeClient.call.get("frappe.client.get_list", {
-        doctype: "Mode of Payment",
-        fields: ["name", "mode_of_payment"],
-        limit: 100,
-      });
+      const paymentMethods = await frappeClient.call.get(
+        "frappe.client.get_list",
+        {
+          doctype: "Mode of Payment",
+          fields: ["name", "mode_of_payment"],
+          limit: 100,
+        }
+      );
 
       // Process the data
-      const processedCompanies = companies.message?.map((company: any) => ({
-        name: company.name,
-        company_name: company.company_name,
-      })) || [];
+      const processedCompanies =
+        companies.message?.map((company: any) => ({
+          name: company.name,
+          company_name: company.company_name,
+        })) || [];
 
-      const processedSuppliers = suppliers.message?.map((supplier: any) => ({
-        name: supplier.name,
-        supplier_name: supplier.supplier_name,
-      })) || [];
+      const processedSuppliers =
+        suppliers.message?.map((supplier: any) => ({
+          name: supplier.name,
+          supplier_name: supplier.supplier_name,
+        })) || [];
 
-      const processedCustomers = customers.message?.map((customer: any) => ({
-        name: customer.name,
-        customer_name: customer.customer_name,
-      })) || [];
+      const processedCustomers =
+        customers.message?.map((customer: any) => ({
+          name: customer.name,
+          customer_name: customer.customer_name,
+        })) || [];
 
-      const processedItems = items.message?.map((item: any) => ({
-        name: item.name,
-        item_code: item.item_code,
-        item_name: item.item_name,
-        description: item.description,
-        stock_uom: item.stock_uom,
-        standard_rate: item.standard_rate,
-        is_stock_item: item.is_stock_item,
-      })) || [];
+      const processedItems =
+        items.message?.map((item: any) => ({
+          name: item.name,
+          item_code: item.item_code,
+          item_name: item.item_name,
+          description: item.description,
+          stock_uom: item.stock_uom,
+          standard_rate: item.standard_rate,
+          is_stock_item: item.is_stock_item,
+        })) || [];
 
-      const processedWarehouses = warehouses.message?.map((warehouse: any) => ({
-        name: warehouse.name,
-        warehouse_name: warehouse.warehouse_name,
-      })) || [];
+      const processedWarehouses =
+        warehouses.message?.map((warehouse: any) => ({
+          name: warehouse.name,
+          warehouse_name: warehouse.warehouse_name,
+        })) || [];
 
-      const processedAccounts = accounts.message?.map((account: any) => ({
-        name: account.name,
-        account_name: account.account_name,
-        account_type: account.account_type,
-        root_type: account.root_type,
-      })) || [];
+      const processedAccounts =
+        accounts.message?.map((account: any) => ({
+          name: account.name,
+          account_name: account.account_name,
+          account_type: account.account_type,
+          root_type: account.root_type,
+        })) || [];
 
       // const processedExpenseTypes = expenseTypes.message?.map((type: any) => ({
       //   name: type.name,
       //   description: type.description,
       // })) || [];
 
-      const processedPaymentMethods = paymentMethods.message?.map((method: any) => ({
-        name: method.name,
-        mode_of_payment: method.mode_of_payment,
-      })) || [];
+      const processedPaymentMethods =
+        paymentMethods.message?.map((method: any) => ({
+          name: method.name,
+          mode_of_payment: method.mode_of_payment,
+        })) || [];
 
       const options: AccountingOptions = {
         companies: processedCompanies,

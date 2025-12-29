@@ -1,33 +1,26 @@
 // app/api/stock/settings/item-price/[name]/route.ts
-// Pana ERP - Item Price Single Item API Route
+// Pana ERP v3.0 - Single Item Price API Routes (Factory Pattern)
 
-import { NextRequest } from "next/server";
-import { frappeClient } from "@/lib/frappe-client";
-import { handleApiRequest, withEndpointLogging } from "@/lib/api-template";
-import { ItemPrice } from "@/types/item-price";
+import {
+  createGetHandler,
+  createUpdateHandler,
+  createDeleteHandler,
+} from "@/lib/api-factory";
 
-// GET - Fetch single item price by name
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ name: string }> }
-) {
-  return handleApiRequest<{ item_price: ItemPrice }>(
-    withEndpointLogging("/api/stock/settings/item-price/[name] - GET")(
-      async () => {
-        const { name } = await params;
-        const decodedName = decodeURIComponent(name);
+/**
+ * GET /api/stock/settings/item-price/[name]
+ * Fetch a single item price by name
+ */
+export const GET = createGetHandler("Item Price");
 
-        const item_price = await frappeClient.db.getDoc<ItemPrice>(
-          "Item Price",
-          decodedName
-        );
+/**
+ * PUT /api/stock/settings/item-price/[name]
+ * Update an item price
+ */
+export const PUT = createUpdateHandler("Item Price");
 
-        if (!item_price) {
-          throw new Error(`Item Price "${decodedName}" not found`);
-        }
-
-        return { item_price: item_price as ItemPrice };
-      }
-    )
-  );
-}
+/**
+ * DELETE /api/stock/settings/item-price/[name]
+ * Delete an item price
+ */
+export const DELETE = createDeleteHandler("Item Price");

@@ -1,23 +1,26 @@
 // app/api/stock/settings/item-group/[name]/route.ts
-import { NextRequest } from 'next/server';
-import { frappeClient } from '@/lib/frappe-client';
-import { handleApiRequest, withEndpointLogging } from '@/lib/api-template';
-import { ItemGroup } from '@/types/item-group';
+// Pana ERP v3.0 - Single Item Group API Routes (Factory Pattern)
 
-const DOCTYPE = 'Item Group';
+import {
+  createGetHandler,
+  createUpdateHandler,
+  createDeleteHandler,
+} from "@/lib/api-factory";
 
-// GET - Fetch single item group
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { name: string } }
-) {
-  return handleApiRequest<{ item_group: ItemGroup }>(
-    withEndpointLogging(`/api/stock/settings/item-group/${params.name} - GET`)(async () => {
-      const name = decodeURIComponent(params.name);
-      
-      const doc = await frappeClient.db.getDoc<ItemGroup>(DOCTYPE, name);
-      
-      return { item_group: doc as ItemGroup };
-    })
-  );
-}
+/**
+ * GET /api/stock/settings/item-group/[name]
+ * Fetch a single item group by name
+ */
+export const GET = createGetHandler("Item Group");
+
+/**
+ * PUT /api/stock/settings/item-group/[name]
+ * Update an item group
+ */
+export const PUT = createUpdateHandler("Item Group");
+
+/**
+ * DELETE /api/stock/settings/item-group/[name]
+ * Delete an item group
+ */
+export const DELETE = createDeleteHandler("Item Group");

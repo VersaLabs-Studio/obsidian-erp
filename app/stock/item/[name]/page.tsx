@@ -1,12 +1,10 @@
 // app/stock/item/[name]/page.tsx
-// Pana ERP v1.3 - Item Detail Page (Production-Ready Template)
+// Pana ERP v3.0 - Item Detail Page (Schema-Driven Architecture)
+
 "use client";
 
+import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import {
-  useItemQuery,
-  useDeleteItemMutation,
-} from "@/hooks/data/useItemsQuery";
 import { Button } from "@/components/ui/button";
 import {
   Edit2,
@@ -27,7 +25,23 @@ import {
   DropdownMenuSeparator,
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
-import { PageHeader } from "@/components/ui/page-header";
+
+// v3.0: Import from generated types
+import { Item } from "@/types/doctype-types";
+
+// v3.0: Use generic hooks
+import { useFrappeDoc, useFrappeDelete } from "@/hooks/generic";
+
+// v3.0: Use smart components
+import { PageHeader } from "@/components/smart/page-header";
+import {
+  StatusBadge,
+  LoadingState,
+  ConfirmDialog,
+  PrintLabelDialog,
+} from "@/components/smart";
+
+// Existing UI components
 import { InfoCard, DataPoint, StatCard } from "@/components/ui/info-card";
 import { useExport } from "@/hooks/useExport";
 import { cn } from "@/lib/utils";
@@ -57,18 +71,29 @@ export default function ItemDetailPage() {
   const params = useParams<{ name: string }>();
   const itemName = decodeURIComponent(params.name);
 
-  const { data: itemData, isLoading } = useItemQuery(itemName);
-  const deleteMutation = useDeleteItemMutation();
-  const { exportData, isExporting } = useExport();
+  // v3.0: Dialog states
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showPrintDialog, setShowPrintDialog] = useState(false);
 
-  const item = itemData?.item;
+  // v3.0: Use generic useFrappeDoc hook with generated Item type
+  const { data: item, isLoading } = useFrappeDoc<Item>("Item", itemName);
+
+  // v3.0: Use generic delete mutation
+  const deleteMutation = useFrappeDelete("Item", {
+    successMessage: "Item deleted successfully",
+    onSuccess: () => {
+      router.push("/stock/item");
+    },
+  });
+
+  const { exportData, isExporting } = useExport();
 
   // Handle export
   const handleExport = async (format: "csv" | "pdf") => {
     if (!item) return;
     const exportItem = {
       item_code: item.item_code,
-      item_name: item.item_name,
+      item_name: item.item_name || "",
       item_group: item.item_group,
       stock_uom: item.stock_uom,
       brand: item.brand || "",
@@ -96,15 +121,12 @@ export default function ItemDetailPage() {
     );
   };
 
-  // Handle delete
-  const handleDelete = async () => {
-    if (confirm(`Are you sure you want to delete "${item?.item_name}"?`)) {
-      try {
-        await deleteMutation.mutateAsync(item?.name || itemName);
-        router.push("/stock/item");
-      } catch (error) {
-        console.error("Failed to delete item:", error);
-      }
+  // v3.0: Handle delete with dialog
+  const handleDeleteConfirm = async () => {
+    try {
+      await deleteMutation.mutateAsync(item?.name || itemName);
+    } catch (error) {
+      console.error("Failed to delete item:", error);
     }
   };
 
@@ -112,13 +134,41 @@ export default function ItemDetailPage() {
     return <LoadingSkeleton />;
   }
 
+  // Safe access to item_name with fallback
+  const displayName = item.item_name || item.item_code;
+
   return (
     <div className="max-w-6xl mx-auto space-y-8 pb-20">
-      {/* Header */}
+      {/* v3.0: Delete Confirmation Dialog */}
+      <ConfirmDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        title="Delete Item"
+        description={`Are you sure you want to delete "${displayName}"? This action cannot be undone.`}
+        confirmText="Delete"
+        variant="destructive"
+        onConfirm={handleDeleteConfirm}
+        loading={deleteMutation.isPending}
+      />
+
+      {/* v3.0: Print Label Dialog */}
+      <PrintLabelDialog
+        open={showPrintDialog}
+        onOpenChange={setShowPrintDialog}
+        data={{
+          code: item.item_code,
+          name: displayName,
+          price: item.standard_rate,
+          currency: "ETB",
+          additionalInfo: item.item_group,
+        }}
+      />
+
+      {/* v3.0: Use refactored PageHeader from smart components */}
       <PageHeader
         backUrl="/stock/item"
         label="Item Details"
-        title={item.item_name}
+        title={displayName}
         status={{
           label: item.disabled ? "Inactive" : "Active",
           variant: item.disabled ? "destructive" : "success",
@@ -144,12 +194,16 @@ export default function ItemDetailPage() {
             <DropdownMenuItem
               className="rounded-xl"
               onClick={() =>
-                router.push(`/stock/item/${encodeURIComponent(itemName)}/edit`)
+                router.push(`/stock/item/${encodeURIComponent(item.name)}/edit`)
               }
             >
               <Edit2 className="mr-2 h-4 w-4" /> Edit Item
             </DropdownMenuItem>
-            <DropdownMenuItem className="rounded-xl">
+            {/* v3.0: Print Label now works */}
+            <DropdownMenuItem
+              className="rounded-xl"
+              onClick={() => setShowPrintDialog(true)}
+            >
               <Printer className="mr-2 h-4 w-4" /> Print Label
             </DropdownMenuItem>
             <DropdownMenuSeparator className="bg-border/50" />
@@ -171,9 +225,10 @@ export default function ItemDetailPage() {
               <Download className="mr-2 h-4 w-4" /> Export PDF
             </DropdownMenuItem>
             <DropdownMenuSeparator className="bg-border/50" />
+            {/* v3.0: Delete now uses dialog */}
             <DropdownMenuItem
               className="rounded-xl text-destructive focus:bg-destructive/10"
-              onClick={handleDelete}
+              onClick={() => setShowDeleteDialog(true)}
             >
               <Trash2 className="mr-2 h-4 w-4" /> Delete
             </DropdownMenuItem>
@@ -194,7 +249,7 @@ export default function ItemDetailPage() {
             delay={100}
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-8 gap-x-12">
-              <DataPoint label="Item Name" value={item.item_name} />
+              <DataPoint label="Item Name" value={displayName} />
               <DataPoint label="Item Code" value={item.item_code} mono />
               <DataPoint label="Group" value={item.item_group} />
               <DataPoint label="Brand" value={item.brand} />
@@ -273,9 +328,9 @@ export default function ItemDetailPage() {
               </div>
               <div className="h-[1px] bg-border/50" />
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Current Stock</span>
+                <span className="text-sm font-medium">Standard Rate</span>
                 <span className="font-mono text-lg font-bold text-primary">
-                  {item.qty?.toLocaleString() || "0"}
+                  {item.standard_rate?.toFixed(2) || "0.00"}
                 </span>
               </div>
             </div>

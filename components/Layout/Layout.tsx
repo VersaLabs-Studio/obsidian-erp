@@ -1,5 +1,5 @@
 // components/Layout/Layout.tsx
-// Pana ERP v1.3 - Premium Floating Layout with Collapsible Navigation
+// Pana ERP v3.0 - Premium Floating Layout with Dark Mode Support
 "use client";
 
 import { Button } from "@/components/ui/button";
@@ -51,6 +51,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { ThemeToggle } from "@/components/smart/theme-toggle";
 
 // Real Navigation Structure with Sub-modules
 const navigation = [
@@ -141,7 +142,11 @@ const navigation = [
       { title: "Opportunities", href: "/crm/opportunities", icon: TrendingUp },
       { title: "Quotations", href: "/crm/quotations", icon: FileText },
       { title: "Sales Orders", href: "/crm/sales-orders", icon: ShoppingCart },
-      { title: "Purchase Orders", href: "/crm/purchase-orders", icon: ShoppingCart },
+      {
+        title: "Purchase Orders",
+        href: "/crm/purchase-orders",
+        icon: ShoppingCart,
+      },
       { title: "Activities", href: "/crm/activities", icon: ClipboardList },
       {
         title: "Communications",
@@ -515,6 +520,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
           {/* Right Actions */}
           <div className="flex items-center gap-2">
+            {/* Theme Toggle */}
+            <ThemeToggle />
             <Button
               size="icon"
               variant="ghost"

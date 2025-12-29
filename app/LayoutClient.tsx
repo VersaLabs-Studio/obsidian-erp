@@ -8,6 +8,7 @@ import Layout from "@/components/Layout/Layout";
 import { Toaster } from "sonner";
 import { getQueryClient } from "@/lib/query-client";
 import { ToastProvider } from "@/components/ui/toast";
+import { ThemeProvider } from "@/lib/theme-context";
 
 function LoadingFallback() {
   return (
@@ -27,13 +28,11 @@ export default function LayoutClient({
 }) {
   const queryClient = getQueryClient();
   return (
-    <>
+    <ThemeProvider defaultTheme="system">
       <QueryClientProvider client={queryClient}>
         <ToastProvider>
-           <Suspense fallback={<LoadingFallback />}>
-            <Layout>
-              {children}
-            </Layout>
+          <Suspense fallback={<LoadingFallback />}>
+            <Layout>{children}</Layout>
           </Suspense>
         </ToastProvider>
         <ReactQueryDevtools initialIsOpen={false} />
@@ -58,6 +57,6 @@ export default function LayoutClient({
           },
         }}
       />
-    </>
+    </ThemeProvider>
   );
 }

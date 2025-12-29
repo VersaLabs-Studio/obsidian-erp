@@ -1,32 +1,31 @@
 // app/stock/item/[name]/edit/page.tsx
-// Pana ERP v1.3 - Edit Item Page (Production-Ready Template)
+// Pana ERP v3.0 - Edit Item Page (Schema-Driven Architecture)
+
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Form,
   FormControl,
   FormField,
   FormItem,
+  FormLabel,
   FormMessage,
 } from "@/components/ui/form";
 import {
-  useItemQuery,
-  useUpdateItemMutation,
-  useDeleteItemMutation,
-  useItemOptionsQuery,
-} from "@/hooks/data/useItemsQuery";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import {
   Save,
   Package,
@@ -37,28 +36,74 @@ import {
   MoreVertical,
 } from "lucide-react";
 import { useEffect, useMemo } from "react";
+
+// v3.0: Import from generated types
+import { Item, ItemUpdateRequest } from "@/types/doctype-types";
+
+// v3.0: Use generic hooks
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
-import { PageHeader } from "@/components/ui/page-header";
+  useFrappeDoc,
+  useFrappeUpdate,
+  useFrappeDelete,
+} from "@/hooks/generic";
+
+// v3.0: Use smart components
+import { PageHeader } from "@/components/smart/page-header";
+import { FrappeSelect } from "@/components/smart/frappe-select";
+import { DataField } from "@/components/smart/data-field";
+
+// Existing UI components
 import { InfoCard } from "@/components/ui/info-card";
-import {
-  DataField,
-  PremiumInput,
-  ToggleCard,
-} from "@/components/ui/form-field";
-import {
-  itemFormSchema,
-  ItemFormData,
-  formToFrappe,
-  frappeToForm,
-  defaultItemFormValues,
-} from "@/lib/schemas/item";
 import { cn } from "@/lib/utils";
+
+// ============================================================================
+// Form Schema
+// ============================================================================
+
+const itemEditFormSchema = z.object({
+  item_code: z.string(),
+  item_name: z.string().min(1, "Item name is required"),
+  item_group: z.string().min(1, "Item group is required"),
+  stock_uom: z.string().min(1, "Unit of measure is required"),
+  description: z.string().optional(),
+  brand: z.string().optional(),
+  is_stock_item: z.boolean().default(true),
+  is_fixed_asset: z.boolean().default(false),
+  disabled: z.boolean().default(false),
+});
+
+type ItemEditFormData = z.infer<typeof itemEditFormSchema>;
+
+// ============================================================================
+// Utility Functions
+// ============================================================================
+
+function frappeToForm(item: Item): ItemEditFormData {
+  return {
+    item_code: item.item_code,
+    item_name: item.item_name || "",
+    item_group: item.item_group,
+    stock_uom: item.stock_uom,
+    description: item.description || "",
+    brand: item.brand || "",
+    is_stock_item: item.is_stock_item === 1,
+    is_fixed_asset: item.is_fixed_asset === 1,
+    disabled: item.disabled === 1,
+  };
+}
+
+function formToFrappe(data: ItemEditFormData): ItemUpdateRequest {
+  return {
+    item_name: data.item_name,
+    item_group: data.item_group,
+    stock_uom: data.stock_uom,
+    description: data.description,
+    brand: data.brand,
+    is_stock_item: data.is_stock_item ? 1 : 0,
+    is_fixed_asset: data.is_fixed_asset ? 1 : 0,
+    disabled: data.disabled ? 1 : 0,
+  };
+}
 
 // ============================================================================
 // Loading Skeleton
@@ -88,18 +133,41 @@ export default function EditItemPage() {
   const params = useParams<{ name: string }>();
   const itemName = decodeURIComponent(params.name);
 
-  const { data: itemData, isLoading } = useItemQuery(itemName);
-  const { data: optionsData } = useItemOptionsQuery();
-  const updateMutation = useUpdateItemMutation();
-  const deleteMutation = useDeleteItemMutation();
+  // v3.0: Use generic useFrappeDoc hook with generated Item type
+  const { data: item, isLoading } = useFrappeDoc<Item>("Item", itemName);
 
-  const item = itemData?.item;
-  const itemGroups = optionsData?.data?.item_groups || [];
-  const uoms = optionsData?.data?.stock_uoms || [];
+  // v3.0: Use generic update mutation
+  const updateMutation = useFrappeUpdate<
+    { data: Item },
+    { name: string; data: ItemUpdateRequest }
+  >("Item", {
+    successMessage: "Item updated successfully",
+    onSuccess: () => {
+      router.push(`/stock/item/${encodeURIComponent(itemName)}`);
+    },
+  });
 
-  const form = useForm<ItemFormData>({
-    resolver: zodResolver(itemFormSchema),
-    defaultValues: defaultItemFormValues,
+  // v3.0: Use generic delete mutation
+  const deleteMutation = useFrappeDelete("Item", {
+    successMessage: "Item deleted successfully",
+    onSuccess: () => {
+      router.push("/stock/item");
+    },
+  });
+
+  const form = useForm<ItemEditFormData>({
+    resolver: zodResolver(itemEditFormSchema),
+    defaultValues: {
+      item_code: "",
+      item_name: "",
+      item_group: "",
+      stock_uom: "",
+      description: "",
+      brand: "",
+      is_stock_item: true,
+      is_fixed_asset: false,
+      disabled: false,
+    },
   });
 
   // Initialize form with item data
@@ -119,14 +187,13 @@ export default function EditItemPage() {
   }, [item, watchedValues]);
 
   // Submit handler
-  const onSubmit = async (data: ItemFormData) => {
+  const onSubmit = async (data: ItemEditFormData) => {
     try {
       const frappeData = formToFrappe(data);
       await updateMutation.mutateAsync({
         name: itemName,
-        data: frappeData as any,
+        data: frappeData,
       });
-      router.push(`/stock/item/${encodeURIComponent(itemName)}`);
     } catch (error) {
       console.error("Failed to update item:", error);
     }
@@ -134,10 +201,10 @@ export default function EditItemPage() {
 
   // Delete handler
   const handleDelete = async () => {
-    if (confirm(`Are you sure you want to delete "${item?.item_name}"?`)) {
+    const displayName = item?.item_name || item?.item_code || itemName;
+    if (confirm(`Are you sure you want to delete "${displayName}"?`)) {
       try {
         await deleteMutation.mutateAsync(item?.name || itemName);
-        router.push("/stock/item");
       } catch (error) {
         console.error("Failed to delete item:", error);
       }
@@ -148,13 +215,15 @@ export default function EditItemPage() {
     return <LoadingSkeleton />;
   }
 
+  const displayName = item.item_name || item.item_code;
+
   return (
     <div className="max-w-6xl mx-auto space-y-8 pb-20">
-      {/* Header */}
+      {/* v3.0: Use refactored PageHeader from smart components */}
       <PageHeader
-        backUrl={`/stock/item/${encodeURIComponent(itemName)}`}
+        backUrl={`/stock/item/${encodeURIComponent(item.name)}`}
         label="Editing"
-        title={item.item_name}
+        title={displayName}
         status={{
           label: item.disabled ? "Inactive" : "Active",
           variant: item.disabled ? "destructive" : "success",
@@ -207,6 +276,7 @@ export default function EditItemPage() {
                 delay={100}
               >
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  {/* Item Name */}
                   <FormField
                     control={form.control}
                     name="item_name"
@@ -214,45 +284,59 @@ export default function EditItemPage() {
                       <FormItem className="sm:col-span-2">
                         <DataField
                           label="Item Name"
+                          name="item_name"
                           required
                           error={form.formState.errors.item_name?.message}
                         >
-                          <PremiumInput
+                          <Input
                             {...field}
                             placeholder="Enter item name..."
+                            className="h-12 rounded-xl bg-secondary/30 hover:bg-secondary/50 focus:bg-white border-0"
                           />
                         </DataField>
                       </FormItem>
                     )}
                   />
 
+                  {/* Item Code (disabled) */}
                   <FormField
                     control={form.control}
                     name="item_code"
                     render={({ field }) => (
                       <FormItem>
-                        <DataField label="Item Code" hint="Cannot be changed">
-                          <PremiumInput {...field} disabled mono />
-                        </DataField>
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="brand"
-                    render={({ field }) => (
-                      <FormItem>
-                        <DataField label="Brand (Optional)">
-                          <PremiumInput
+                        <DataField
+                          label="Item Code"
+                          name="item_code"
+                          helperText="Cannot be changed"
+                        >
+                          <Input
                             {...field}
-                            placeholder="Brand name..."
+                            disabled
+                            className="h-12 rounded-xl bg-muted/50 border-0 font-mono"
                           />
                         </DataField>
                       </FormItem>
                     )}
                   />
 
+                  {/* Brand */}
+                  <FormField
+                    control={form.control}
+                    name="brand"
+                    render={({ field }) => (
+                      <FormItem>
+                        <DataField label="Brand (Optional)" name="brand">
+                          <Input
+                            {...field}
+                            placeholder="Brand name..."
+                            className="h-12 rounded-xl bg-secondary/30 hover:bg-secondary/50 focus:bg-white border-0"
+                          />
+                        </DataField>
+                      </FormItem>
+                    )}
+                  />
+
+                  {/* v3.0: Use FrappeSelect for Item Group */}
                   <FormField
                     control={form.control}
                     name="item_group"
@@ -260,36 +344,24 @@ export default function EditItemPage() {
                       <FormItem>
                         <DataField
                           label="Item Group"
+                          name="item_group"
                           required
                           error={form.formState.errors.item_group?.message}
                         >
-                          <Select
-                            onValueChange={field.onChange}
+                          <FrappeSelect
+                            doctype="Item Group"
                             value={field.value}
-                          >
-                            <FormControl>
-                              <SelectTrigger className="h-12 rounded-xl bg-secondary/30 hover:bg-secondary/50 focus:bg-white border-0 shadow-none">
-                                <SelectValue />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent className="rounded-2xl shadow-xl bg-white/95 backdrop-blur-xl border-0">
-                              {itemGroups.map((g) => (
-                                <SelectItem
-                                  key={g}
-                                  value={g}
-                                  className="rounded-xl"
-                                >
-                                  {g}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                            onChange={field.onChange}
+                            placeholder="Select group..."
+                            className="h-12 rounded-xl bg-secondary/30 hover:bg-secondary/50 focus:bg-white border-0"
+                          />
                         </DataField>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
 
+                  {/* v3.0: Use FrappeSelect for UOM */}
                   <FormField
                     control={form.control}
                     name="stock_uom"
@@ -297,30 +369,17 @@ export default function EditItemPage() {
                       <FormItem>
                         <DataField
                           label="Unit of Measure"
+                          name="stock_uom"
                           required
                           error={form.formState.errors.stock_uom?.message}
                         >
-                          <Select
-                            onValueChange={field.onChange}
+                          <FrappeSelect
+                            doctype="UOM"
                             value={field.value}
-                          >
-                            <FormControl>
-                              <SelectTrigger className="h-12 rounded-xl bg-secondary/30 hover:bg-secondary/50 focus:bg-white border-0 shadow-none">
-                                <SelectValue />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent className="rounded-2xl shadow-xl bg-white/95 backdrop-blur-xl border-0">
-                              {uoms.map((u) => (
-                                <SelectItem
-                                  key={u}
-                                  value={u}
-                                  className="rounded-xl"
-                                >
-                                  {u}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                            onChange={field.onChange}
+                            placeholder="Select UOM..."
+                            className="h-12 rounded-xl bg-secondary/30 hover:bg-secondary/50 focus:bg-white border-0"
+                          />
                         </DataField>
                         <FormMessage />
                       </FormItem>
@@ -369,12 +428,22 @@ export default function EditItemPage() {
                     control={form.control}
                     name="is_stock_item"
                     render={({ field }) => (
-                      <ToggleCard
-                        checked={field.value}
-                        onChange={field.onChange}
-                        title="Stock Item"
-                        description="Track inventory"
-                      />
+                      <FormItem className="flex items-center space-x-3 space-y-0 p-4 bg-secondary/30 rounded-xl hover:bg-secondary/50 transition-colors">
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                        <div className="space-y-1 leading-none">
+                          <FormLabel className="font-medium">
+                            Stock Item
+                          </FormLabel>
+                          <p className="text-xs text-muted-foreground">
+                            Track inventory
+                          </p>
+                        </div>
+                      </FormItem>
                     )}
                   />
 
@@ -382,12 +451,22 @@ export default function EditItemPage() {
                     control={form.control}
                     name="is_fixed_asset"
                     render={({ field }) => (
-                      <ToggleCard
-                        checked={field.value}
-                        onChange={field.onChange}
-                        title="Fixed Asset"
-                        description="Depreciate"
-                      />
+                      <FormItem className="flex items-center space-x-3 space-y-0 p-4 bg-secondary/30 rounded-xl hover:bg-secondary/50 transition-colors">
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                        <div className="space-y-1 leading-none">
+                          <FormLabel className="font-medium">
+                            Fixed Asset
+                          </FormLabel>
+                          <p className="text-xs text-muted-foreground">
+                            Depreciate
+                          </p>
+                        </div>
+                      </FormItem>
                     )}
                   />
 
@@ -395,13 +474,22 @@ export default function EditItemPage() {
                     control={form.control}
                     name="disabled"
                     render={({ field }) => (
-                      <ToggleCard
-                        checked={field.value}
-                        onChange={field.onChange}
-                        title="Disabled"
-                        description="Inactive"
-                        variant="destructive"
-                      />
+                      <FormItem className="flex items-center space-x-3 space-y-0 p-4 bg-red-50/50 rounded-xl hover:bg-red-50 transition-colors">
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                        <div className="space-y-1 leading-none">
+                          <FormLabel className="font-medium text-destructive">
+                            Disabled
+                          </FormLabel>
+                          <p className="text-xs text-muted-foreground">
+                            Inactive
+                          </p>
+                        </div>
+                      </FormItem>
                     )}
                   />
                 </div>
