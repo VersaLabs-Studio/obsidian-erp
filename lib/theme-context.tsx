@@ -57,8 +57,15 @@ export function ThemeProvider({
   defaultTheme = "system",
   forcedTheme,
 }: ThemeProviderProps) {
-  const [theme, setThemeState] = useState<Theme>(defaultTheme);
-  const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">("light");
+  const [theme, setThemeState] = useState<Theme>(() => {
+    // Initialize from localStorage on first render
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem(STORAGE_KEY) as Theme | null;
+      return stored || defaultTheme;
+    }
+    return defaultTheme;
+  });
+
   const [mounted, setMounted] = useState(false);
 
   // Get system preference
@@ -79,25 +86,41 @@ export function ThemeProvider({
     [forcedTheme, getSystemTheme]
   );
 
+  // Get current resolved theme
+  const resolvedTheme = resolveTheme(theme);
+
   // Apply theme to document
   const applyTheme = useCallback((resolved: "light" | "dark") => {
+    if (typeof window === "undefined") return;
     const root = document.documentElement;
+
+    // Add transitioning class for smooth animation
+    root.classList.add("transitioning");
+
+    // Apply theme classes
     root.classList.remove("light", "dark");
     root.classList.add(resolved);
     // Also set data attribute for more specific styling
     root.setAttribute("data-theme", resolved);
+
+    // Remove transitioning class after animation completes
+    setTimeout(() => {
+      root.classList.remove("transitioning");
+    }, 200);
   }, []);
 
-  // Initialize theme from storage
+  // Initialize theme on mount
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY) as Theme | null;
-    const initialTheme = stored || defaultTheme;
-    setThemeState(initialTheme);
-    const resolved = resolveTheme(initialTheme);
-    setResolvedTheme(resolved);
-    applyTheme(resolved);
+    applyTheme(resolvedTheme);
     setMounted(true);
-  }, [defaultTheme, resolveTheme, applyTheme]);
+  }, []);
+
+  // Apply theme whenever it changes
+  useEffect(() => {
+    if (mounted) {
+      applyTheme(resolvedTheme);
+    }
+  }, [resolvedTheme, mounted, applyTheme]);
 
   // Listen for system theme changes
   useEffect(() => {
@@ -106,7 +129,6 @@ export function ThemeProvider({
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
     const handleChange = () => {
       const resolved = getSystemTheme();
-      setResolvedTheme(resolved);
       applyTheme(resolved);
     };
 
@@ -118,9 +140,10 @@ export function ThemeProvider({
   const setTheme = useCallback(
     (newTheme: Theme) => {
       setThemeState(newTheme);
-      localStorage.setItem(STORAGE_KEY, newTheme);
+      if (typeof window !== "undefined") {
+        localStorage.setItem(STORAGE_KEY, newTheme);
+      }
       const resolved = resolveTheme(newTheme);
-      setResolvedTheme(resolved);
       applyTheme(resolved);
     },
     [resolveTheme, applyTheme]
@@ -131,11 +154,6 @@ export function ThemeProvider({
     const newTheme = resolvedTheme === "light" ? "dark" : "light";
     setTheme(newTheme);
   }, [resolvedTheme, setTheme]);
-
-  // Prevent flash of wrong theme
-  if (!mounted) {
-    return <div style={{ visibility: "hidden" }}>{children}</div>;
-  }
 
   return (
     <ThemeContext.Provider

@@ -31,7 +31,7 @@ export function InfoCard({
 }: InfoCardProps) {
   const variantClasses = {
     default: "bg-card shadow-sm hover:shadow-xl hover:shadow-primary/5",
-    gradient: `bg-gradient-to-br ${gradientFrom} ${gradientTo} border border-white/50`,
+    gradient: `bg-gradient-to-br from-primary/5 to-primary/10 border border-border/50`,
     transparent: "bg-transparent border-none shadow-none hover:shadow-none p-0",
   };
 

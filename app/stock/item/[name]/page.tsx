@@ -179,14 +179,14 @@ export default function ItemDetailPage() {
             <Button
               variant="ghost"
               size="icon"
-              className="rounded-full hover:bg-white"
+              className="rounded-full hover:bg-secondary"
             >
               <MoreVertical className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent
             align="end"
-            className="rounded-2xl border-none shadow-xl bg-white/90 backdrop-blur-xl p-2 w-48"
+            className="rounded-2xl border-none shadow-xl bg-popover/90 backdrop-blur-xl p-2 w-48"
           >
             <DropdownMenuLabel className="text-xs uppercase tracking-wider text-muted-foreground">
               Actions

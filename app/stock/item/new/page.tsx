@@ -193,7 +193,7 @@ export default function CreateItemPage() {
                             {...field}
                             onChange={(e) => handleNameChange(e.target.value)}
                             placeholder="Enter item name..."
-                            className="h-12 rounded-xl bg-secondary/30 hover:bg-secondary/50 focus:bg-white border-0"
+                            className="h-12 rounded-xl bg-secondary/30 hover:bg-secondary/50 focus:bg-card border-0"
                           />
                         </DataField>
                       </FormItem>
@@ -216,7 +216,7 @@ export default function CreateItemPage() {
                             <Input
                               {...field}
                               placeholder="Auto-generated..."
-                              className="h-12 rounded-xl bg-secondary/30 hover:bg-secondary/50 focus:bg-white border-0 font-mono"
+                              className="h-12 rounded-xl bg-secondary/30 hover:bg-secondary/50 focus:bg-card border-0 font-mono"
                             />
                             {isGeneratingCode && (
                               <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-primary" />
@@ -237,7 +237,7 @@ export default function CreateItemPage() {
                           <Input
                             {...field}
                             placeholder="Brand name..."
-                            className="h-12 rounded-xl bg-secondary/30 hover:bg-secondary/50 focus:bg-white border-0"
+                            className="h-12 rounded-xl bg-secondary/30 hover:bg-secondary/50 focus:bg-card border-0"
                           />
                         </DataField>
                       </FormItem>
@@ -261,7 +261,7 @@ export default function CreateItemPage() {
                             value={field.value}
                             onChange={field.onChange}
                             placeholder="Select group..."
-                            className="h-12 rounded-xl bg-secondary/30 hover:bg-secondary/50 focus:bg-white border-0"
+                            className="h-12 rounded-xl bg-secondary/30 hover:bg-secondary/50 focus:bg-card border-0"
                           />
                         </DataField>
                         <FormMessage />
@@ -286,7 +286,7 @@ export default function CreateItemPage() {
                             value={field.value}
                             onChange={field.onChange}
                             placeholder="Select UOM..."
-                            className="h-12 rounded-xl bg-secondary/30 hover:bg-secondary/50 focus:bg-white border-0"
+                            className="h-12 rounded-xl bg-secondary/30 hover:bg-secondary/50 focus:bg-card border-0"
                           />
                         </DataField>
                         <FormMessage />
@@ -314,7 +314,7 @@ export default function CreateItemPage() {
                         <Textarea
                           {...field}
                           placeholder="Enter a detailed description of the item..."
-                          className="min-h-[120px] rounded-xl bg-secondary/30 hover:bg-secondary/50 focus:bg-white border-0 resize-none transition-all duration-300"
+                          className="min-h-[120px] rounded-xl bg-secondary/30 hover:bg-secondary/50 focus:bg-card border-0 resize-none transition-all duration-300"
                         />
                       </FormControl>
                     </FormItem>
@@ -395,7 +395,7 @@ export default function CreateItemPage() {
                     <Sparkles className="h-4 w-4 text-primary" /> Preview
                   </h3>
                   <div className="space-y-3">
-                    <div className="bg-white/60 backdrop-blur-sm rounded-xl p-3">
+                    <div className="bg-card/60 backdrop-blur-sm rounded-xl p-3">
                       <p className="text-[10px] uppercase font-semibold text-muted-foreground/60">
                         Name
                       </p>
@@ -403,7 +403,7 @@ export default function CreateItemPage() {
                         {watchedValues.item_name || "—"}
                       </p>
                     </div>
-                    <div className="bg-white/60 backdrop-blur-sm rounded-xl p-3">
+                    <div className="bg-card/60 backdrop-blur-sm rounded-xl p-3">
                       <p className="text-[10px] uppercase font-semibold text-muted-foreground/60">
                         Code
                       </p>
@@ -412,7 +412,7 @@ export default function CreateItemPage() {
                       </p>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
-                      <div className="bg-white/60 backdrop-blur-sm rounded-xl p-3">
+                      <div className="bg-card/60 backdrop-blur-sm rounded-xl p-3">
                         <p className="text-[10px] uppercase font-semibold text-muted-foreground/60">
                           Group
                         </p>
@@ -420,7 +420,7 @@ export default function CreateItemPage() {
                           {watchedValues.item_group || "—"}
                         </p>
                       </div>
-                      <div className="bg-white/60 backdrop-blur-sm rounded-xl p-3">
+                      <div className="bg-card/60 backdrop-blur-sm rounded-xl p-3">
                         <p className="text-[10px] uppercase font-semibold text-muted-foreground/60">
                           UOM
                         </p>

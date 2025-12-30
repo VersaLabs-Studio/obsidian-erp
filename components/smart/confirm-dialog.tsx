@@ -76,7 +76,7 @@ export function ConfirmDialog({
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent className="rounded-3xl border-0 shadow-2xl bg-white/95 backdrop-blur-xl">
+      <AlertDialogContent className="rounded-3xl border-0 shadow-2xl bg-popover/95 backdrop-blur-xl">
         <AlertDialogHeader>
           <AlertDialogTitle className="text-xl font-bold">
             {title}

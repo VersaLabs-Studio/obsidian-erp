@@ -65,7 +65,7 @@ export const PremiumInput = React.forwardRef<
     <input
       ref={ref}
       className={cn(
-        "w-full h-12 px-4 rounded-xl bg-secondary/30 hover:bg-secondary/50 focus:bg-white focus:shadow-lg focus:shadow-primary/5 outline-none transition-all duration-300 text-base font-medium",
+        "w-full h-12 px-4 rounded-xl bg-secondary/30 hover:bg-secondary/50 focus:bg-card focus:shadow-lg focus:shadow-primary/5 outline-none transition-all duration-300 text-base font-medium",
         mono && "font-mono text-sm",
         props.disabled &&
           "bg-secondary/20 text-muted-foreground cursor-not-allowed",

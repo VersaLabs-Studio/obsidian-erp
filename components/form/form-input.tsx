@@ -1,0 +1,98 @@
+// components/form/form-input.tsx
+// Pana ERP v3.0 - Reusable Form Input Component
+
+"use client";
+
+import { Control, FieldPath, FieldValues } from "react-hook-form";
+import { FormField, FormItem, FormMessage } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { DataField } from "@/components/smart/data-field";
+import { cn } from "@/lib/utils";
+import { Loader2 } from "lucide-react";
+
+interface FormInputProps<T extends FieldValues> {
+  /** Form control from useForm */
+  control: Control<T>;
+  /** Field name (must match schema) */
+  name: FieldPath<T>;
+  /** Field label */
+  label: string;
+  /** Whether field is required */
+  required?: boolean;
+  /** Placeholder text */
+  placeholder?: string;
+  /** Input type (text, email, number, etc.) */
+  type?: string;
+  /** Additional CSS classes */
+  className?: string;
+  /** Whether input is disabled */
+  disabled?: boolean;
+  /** Show loading spinner */
+  loading?: boolean;
+  /** Custom icon on the right */
+  rightIcon?: React.ReactNode;
+}
+
+/**
+ * Reusable form input with DataField wrapper
+ *
+ * @example
+ * ```tsx
+ * <FormInput
+ *   control={form.control}
+ *   name="item_name"
+ *   label="Item Name"
+ *   required
+ *   placeholder="Enter item name..."
+ * />
+ * ```
+ */
+export function FormInput<T extends FieldValues>({
+  control,
+  name,
+  label,
+  required = false,
+  placeholder,
+  type = "text",
+  className,
+  disabled = false,
+  loading = false,
+  rightIcon,
+}: FormInputProps<T>) {
+  return (
+    <FormField
+      control={control}
+      name={name}
+      render={({ field }) => (
+        <FormItem>
+          <DataField label={label} name={String(name)} required={required}>
+            <div className="relative">
+              <Input
+                {...field}
+                type={type}
+                placeholder={placeholder}
+                disabled={disabled || loading}
+                className={cn(
+                  "h-12 rounded-xl bg-secondary/30 hover:bg-secondary/50 focus:bg-card border-0",
+                  loading && "pr-10",
+                  className
+                )}
+              />
+              {loading && (
+                <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-primary" />
+              )}
+              {rightIcon && !loading && (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  {rightIcon}
+                </div>
+              )}
+            </div>
+          </DataField>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+  );
+}
+
+export default FormInput;

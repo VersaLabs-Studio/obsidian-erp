@@ -2,6 +2,7 @@
 // Pana ERP v3.0 - Generic List Query Hook
 
 import { useQuery, UseQueryOptions } from "@tanstack/react-query";
+import { getApiPath } from "@/lib/doctype-config";
 
 /**
  * Options for Frappe list queries
@@ -40,8 +41,8 @@ export function useFrappeList<T>(
   options?: FrappeListOptions,
   queryOptions?: Omit<UseQueryOptions<T[], Error>, "queryKey" | "queryFn">
 ) {
-  // Build the API endpoint based on doctype
-  const apiPath = doctypeToApiPath(doctype);
+  // Build the API endpoint based on doctype (uses centralized config)
+  const apiPath = getApiPath(doctype);
 
   return useQuery({
     queryKey: [doctype, "list", options],
@@ -86,35 +87,6 @@ export function useFrappeList<T>(
     staleTime: 60 * 1000, // 1 minute
     ...queryOptions,
   });
-}
-
-/**
- * Convert DocType name to API path
- * e.g., "Item" -> "stock/item", "Sales Order" -> "crm/sales-order"
- */
-function doctypeToApiPath(doctype: string): string {
-  // Define module mappings
-  const moduleMap: Record<string, string> = {
-    Item: "stock/item",
-    "Item Group": "stock/settings/item-group",
-    Warehouse: "stock/settings/warehouse",
-    UOM: "stock/settings/uom",
-    "Stock Entry": "stock/stock-entries",
-    "Delivery Note": "stock/delivery-notes",
-    "Purchase Receipt": "stock/purchase-receipts",
-    Customer: "crm/customer",
-    Supplier: "purchasing/supplier",
-    "Sales Order": "crm/sales-order",
-    "Purchase Order": "purchasing/purchase-order",
-  };
-
-  // Return mapped path or convert to kebab-case
-  if (moduleMap[doctype]) {
-    return moduleMap[doctype];
-  }
-
-  // Fallback: convert to lowercase kebab-case
-  return doctype.toLowerCase().replace(/\s+/g, "-");
 }
 
 export default useFrappeList;

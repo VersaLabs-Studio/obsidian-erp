@@ -57,11 +57,11 @@ function ItemRow({ item, index, onView, onEdit, onDelete }: ItemRowProps) {
 
   return (
     <div
-      className="group relative flex items-center justify-between p-4 mb-2 bg-card hover:bg-white hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-0.5 transition-all duration-300 rounded-2xl cursor-pointer animate-slide-up"
+      className="group relative flex items-start justify-between p-4 mb-2 bg-card hover:bg-card/80 hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-0.5 transition-all duration-300 rounded-2xl cursor-pointer animate-slide-up"
       style={{ animationDelay: `${index * 50}ms`, transitionDelay: "0ms" }}
       onClick={onView}
     >
-      <div className="flex items-center gap-4 min-w-0">
+      <div className="flex items-start gap-4 min-w-0 flex-1">
         <div className="h-10 w-10 rounded-full bg-secondary/50 flex items-center justify-center text-xs font-bold text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors shrink-0">
           {initials}
         </div>
@@ -75,7 +75,7 @@ function ItemRow({ item, index, onView, onEdit, onDelete }: ItemRowProps) {
         </div>
       </div>
 
-      <div className="hidden sm:flex items-center gap-8 text-sm text-muted-foreground">
+      <div className="hidden sm:flex items-start gap-8 text-sm text-muted-foreground shrink-0">
         <div className="flex flex-col items-end w-24">
           <span className="text-[10px] uppercase font-semibold text-muted-foreground/50">
             Group
@@ -109,7 +109,7 @@ function ItemRow({ item, index, onView, onEdit, onDelete }: ItemRowProps) {
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="end"
-              className="rounded-xl border-none shadow-xl bg-white/90 backdrop-blur-xl"
+              className="rounded-xl border-none shadow-xl bg-popover/90 backdrop-blur-xl"
             >
               <DropdownMenuLabel>Actions</DropdownMenuLabel>
               <DropdownMenuItem className="rounded-lg" onClick={onView}>

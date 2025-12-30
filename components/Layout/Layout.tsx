@@ -432,7 +432,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <DropdownMenuContent
             align="end"
             side="top"
-            className="w-56 rounded-2xl border-none shadow-2xl bg-white/95 backdrop-blur-xl p-2"
+            className="w-56 rounded-2xl border-none shadow-2xl bg-popover/95 backdrop-blur-xl p-2"
           >
             <DropdownMenuLabel className="text-xs text-muted-foreground uppercase tracking-wider px-2 py-1.5">
               My Account

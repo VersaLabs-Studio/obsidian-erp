@@ -75,7 +75,7 @@ export function ListToolbar({
   return (
     <div
       className={cn(
-        "sticky top-0 z-10 flex items-center gap-2 p-1.5 bg-white/60 backdrop-blur-md rounded-full border border-white/20 shadow-sm animate-scale-in max-w-3xl mx-auto sm:mx-0",
+        "sticky top-0 z-10 flex items-center gap-2 p-1.5 bg-card/60 backdrop-blur-md rounded-full border border-border/20 shadow-sm animate-scale-in max-w-3xl mx-auto sm:mx-0",
         className
       )}
     >
@@ -121,7 +121,7 @@ export function ListToolbar({
           </DropdownMenuTrigger>
           <DropdownMenuContent
             align="start"
-            className="w-56 rounded-2xl shadow-xl bg-white/95 backdrop-blur-xl border-0 p-2"
+            className="w-56 rounded-2xl shadow-xl bg-popover/95 backdrop-blur-xl border-0 p-2"
           >
             <DropdownMenuLabel className="text-xs uppercase tracking-wider text-muted-foreground">
               Filters
@@ -185,7 +185,7 @@ export function ListToolbar({
           </DropdownMenuTrigger>
           <DropdownMenuContent
             align="end"
-            className="rounded-2xl shadow-xl bg-white/95 backdrop-blur-xl border-0 p-2"
+            className="rounded-2xl shadow-xl bg-popover/95 backdrop-blur-xl border-0 p-2"
           >
             <DropdownMenuLabel className="text-xs uppercase tracking-wider text-muted-foreground">
               Export Format

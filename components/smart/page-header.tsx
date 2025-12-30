@@ -74,7 +74,7 @@ export function PageHeader({
       className={cn(
         // Base styles - Floating pill design
         "flex items-center justify-between sticky top-0 z-20",
-        "bg-white/80 backdrop-blur-xl rounded-full shadow-sm border border-white/40",
+        "bg-card/80 backdrop-blur-xl rounded-full shadow-sm border border-border/40",
         "p-2 pr-4",
         "animate-in fade-in slide-in-from-top-2 duration-500",
         className
@@ -87,7 +87,7 @@ export function PageHeader({
           variant="ghost"
           size="icon"
           onClick={handleBack}
-          className="rounded-full h-10 w-10 hover:bg-white shrink-0"
+          className="rounded-full h-10 w-10 hover:bg-secondary shrink-0"
         >
           <ArrowLeft className="h-5 w-5 text-muted-foreground" />
         </Button>

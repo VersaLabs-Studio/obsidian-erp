@@ -186,7 +186,7 @@ export function PrintLabelDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="rounded-3xl border-0 shadow-2xl bg-white/95 backdrop-blur-xl max-w-md">
+      <DialogContent className="rounded-3xl border-0 shadow-2xl bg-popover/95 backdrop-blur-xl max-w-md">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold flex items-center gap-2">
             <Printer className="h-5 w-5 text-primary" />
@@ -201,7 +201,7 @@ export function PrintLabelDialog({
         <div className="flex justify-center py-6 bg-secondary/30 rounded-2xl">
           <div
             ref={printRef}
-            className="bg-white border border-border rounded-lg shadow-sm flex flex-col items-center justify-center p-3"
+            className="bg-card border border-border rounded-lg shadow-sm flex flex-col items-center justify-center p-3"
             style={{
               width: size.width,
               height: size.height,

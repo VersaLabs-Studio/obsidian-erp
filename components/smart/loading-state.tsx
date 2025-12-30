@@ -70,7 +70,7 @@ export function LoadingState({
 function TableRowSkeleton({ delay }: { delay: number }) {
   return (
     <div
-      className="flex items-center gap-4 px-4 py-4 bg-white rounded-2xl border border-border/50 animate-in fade-in"
+      className="flex items-center gap-4 px-4 py-4 bg-card rounded-2xl border border-border/50 animate-in fade-in"
       style={{ animationDelay: `${delay}ms` }}
     >
       <div className="skeleton h-10 w-10 rounded-xl shrink-0" />
@@ -87,7 +87,7 @@ function TableRowSkeleton({ delay }: { delay: number }) {
 function CardSkeleton({ delay }: { delay: number }) {
   return (
     <div
-      className="p-6 bg-white rounded-2xl border border-border/50 animate-in fade-in"
+      className="p-6 bg-card rounded-2xl border border-border/50 animate-in fade-in"
       style={{ animationDelay: `${delay}ms` }}
     >
       <div className="flex items-start justify-between mb-4">
@@ -111,7 +111,7 @@ function CardSkeleton({ delay }: { delay: number }) {
 function ListItemSkeleton({ delay }: { delay: number }) {
   return (
     <div
-      className="flex items-center gap-3 px-4 py-3 bg-white rounded-xl animate-in fade-in"
+      className="flex items-center gap-3 px-4 py-3 bg-card rounded-xl animate-in fade-in"
       style={{ animationDelay: `${delay}ms` }}
     >
       <div className="skeleton h-8 w-8 rounded-lg shrink-0" />

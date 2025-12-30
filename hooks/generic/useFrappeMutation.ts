@@ -7,6 +7,7 @@ import {
   UseMutationOptions,
 } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { getApiPath } from "@/lib/doctype-config";
 
 type MutationOperation = "create" | "update" | "delete";
 
@@ -69,7 +70,7 @@ export function useFrappeMutation<TData = unknown, TVariables = unknown>(
   >
 ) {
   const queryClient = useQueryClient();
-  const apiPath = doctypeToApiPath(doctype);
+  const apiPath = getApiPath(doctype);
   const showToast = config?.showToast ?? true;
 
   return useMutation<TData, Error, TVariables>({
@@ -178,31 +179,6 @@ export function useFrappeDelete<TData = { message: string }>(
   config?: MutationConfig<TData, string>
 ) {
   return useFrappeMutation<TData, string>(doctype, "delete", config);
-}
-
-/**
- * Convert DocType name to API path
- */
-function doctypeToApiPath(doctype: string): string {
-  const moduleMap: Record<string, string> = {
-    Item: "stock/item",
-    "Item Group": "stock/settings/item-group",
-    Warehouse: "stock/settings/warehouse",
-    UOM: "stock/settings/uom",
-    "Stock Entry": "stock/stock-entries",
-    "Delivery Note": "stock/delivery-notes",
-    "Purchase Receipt": "stock/purchase-receipts",
-    Customer: "crm/customer",
-    Supplier: "purchasing/supplier",
-    "Sales Order": "crm/sales-order",
-    "Purchase Order": "purchasing/purchase-order",
-  };
-
-  if (moduleMap[doctype]) {
-    return moduleMap[doctype];
-  }
-
-  return doctype.toLowerCase().replace(/\s+/g, "-");
 }
 
 export default useFrappeMutation;
