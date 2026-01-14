@@ -1,9 +1,9 @@
 # Pana ERP v3.0 - Architecture & Implementation Guide
 
-> **Document Version:** 3.0.3  
-> **Last Updated:** 2025-12-30  
+> **Document Version:** 3.0.4  
+> **Last Updated:** 2026-01-14  
 > **Status:** PRODUCTION READY  
-> **Golden Template:** Items Module (Stock)
+> **Golden Template:** Items Module (Stock), Contact Module (CRM)
 
 ---
 
@@ -787,6 +787,100 @@ const formData = { ...frappeData, disabled: frappeData.disabled === 1 };
 ---
 
 ## 16. Changelog
+
+### v3.0.4 (2026-01-14) 🚀 TYPES AUTO-GENERATION & LINKED ENTITY NAVIGATION
+
+**Major Improvements:**
+
+- **Complete Type Generation** (`scripts/generate-types.js`)
+  - Auto-generates TypeScript interfaces AND Zod schemas for ALL DocTypes
+  - Output files: `types/doctype-types.ts` and `lib/schemas/doctype-schemas.ts`
+  - Supports `pnpm generate-types --all` for batch generation
+  - Smart handling of DocTypes with spaces (e.g., "Sales Order" → SalesOrderSchema)
+  - Handles missing DocTypes gracefully (skips if not installed on Frappe instance)
+
+- **Complete Schema Generation** (`lib/schemas/doctype-schemas.ts`)
+  - Zod schemas for form validation
+  - Create and Update schemas per DocType
+  - Consistent naming: `{DocType}Schema`, `{DocType}CreateSchema`, `{DocType}UpdateSchema`
+
+- **Contact Module Implementation** (`app/crm/contact/`)
+  - Full CRUD implementation following v3.0 patterns
+  - List, Create, Detail, and Edit pages
+  - Uses `InfoCard` with `DataPoint` for read-only display
+  - Linked Entity sidebar with CTA navigation
+
+- **Linked Entity CTA Pattern** (NEW)
+  - Cross-module navigation for linked DocTypes
+  - Uses `getApiPath(doctype)` for URL resolution
+  - Premium UI with hover effects and micro-animations
+  - SEO-friendly with `<Link>` component support
+
+**New Components:**
+
+- **`DataPoint`** (`components/ui/info-card.tsx`)
+  - Read-only data display component
+  - Used in Detail pages instead of form inputs
+  - Consistent label/value styling
+
+**New Patterns:**
+
+```typescript
+// Cross-module navigation with getApiPath()
+import { getApiPath } from "@/lib/doctype-config";
+import Link from "next/link";
+
+const linkDoctype = "Customer"; // e.g., from contact.links[]
+const linkName = "CUST-001";
+const href = `/${getApiPath(linkDoctype)}/${encodeURIComponent(linkName)}`;
+
+<Link href={href}>View {linkDoctype}</Link>
+```
+
+**UI Pattern - Linked Entities Sidebar:**
+
+```tsx
+{/* Standard pattern for displaying linked DocTypes */}
+<InfoCard title="Linked To" icon="link">
+  {(contact.links as any[]).map((link, idx) => (
+    <div
+      key={idx}
+      className="group flex items-center justify-between p-4 bg-secondary/20 rounded-2xl hover:bg-secondary/40 transition-all duration-300 border border-transparent hover:border-primary/10"
+    >
+      <div className="flex items-center gap-3">
+        <div className="p-2.5 bg-background rounded-xl shadow-sm group-hover:scale-110 transition-transform">
+          <Building2 className="h-4 w-4 text-primary" />
+        </div>
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50">
+            {link.link_doctype}
+          </p>
+          <p className="font-semibold text-sm">{link.link_name}</p>
+        </div>
+      </div>
+      <Button variant="ghost" size="icon" className="rounded-full" asChild>
+        <Link href={`/${getApiPath(link.link_doctype)}/${encodeURIComponent(link.link_name)}`}>
+          <ArrowUpRight className="h-4 w-4" />
+        </Link>
+      </Button>
+    </div>
+  ))}
+</InfoCard>
+```
+
+**Documentation:**
+
+- Updated ARCHITECTURE_V3.md with v3.0.4 features
+- Updated MODULE_CREATION_WORKFLOW.md with Linked Entity patterns
+- Added Contact module as second Golden Template
+
+**Key Reminders:**
+
+> **Pro Tip for Cross-Module Navigation:**  
+> Always use `getApiPath(doctype)` from `@/lib/doctype-config` for dynamic URL resolution.  
+> This ensures links work correctly across all modules without hardcoding paths.
+
+---
 
 ### v3.0.3 (2025-12-30) 🏗️ ARCHITECTURE FINALIZATION
 

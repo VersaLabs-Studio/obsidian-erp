@@ -1,8 +1,8 @@
 # Pana ERP v3.0 - Template Review & Pre-Implementation Checklist
 
-> **Date:** 2025-12-30
-> **Module Reviewed:** Items (Stock)
-> **Status:** ✅ PRODUCTION READY
+> **Date:** 2026-01-14  
+> **Modules Reviewed:** Items (Stock), Contact (CRM)  
+> **Status:** ✅ PRODUCTION READY (v3.0.4)
 
 ---
 
@@ -93,38 +93,32 @@ lib/
 - Smooth transitions
 - localStorage persistence
 
+### 2.6 Linked Entity Navigation (NEW in v3.0.4)
+- Cross-module navigation via `getApiPath()`
+- Premium UI pattern for linked entities sidebar
+- Hover effects and micro-animations
+- SEO-friendly with `<Link>` component
+
+### 2.7 DataPoint Component (NEW in v3.0.4)
+- Read-only data display for detail pages
+- Clear distinction between view and edit modes
+- Consistent label/value styling
+
 ---
 
 ## 3. Architectural Recommendations Before v3.0 Implementation
 
-### 3.1 🔴 CRITICAL: Centralize DocType-to-API Path Mapping
+### 3.1 ✅ COMPLETED: Centralize DocType-to-API Path Mapping
 
-**Issue:** The `doctypeToApiPath` function is duplicated in 3 files:
-- `hooks/generic/useFrappeList.ts`
-- `hooks/generic/useFrappeDoc.ts`
-- `hooks/generic/useFrappeMutation.ts`
+**Status:** ✅ Implemented in v3.0.3
 
-**Recommendation:**
+**Location:** `lib/doctype-config.ts`
+
 ```typescript
-// lib/doctype-config.ts
-export const DOCTYPE_CONFIG = {
-  Item: {
-    apiPath: "stock/item",
-    module: "Stock",
-    labelField: "item_name",
-    searchFields: ["item_code", "item_name"],
-  },
-  "Item Group": {
-    apiPath: "stock/settings/item-group",
-    module: "Stock",
-    labelField: "item_group_name",
-  },
-  // ... all doctypes
-} as const;
+import { getApiPath } from "@/lib/doctype-config";
 
-export function getApiPath(doctype: string): string {
-  return DOCTYPE_CONFIG[doctype]?.apiPath || doctype.toLowerCase().replace(/\s+/g, "-");
-}
+// Usage
+const apiPath = getApiPath("Sales Order"); // => "crm/sales-order"
 ```
 
 ### 3.2 🔴 CRITICAL: Create Domain-Specific Hooks Layer
@@ -376,15 +370,15 @@ When creating a new module, follow this checklist:
 
 Before starting full v3.0 implementation:
 
-| Priority | Action | Effort | Impact |
-|----------|--------|--------|--------|
-| 🔴 | Centralize `doctypeToApiPath` | 1 hour | High |
-| 🔴 | Add remaining doctypes to mapping | 2 hours | High |
-| 🟡 | Create `FormInput`, `FormSelect` wrappers | 2 hours | Medium |
-| 🟡 | Create `useDeleteWithConfirmation` hook | 1 hour | Medium |
-| 🟡 | Create query key factory | 1 hour | Medium |
-| 🟢 | Add optimistic updates | 3 hours | Low |
-| 🟢 | Add error boundaries | 2 hours | Low |
+| Priority | Action | Effort | Impact | Status |
+|----------|--------|--------|--------|--------|
+| 🔴 | Centralize `doctypeToApiPath` | 1 hour | High | ✅ Done |
+| 🔴 | Add remaining doctypes to mapping | 2 hours | High | ✅ Done |
+| 🟡 | Create `FormInput`, `FormSelect` wrappers | 2 hours | Medium | ✅ Done |
+| 🟡 | Create `useDeleteWithConfirmation` hook | 1 hour | Medium | ✅ Done |
+| 🟡 | Create query key factory | 1 hour | Medium | ✅ Done |
+| 🟢 | Add optimistic updates | 3 hours | Low | 🔄 Optional |
+| 🟢 | Add error boundaries | 2 hours | Low | 🔄 Optional |
 
 ---
 
@@ -392,19 +386,27 @@ Before starting full v3.0 implementation:
 
 ### ✅ APPROVED FOR v3.0 IMPLEMENTATION
 
-The Items module template is **production-ready** with the following characteristics:
+The Items and Contact module templates are **production-ready** with the following characteristics:
 
 1. **Architecture:** Clean separation of concerns (types, hooks, components, pages)
 2. **Patterns:** Consistent patterns for all CRUD operations
 3. **UI/UX:** Premium design with dark mode support
 4. **Type Safety:** Generated types with runtime validation
 5. **Developer Experience:** Factory patterns reduce boilerplate
+6. **Cross-Module Navigation:** `getApiPath()` for linked entity navigation
+7. **Display Components:** `DataPoint` for read-only detail pages
 
-### Recommended Pre-Implementation Tasks (Optional but Beneficial):
-1. Centralize DocType-to-API path mapping
-2. Create form field wrapper components
-3. Create delete confirmation hook
+### ✅ Completed Pre-Implementation Tasks:
+1. ~~Centralize DocType-to-API path mapping~~ → `lib/doctype-config.ts`
+2. ~~Create form field wrapper components~~ → `components/form/`
+3. ~~Create delete confirmation hook~~ → `hooks/useDeleteWithConfirmation.ts`
+4. ~~Create query key factory~~ → `lib/query-keys.ts`
+5. ~~Auto-generate types and schemas~~ → `scripts/generate-types.js`
+
+### 🔄 Optional Future Enhancements:
+1. Add optimistic updates for mutations
+2. Add error boundaries per module
 
 ---
 
-*This document serves as the final template review before Pana ERP v3.0 full implementation.*
+*This document serves as the final template review for Pana ERP v3.0.4.*

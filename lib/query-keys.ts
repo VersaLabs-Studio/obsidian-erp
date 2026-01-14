@@ -71,6 +71,9 @@ export const queryKeys = {
     list: (options?: FrappeListOptions) =>
       ["Customer", "list", options] as const,
     doc: (name: string) => ["Customer", "doc", name] as const,
+    // Query key for fetching customers converted from a specific lead
+    fromLead: (leadName: string) =>
+      ["Customer", "list", "lead", leadName] as const,
   },
   lead: {
     all: () => ["Lead"] as const,

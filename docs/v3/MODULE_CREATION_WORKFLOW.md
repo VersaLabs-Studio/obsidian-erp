@@ -1,7 +1,7 @@
 # Pana ERP v3.0 - Module Creation Workflow
 
-> **Version:** 3.0.3  
-> **Last Updated:** 2025-12-30  
+> **Version:** 3.0.4  
+> **Last Updated:** 2026-01-14  
 > **Status:** PRODUCTION READY
 
 This document provides step-by-step instructions for creating new modules in Pana ERP v3.0. Follow this workflow exactly to ensure consistency across the codebase.
@@ -21,6 +21,7 @@ This document provides step-by-step instructions for creating new modules in Pan
 9. [Step 7: Final Verification](#9-step-7-final-verification)
 10. [Code Templates](#10-code-templates)
 11. [Common Patterns](#11-common-patterns)
+12. [Linked Entity Navigation](#12-linked-entity-navigation)
 
 ---
 
@@ -895,12 +896,131 @@ Follow this workflow exactly for every new module:
 - ❌ Skip dark mode testing
 
 **ALWAYS:**
+
 - ✅ Use theme-aware colors
 - ✅ Use smart components
 - ✅ Use generic hooks
 - ✅ Use factory patterns for API
 - ✅ Test in both light and dark mode
+- ✅ Use `getApiPath()` for cross-module links
+
+---
+
+## 12. Linked Entity Navigation
+
+### 12.1 Cross-Module Navigation with getApiPath()
+
+When implementing navigation between related DocTypes (e.g., Contact → Customer), always use the centralized `getApiPath()` utility:
+
+```typescript
+import { getApiPath } from "@/lib/doctype-config";
+import Link from "next/link";
+
+// Dynamic URL generation
+const linkDoctype = "Customer"; // from linked data
+const linkName = "CUST-001";
+const href = `/${getApiPath(linkDoctype)}/${encodeURIComponent(linkName)}`;
+
+// Usage in component
+<Link href={href}>View {linkDoctype}</Link>
+```
+
+**Why this matters:**
+- DocType names may have spaces (e.g., "Sales Order")
+- URL paths vary by module (e.g., `crm/customer`, `stock/item`)
+- `getApiPath()` is the **single source of truth** for path resolution
+
+### 12.2 DataPoint Component for Read-Only Display
+
+Use `DataPoint` from `@/components/ui/info-card` for displaying read-only data in detail pages:
+
+```typescript
+import { InfoCard, DataPoint } from "@/components/ui/info-card";
+
+<InfoCard title="Contact Details" icon="contact">
+  <div className="grid grid-cols-2 gap-4">
+    <DataPoint label="Email" value={contact.email_id} />
+    <DataPoint label="Phone" value={contact.phone} />
+    <DataPoint label="Mobile" value={contact.mobile_no} />
+  </div>
+</InfoCard>
+```
+
+**Key distinction:**
+- **Detail pages** (read-only): Use `DataPoint`
+- **Edit/Create pages** (editable): Use `FormInput`, `FormSelect`, etc.
+
+### 12.3 Linked Entities Sidebar Pattern
+
+Standard UI pattern for displaying and navigating to linked DocTypes:
+
+```tsx
+import { getApiPath } from "@/lib/doctype-config";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { InfoCard } from "@/components/ui/info-card";
+import { Building2, ArrowUpRight } from "lucide-react";
+
+{/* In sidebar of detail page */}
+{contact.links && contact.links.length > 0 && (
+  <InfoCard title="Linked To" icon="link">
+    <div className="space-y-3">
+      {(contact.links as any[]).map((link, idx) => {
+        const href = `/${getApiPath(link.link_doctype)}/${encodeURIComponent(link.link_name)}`;
+        
+        return (
+          <div
+            key={idx}
+            className="group flex items-center justify-between p-4 bg-secondary/20 rounded-2xl hover:bg-secondary/40 transition-all duration-300 border border-transparent hover:border-primary/10"
+          >
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-background rounded-xl shadow-sm group-hover:scale-110 transition-transform duration-300">
+                <Building2 className="h-4 w-4 text-primary" />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-0.5">
+                  {link.link_doctype}
+                </p>
+                <p className="font-semibold text-sm">{link.link_name}</p>
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-full hover:bg-primary hover:text-primary-foreground transform active:scale-90 transition-all"
+              asChild
+            >
+              <Link href={href}>
+                <ArrowUpRight className="h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
+        );
+      })}
+    </div>
+  </InfoCard>
+)}
+```
+
+**UI Pattern Features:**
+- Icon bag with scale-up on hover
+- Uppercase metadata label for DocType
+- Bold entity name
+- Ghost button CTA with primary color on hover
+- Active scale-down effect for tactile feedback
+
+### 12.4 Pro Tips
+
+> **🔗 Cross-Module Navigation:**  
+> Always rely on `getApiPath(doctype)` from `@/lib/doctype-config`. This ensures that as you migrate more DocTypes to v3.0, any links to them will automatically resolve to the correct folder structure.
+
+> **📝 Detail vs Edit Pages:**  
+> Detail pages should use `DataPoint` for read-only display. Never use form inputs on detail pages—this maintains the "quiet luxury" aesthetic and clear UX distinction.
+
+> **🎨 Linked Entities UI:**  
+> The pattern here (Icon Bag + Metadata + CTA Button) is the standard for "Linked Entities" sidebars. It maintains a clean, read-only appearance that reveals interactivity only on hover.
 
 ---
 
 *This workflow document is the authoritative guide for creating new modules in Pana ERP v3.0.*
+
