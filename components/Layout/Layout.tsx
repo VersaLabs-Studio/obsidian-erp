@@ -153,20 +153,10 @@ const navigation = [
     title: "CRM",
     icon: Users,
     items: [
-      { title: "Dashboard", href: "/crm/dashboard", icon: LayoutDashboard },
       { title: "Leads", href: "/crm/lead", icon: Target },
-      { title: "Opportunities", href: "/crm/opportunities", icon: TrendingUp },
-      { title: "Quotations", href: "/crm/quotations", icon: FileText },
-      { title: "Sales Orders", href: "/crm/sales-orders", icon: ShoppingCart },
       { title: "Customers", href: "/crm/customer", icon: Users },
       { title: "Contacts", href: "/crm/contact", icon: User },
-      { title: "Addresses", href: "/crm/addresses", icon: MapPin },
-      { title: "Activities", href: "/crm/activities", icon: ClipboardList },
-      {
-        title: "Communications",
-        href: "/crm/communications",
-        icon: MessageSquare,
-      },
+      { title: "Addresses", href: "/crm/address", icon: MapPin },
     ],
   },
   {
