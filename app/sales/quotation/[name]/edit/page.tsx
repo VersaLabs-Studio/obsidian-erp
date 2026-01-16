@@ -20,6 +20,7 @@ import {
   MapPin,
   Calculator,
   Briefcase,
+  Building2,
 } from "lucide-react";
 import { useFrappeDoc, useFrappeUpdate, useFrappeList } from "@/hooks/generic";
 import { PageHeader, LoadingState } from "@/components/smart";
@@ -31,7 +32,7 @@ import {
   FormDatePicker,
 } from "@/components/form";
 import { QuotationUpdateSchema } from "@/lib/schemas/doctype-schemas";
-import type { Quotation, Address, Contact } from "@/types/doctype-types";
+import type { Quotation } from "@/types/doctype-types";
 
 export default function EditQuotationPage() {
   const params = useParams();
@@ -79,6 +80,7 @@ export default function EditQuotationPage() {
         company: quote.company,
         currency: quote.currency,
         selling_price_list: quote.selling_price_list,
+        price_list_currency: quote.price_list_currency,
         items:
           quote.items?.map((i) => ({
             item_code: i.item_code,
@@ -95,24 +97,6 @@ export default function EditQuotationPage() {
   }, [quote, reset, router, name]);
 
   // --- Dynamic Data Fetching (Mirrored from New) ---
-  const addressFilters = useMemo(() => {
-    if (!selectedPartyName) return [];
-    return [
-      ["Dynamic Link", "link_doctype", "=", selectedPartyType],
-      ["Dynamic Link", "link_name", "=", selectedPartyName],
-    ];
-  }, [selectedPartyType, selectedPartyName]);
-
-  const { data: addresses } = useFrappeList<Address>("Address", {
-    filters: addressFilters,
-    enabled: !!selectedPartyName,
-  });
-
-  const { data: contacts } = useFrappeList<Contact>("Contact", {
-    filters: addressFilters,
-    enabled: !!selectedPartyName,
-  });
-
   const { data: taxTemplates } = useFrappeList<any>(
     "Sales Taxes and Charges Template"
   );
@@ -148,7 +132,14 @@ export default function EditQuotationPage() {
   );
 
   const onSubmit = async (values: any) => {
-    await updateMutation.mutateAsync({ name, data: values });
+    const payload = {
+      ...values,
+      currency: "ETB",
+      price_list_currency: "ETB",
+      conversion_rate: 1,
+      plc_conversion_rate: 1,
+    };
+    await updateMutation.mutateAsync({ name, data: payload });
   };
 
   if (isQuoteLoading) return <LoadingState type="detail" />;
@@ -169,6 +160,15 @@ export default function EditQuotationPage() {
             icon={<Briefcase className="h-4 w-4" />}
           >
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <FormFrappeSelect
+                control={control}
+                name="company"
+                label="Company"
+                required
+                doctype="Company"
+                labelField="company_name"
+                placeholder="Select company..."
+              />
               <FormSelect
                 control={control}
                 name="quotation_to"
@@ -179,21 +179,19 @@ export default function EditQuotationPage() {
                   { value: "Lead", label: "Lead" },
                 ]}
               />
-              <div className="md:col-span-2">
-                <FormFrappeSelect
-                  control={control}
-                  name="party_name"
-                  label={selectedPartyType}
-                  required
-                  doctype={selectedPartyType}
-                  labelField={
-                    selectedPartyType === "Customer"
-                      ? "customer_name"
-                      : "lead_name"
-                  }
-                  placeholder={`Search ${selectedPartyType}...`}
-                />
-              </div>
+              <FormFrappeSelect
+                control={control}
+                name="party_name"
+                label={selectedPartyType}
+                required
+                doctype={selectedPartyType}
+                labelField={
+                  selectedPartyType === "Customer"
+                    ? "customer_name"
+                    : "lead_name"
+                }
+                placeholder={`Search ${selectedPartyType}...`}
+              />
               <FormDatePicker
                 control={control}
                 name="transaction_date"
@@ -219,40 +217,56 @@ export default function EditQuotationPage() {
             </div>
           </InfoCard>
 
+          {/* Section 2: Pricing */}
+          <InfoCard title="Pricing" icon={<Building2 className="h-4 w-4" />}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <FormFrappeSelect
+                control={control}
+                name="selling_price_list"
+                label="Price List"
+                required
+                doctype="Price List"
+                filters={[["selling", "=", 1]]}
+                labelField="price_list_name"
+                placeholder="Select price list..."
+              />
+            </div>
+          </InfoCard>
+
           {/* Section 2: Address & Contact */}
           <InfoCard
             title="Logistics & Point of Contact"
             icon={<MapPin className="h-4 w-4" />}
           >
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <FormSelect
+              <FormFrappeSelect
                 control={control}
                 name="customer_address"
                 label="Address"
+                doctype="Address"
                 disabled={!selectedPartyName}
-                options={
-                  addresses?.map((a) => ({
-                    value: a.name,
-                    label: a.address_title || a.address_line1,
-                  })) || []
-                }
+                filters={[
+                  ["Dynamic Link", "link_doctype", "=", selectedPartyType],
+                  ["Dynamic Link", "link_name", "=", selectedPartyName],
+                ]}
+                labelField="address_title"
                 placeholder={
                   selectedPartyName
                     ? "Select address..."
                     : "Select customer first"
                 }
               />
-              <FormSelect
+              <FormFrappeSelect
                 control={control}
                 name="contact_person"
                 label="Contact Person"
+                doctype="Contact"
                 disabled={!selectedPartyName}
-                options={
-                  contacts?.map((c) => ({
-                    value: c.name,
-                    label: c.full_name || c.first_name,
-                  })) || []
-                }
+                filters={[
+                  ["Dynamic Link", "link_doctype", "=", selectedPartyType],
+                  ["Dynamic Link", "link_name", "=", selectedPartyName],
+                ]}
+                labelField="full_name"
                 placeholder={
                   selectedPartyName
                     ? "Select contact..."

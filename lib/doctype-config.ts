@@ -280,6 +280,20 @@ export const DOCTYPE_CONFIG: Record<string, DocTypeConfig> = {
     defaultSortField: "posting_date",
     defaultSortOrder: "desc",
   },
+  Currency: {
+    apiPath: "accounting/currency",
+    module: "Accounting",
+    labelField: "currency_name",
+    searchFields: ["currency_name", "name"],
+    isSettings: true,
+  },
+  "Price List": {
+    apiPath: "accounting/price-list",
+    module: "Accounting",
+    labelField: "price_list_name",
+    searchFields: ["price_list_name", "name"],
+    isSettings: true,
+  },
 
   // ============================================================================
   // MANUFACTURING MODULE

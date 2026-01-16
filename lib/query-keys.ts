@@ -178,6 +178,18 @@ export const queryKeys = {
       ["Payment Entry", "list", options] as const,
     doc: (name: string) => ["Payment Entry", "doc", name] as const,
   },
+  currency: {
+    all: () => ["Currency"] as const,
+    list: (options?: FrappeListOptions) =>
+      ["Currency", "list", options] as const,
+    doc: (name: string) => ["Currency", "doc", name] as const,
+  },
+  priceList: {
+    all: () => ["Price List"] as const,
+    list: (options?: FrappeListOptions) =>
+      ["Price List", "list", options] as const,
+    doc: (name: string) => ["Price List", "doc", name] as const,
+  },
 
   // ============================================================================
   // MANUFACTURING MODULE

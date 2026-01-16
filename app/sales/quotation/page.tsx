@@ -14,14 +14,22 @@ import { PageHeader, EmptyState, LoadingState } from "@/components/smart";
 import type { Quotation } from "@/types/doctype-types";
 
 // Status Badge Colors
-const getStatusVariant = (status: string): "default" | "secondary" | "destructive" | "outline" => {
+const getStatusVariant = (
+  status: string
+): "default" | "secondary" | "destructive" | "outline" => {
   switch (status) {
-    case "Draft": return "secondary";
-    case "Open": return "default";
-    case "Ordered": return "default";
-    case "Lost": return "destructive";
-    case "Expired": return "outline";
-    default: return "outline";
+    case "Draft":
+      return "secondary";
+    case "Open":
+      return "default";
+    case "Ordered":
+      return "default";
+    case "Lost":
+      return "destructive";
+    case "Expired":
+      return "outline";
+    default:
+      return "outline";
   }
 };
 
@@ -30,7 +38,11 @@ export default function QuotationsListPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
-  const { data: quotations, isLoading, error } = useFrappeList<Quotation>("Quotation", {
+  const {
+    data: quotations,
+    isLoading,
+    error,
+  } = useFrappeList<Quotation>("Quotation", {
     orderBy: { field: "transaction_date", order: "desc" },
     search,
     limit: 100,
@@ -47,11 +59,17 @@ export default function QuotationsListPage() {
   }, [quotations, statusFilter]);
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-ET", { style: "currency", currency: "ETB" }).format(amount || 0);
+    return new Intl.NumberFormat("en-ET", {
+      style: "currency",
+      currency: "ETB",
+    }).format(amount || 0);
   };
 
   if (isLoading) return <LoadingState type="list" count={6} />;
-  if (error) return <div className="p-4 text-destructive">Failed to load quotations</div>;
+  if (error)
+    return (
+      <div className="p-4 text-destructive">Failed to load quotations</div>
+    );
 
   return (
     <div className="space-y-6">
@@ -63,7 +81,10 @@ export default function QuotationsListPage() {
         onSearchChange={setSearch}
         searchPlaceholder="Search ID, customer..."
         actions={
-          <Button className="rounded-full" onClick={() => router.push("/sales/quotation/new")}>
+          <Button
+            className="rounded-full"
+            onClick={() => router.push("/sales/quotation/new")}
+          >
             <Plus className="h-4 w-4 mr-2" /> New Quotation
           </Button>
         }
@@ -71,24 +92,30 @@ export default function QuotationsListPage() {
 
       {/* Status Filter */}
       <div className="flex gap-2 flex-wrap">
-        {["All", "Draft", "Open", "Ordered", "Lost", "Expired"].map((status) => (
-          <Button
-            key={status}
-            variant={statusFilter === status ? "default" : "outline"}
-            size="sm"
-            className="rounded-full"
-            onClick={() => setStatusFilter(status)}
-          >
-            {status}
-          </Button>
-        ))}
+        {["all", "Draft", "Open", "Ordered", "Lost", "Expired"].map(
+          (status) => (
+            <Button
+              key={status}
+              variant={statusFilter === status ? "default" : "outline"}
+              size="sm"
+              className="rounded-full capitalize"
+              onClick={() => setStatusFilter(status)}
+            >
+              {status === "all" ? "All" : status}
+            </Button>
+          )
+        )}
       </div>
 
       {!quotations || quotations.length === 0 ? (
         <EmptyState
           title="No quotations found"
           description="Create a new quotation for your customer"
-          action={<Button onClick={() => router.push("/sales/quotation/new")}>Create Quotation</Button>}
+          action={
+            <Button onClick={() => router.push("/sales/quotation/new")}>
+              Create Quotation
+            </Button>
+          }
         />
       ) : (
         <div className="rounded-xl border border-border overflow-hidden">
@@ -98,8 +125,12 @@ export default function QuotationsListPage() {
                 <th className="p-4 font-semibold text-foreground">ID</th>
                 <th className="p-4 font-semibold text-foreground">Customer</th>
                 <th className="p-4 font-semibold text-foreground">Date</th>
-                <th className="p-4 font-semibold text-foreground">Valid Till</th>
-                <th className="p-4 font-semibold text-foreground text-right">Total</th>
+                <th className="p-4 font-semibold text-foreground">
+                  Valid Till
+                </th>
+                <th className="p-4 font-semibold text-foreground text-right">
+                  Total
+                </th>
                 <th className="p-4 font-semibold text-foreground">Status</th>
                 <th className="p-4"></th>
               </tr>
@@ -109,7 +140,11 @@ export default function QuotationsListPage() {
                 <tr
                   key={q.name}
                   className="border-b border-border hover:bg-card/50 transition-colors cursor-pointer"
-                  onClick={() => router.push(`/sales/quotation/${encodeURIComponent(q.name)}`)}
+                  onClick={() =>
+                    router.push(
+                      `/sales/quotation/${encodeURIComponent(q.name)}`
+                    )
+                  }
                 >
                   <td className="p-4 font-medium text-primary">{q.name}</td>
                   <td className="p-4">{q.customer_name}</td>
@@ -118,9 +153,13 @@ export default function QuotationsListPage() {
                     <CalendarDays className="h-3 w-3 text-muted-foreground" />
                     {q.valid_till}
                   </td>
-                  <td className="p-4 text-right font-medium">{formatCurrency(q.grand_total)}</td>
+                  <td className="p-4 text-right font-medium">
+                    {formatCurrency(q.grand_total)}
+                  </td>
                   <td className="p-4">
-                    <Badge variant={getStatusVariant(q.status)}>{q.status}</Badge>
+                    <Badge variant={getStatusVariant(q.status)}>
+                      {q.status}
+                    </Badge>
                   </td>
                   <td className="p-4 text-right">
                     <Button
@@ -129,7 +168,9 @@ export default function QuotationsListPage() {
                       className="h-8 w-8 p-0"
                       onClick={(e) => {
                         e.stopPropagation();
-                        router.push(`/sales/quotation/${encodeURIComponent(q.name)}/edit`);
+                        router.push(
+                          `/sales/quotation/${encodeURIComponent(q.name)}/edit`
+                        );
                       }}
                     >
                       <FileText className="h-4 w-4" />

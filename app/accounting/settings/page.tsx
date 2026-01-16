@@ -3,7 +3,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Building2, Settings, ArrowUpRight } from "lucide-react";
+import {
+  Building2,
+  Settings,
+  ArrowUpRight,
+  Coins,
+  ListOrdered,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/smart";
 import { motion } from "framer-motion";
@@ -15,6 +21,18 @@ const settingsItems = [
       "Manage multiple company profiles, abbreviations, and default currencies.",
     icon: Building2,
     href: "/accounting/settings/company",
+  },
+  {
+    title: "Currencies",
+    description: "Define and manage exchange rates and currency settings.",
+    icon: Coins,
+    href: "/accounting/settings/currency",
+  },
+  {
+    title: "Price Lists",
+    description: "Manage multiple price lists for buying and selling.",
+    icon: ListOrdered,
+    href: "/accounting/settings/price-list",
   },
 ];
 

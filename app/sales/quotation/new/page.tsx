@@ -37,8 +37,9 @@ import {
   FormDatePicker,
 } from "@/components/form";
 import { QuotationCreateSchema } from "@/lib/schemas/doctype-schemas";
-import type { Quotation, Address, Contact, Item } from "@/types/doctype-types";
+import type { Quotation } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
+import { Building2 } from "lucide-react";
 
 /**
  * v3.0 Design Pattern:
@@ -56,18 +57,23 @@ export default function CreateQuotationPage() {
     defaultValues: {
       naming_series: "SAL-QTN-.YYYY.-",
       quotation_to: "Customer",
+      party_name: "",
       transaction_date: new Date().toISOString().split("T")[0],
       valid_till: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000)
         .toISOString()
         .split("T")[0],
       order_type: "Sales",
-      company: "Pana Sports", // Should ideally come from a context or global config
+      company: "",
       currency: "ETB",
       selling_price_list: "Standard Selling",
       price_list_currency: "ETB",
       conversion_rate: 1,
       plc_conversion_rate: 1,
       status: "Draft",
+      customer_address: "",
+      contact_person: "",
+      taxes_and_charges: "",
+      tc_name: "",
       items: [{ item_code: "", description: "", qty: 1, rate: 0 }],
     },
   });
@@ -79,30 +85,6 @@ export default function CreateQuotationPage() {
   const selectedPartyType = watch("quotation_to");
   const selectedPartyName = watch("party_name");
 
-  // --- Dynamic Data Fetching (v3 Factory Pattern) ---
-
-  // Fetch Address/Contact with Dynamic Link filter
-  const addressFilters = useMemo(() => {
-    if (!selectedPartyName) return [];
-    return [
-      ["Dynamic Link", "link_doctype", "=", selectedPartyType],
-      ["Dynamic Link", "link_name", "=", selectedPartyName],
-    ];
-  }, [selectedPartyType, selectedPartyName]);
-
-  const { data: addresses } = useFrappeList<Address>("Address", {
-    filters: addressFilters,
-    limit: 20,
-    enabled: !!selectedPartyName,
-  });
-
-  const { data: contacts } = useFrappeList<Contact>("Contact", {
-    filters: addressFilters,
-    limit: 20,
-    enabled: !!selectedPartyName,
-  });
-
-  // Fetch Aux Data
   const { data: taxTemplates } = useFrappeList<any>(
     "Sales Taxes and Charges Template",
     { limit: 20 }
@@ -140,7 +122,14 @@ export default function CreateQuotationPage() {
   );
 
   const onSubmit = async (values: any) => {
-    await createMutation.mutateAsync(values);
+    const payload = {
+      ...values,
+      currency: "ETB",
+      price_list_currency: "ETB",
+      conversion_rate: 1,
+      plc_conversion_rate: 1,
+    };
+    await createMutation.mutateAsync(payload);
   };
 
   return (
@@ -159,6 +148,15 @@ export default function CreateQuotationPage() {
             icon={<Briefcase className="h-4 w-4" />}
           >
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <FormFrappeSelect
+                control={control}
+                name="company"
+                label="Company"
+                required
+                doctype="Company"
+                labelField="company_name"
+                placeholder="Select company..."
+              />
               <FormSelect
                 control={control}
                 name="quotation_to"
@@ -169,21 +167,19 @@ export default function CreateQuotationPage() {
                   { value: "Lead", label: "Lead" },
                 ]}
               />
-              <div className="md:col-span-2">
-                <FormFrappeSelect
-                  control={control}
-                  name="party_name"
-                  label={selectedPartyType}
-                  required
-                  doctype={selectedPartyType}
-                  labelField={
-                    selectedPartyType === "Customer"
-                      ? "customer_name"
-                      : "lead_name"
-                  }
-                  placeholder={`Search ${selectedPartyType}...`}
-                />
-              </div>
+              <FormFrappeSelect
+                control={control}
+                name="party_name"
+                label={selectedPartyType}
+                required
+                doctype={selectedPartyType}
+                labelField={
+                  selectedPartyType === "Customer"
+                    ? "customer_name"
+                    : "lead_name"
+                }
+                placeholder={`Search ${selectedPartyType}...`}
+              />
               <FormDatePicker
                 control={control}
                 name="transaction_date"
@@ -209,40 +205,55 @@ export default function CreateQuotationPage() {
             </div>
           </InfoCard>
 
-          {/* Section 2: Address & Contact */}
+          {/* Section 2: Pricing */}
+          <InfoCard title="Pricing" icon={<Building2 className="h-4 w-4" />}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <FormFrappeSelect
+                control={control}
+                name="selling_price_list"
+                label="Price List"
+                required
+                doctype="Price List"
+                filters={[["selling", "=", 1]]}
+                labelField="price_list_name"
+                placeholder="Select price list..."
+              />
+            </div>
+          </InfoCard>
+
           <InfoCard
             title="Logistics & Point of Contact"
             icon={<MapPin className="h-4 w-4" />}
           >
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <FormSelect
+              <FormFrappeSelect
                 control={control}
                 name="customer_address"
                 label="Address"
+                doctype="Address"
                 disabled={!selectedPartyName}
-                options={
-                  addresses?.map((a) => ({
-                    value: a.name,
-                    label: a.address_title || a.address_line1,
-                  })) || []
-                }
+                filters={[
+                  ["Dynamic Link", "link_doctype", "=", selectedPartyType],
+                  ["Dynamic Link", "link_name", "=", selectedPartyName],
+                ]}
+                labelField="address_title"
                 placeholder={
                   selectedPartyName
                     ? "Select address..."
                     : "Select customer first"
                 }
               />
-              <FormSelect
+              <FormFrappeSelect
                 control={control}
                 name="contact_person"
                 label="Contact Person"
+                doctype="Contact"
                 disabled={!selectedPartyName}
-                options={
-                  contacts?.map((c) => ({
-                    value: c.name,
-                    label: c.full_name || c.first_name,
-                  })) || []
-                }
+                filters={[
+                  ["Dynamic Link", "link_doctype", "=", selectedPartyType],
+                  ["Dynamic Link", "link_name", "=", selectedPartyName],
+                ]}
+                labelField="full_name"
                 placeholder={
                   selectedPartyName
                     ? "Select contact..."
