@@ -34,6 +34,8 @@ export function useFrappeOptions(
     valueField?: string;
     /** Additional filters */
     filters?: [string, string, unknown][];
+    /** Order by field and direction (use table prefix for joins, e.g. "`tabAddress`.name") */
+    orderBy?: { field: string; order?: "asc" | "desc" };
     /** Limit number of options */
     limit?: number;
   },
@@ -54,6 +56,13 @@ export function useFrappeOptions(
 
       if (options?.filters && options.filters.length > 0) {
         params.set("filters", JSON.stringify(options.filters));
+      }
+      // Use order_by with table prefix when specified (important for Dynamic Link joins)
+      if (options?.orderBy) {
+        params.set(
+          "order_by",
+          `${options.orderBy.field} ${options.orderBy.order || "asc"}`
+        );
       }
       if (options?.limit) {
         params.set("limit", String(options.limit));

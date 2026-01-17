@@ -2,7 +2,7 @@
 // Pana ERP v3.0 - Single Sales Taxes Template API Routes
 
 import {
-  createDocHandler,
+  createGetHandler,
   createUpdateHandler,
   createDeleteHandler,
 } from "@/lib/api-factory";
@@ -18,7 +18,7 @@ const SalesTaxesTemplateUpdateSchema = z.object({
 });
 
 // GET /api/sales/taxes-template/[name] - Get single tax template
-export const GET = createDocHandler("Sales Taxes and Charges Template");
+export const GET = createGetHandler("Sales Taxes and Charges Template");
 
 // PUT /api/sales/taxes-template/[name] - Update tax template
 export const PUT = createUpdateHandler(

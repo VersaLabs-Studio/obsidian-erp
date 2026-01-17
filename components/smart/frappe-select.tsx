@@ -23,6 +23,8 @@ interface FrappeSelectProps {
   valueField?: string;
   /** Additional Frappe filters */
   filters?: [string, string, unknown][];
+  /** Order by field and direction (use table prefix for joins) */
+  orderBy?: { field: string; order?: "asc" | "desc" };
   /** Whether the select is disabled */
   disabled?: boolean;
   /** Whether the field is required */
@@ -62,6 +64,7 @@ export function FrappeSelect({
   labelField = "name",
   valueField = "name",
   filters,
+  orderBy,
   disabled,
   required,
   error,
@@ -75,6 +78,7 @@ export function FrappeSelect({
     labelField,
     valueField,
     filters,
+    orderBy,
     limit: 500,
   });
 
