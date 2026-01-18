@@ -40,6 +40,11 @@ import {
   X,
   Layers,
   Briefcase,
+  Warehouse,
+  ArrowRightLeft,
+  Scale,
+  Cpu,
+  Cog,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
@@ -55,109 +60,13 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ThemeToggle } from "@/components/smart/theme-toggle";
 
-// Real Navigation Structure with Sub-modules
+// NEW v3.0 Navigation Structure
 const navigation = [
   {
     title: "Overview",
     icon: LayoutDashboard,
     href: "/dashboard",
     items: [],
-  },
-  {
-    title: "Inventory",
-    icon: Package,
-    items: [
-      { title: "Dashboard", href: "/stock/dashboard", icon: LayoutDashboard },
-      { title: "Items", href: "/stock/item", icon: Box },
-      { title: "Stock Entries", href: "/stock/stock-entries", icon: FileText },
-      { title: "Delivery Notes", href: "/stock/delivery-notes", icon: Truck },
-      {
-        title: "Purchase Receipts",
-        href: "/stock/purchase-receipts",
-        icon: Receipt,
-      },
-    ],
-  },
-  {
-    title: "Purchasing",
-    icon: ShoppingCart,
-    items: [
-      {
-        title: "Purchase Orders",
-        href: "/purchasing/purchase-orders",
-        icon: FileText,
-      },
-    ],
-  },
-  {
-    title: "Stock Settings",
-    icon: Settings,
-    items: [
-      {
-        title: "Item Prices",
-        href: "/stock/settings/item-price",
-        icon: Wallet,
-      },
-      {
-        title: "Item Groups",
-        href: "/stock/settings/item-group",
-        icon: Layers,
-      },
-    ],
-  },
-  {
-    title: "Manufacturing",
-    icon: Factory,
-    items: [
-      { title: "Bill of Materials", href: "/manufacturing/bom", icon: Layers },
-      { title: "Add BOM", href: "/manufacturing/add-bom", icon: FileText },
-      {
-        title: "BOM Stock Report",
-        href: "/manufacturing/bom-stock-report",
-        icon: BarChart3,
-      },
-      {
-        title: "Production Planning",
-        href: "/manufacturing/production-planning-report",
-        icon: ClipboardList,
-      },
-    ],
-  },
-  {
-    title: "Accounting",
-    icon: Calculator,
-    items: [
-      {
-        title: "Dashboard",
-        href: "/accounting/dashboard",
-        icon: LayoutDashboard,
-      },
-      { title: "Sales", href: "/accounting/sales", icon: TrendingUp },
-      { title: "Purchases", href: "/accounting/purchases", icon: ShoppingCart },
-      { title: "Payments", href: "/accounting/payments", icon: CreditCard },
-      { title: "Expenses", href: "/accounting/expenses", icon: Receipt },
-      { title: "Settings", href: "/accounting/settings", icon: Settings },
-    ],
-  },
-  {
-    title: "Assets",
-    icon: Building2,
-    items: [
-      { title: "Dashboard", href: "/assets/dashboard", icon: LayoutDashboard },
-      { title: "Asset List", href: "/assets/assets", icon: Building2 },
-      { title: "Categories", href: "/assets/categories", icon: Layers },
-      { title: "Locations", href: "/assets/locations", icon: MapPin },
-      { title: "Maintenance", href: "/assets/maintenance", icon: Wrench },
-      { title: "Movements", href: "/assets/movements", icon: MoveRight },
-    ],
-  },
-  {
-    title: "HR",
-    icon: Briefcase,
-    items: [
-      { title: "Employees", href: "/hr/employee", icon: Users },
-      { title: "Settings", href: "/hr/settings", icon: Settings },
-    ],
   },
   {
     title: "CRM",
@@ -186,21 +95,54 @@ const navigation = [
     ],
   },
   {
-    title: "POS",
-    icon: ShoppingCart,
-    href: "/pos",
-    items: [],
+    title: "Inventory",
+    icon: Package,
+    items: [
+      { title: "Items", href: "/stock/item", icon: Box },
+      { title: "Warehouses", href: "/stock/warehouse", icon: Warehouse },
+      {
+        title: "Stock Entries",
+        href: "/stock/stock-entry",
+        icon: ArrowRightLeft,
+      },
+      { title: "Stock Balance", href: "/stock/balance", icon: Scale },
+      { title: "Settings", href: "/stock/settings", icon: Settings },
+    ],
+  },
+  {
+    title: "Manufacturing",
+    icon: Factory,
+    items: [
+      {
+        title: "Work Orders",
+        href: "/manufacturing/work-order",
+        icon: ClipboardList,
+      },
+      { title: "Bill of Materials", href: "/manufacturing/bom", icon: Layers },
+      { title: "Workstations", href: "/manufacturing/workstation", icon: Cpu },
+      { title: "Operations", href: "/manufacturing/operation", icon: Cog },
+      { title: "Settings", href: "/manufacturing/settings", icon: Settings },
+    ],
+  },
+  {
+    title: "HR",
+    icon: Briefcase,
+    items: [
+      { title: "Employees", href: "/hr/employee", icon: Users },
+      { title: "Settings", href: "/hr/settings", icon: Settings },
+    ],
+  },
+  {
+    title: "Accounting",
+    icon: Calculator,
+    items: [
+      { title: "Settings", href: "/accounting/settings", icon: Settings },
+    ],
   },
   {
     title: "Reports",
     icon: BarChart3,
     href: "/reports",
-    items: [],
-  },
-  {
-    title: "Analytics",
-    icon: TrendingUp,
-    href: "/analytics",
     items: [],
   },
 ];
