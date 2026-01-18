@@ -175,6 +175,7 @@ const navigation = [
     title: "Sales",
     icon: FileText,
     items: [
+      { title: "Dashboard", href: "/sales/dashboard", icon: LayoutDashboard },
       { title: "Quotations", href: "/sales/quotation", icon: FileText },
       {
         title: "Sales Orders",

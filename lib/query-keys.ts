@@ -49,6 +49,9 @@ export const queryKeys = {
     list: (options?: FrappeListOptions) =>
       ["Warehouse", "list", options] as const,
     doc: (name: string) => ["Warehouse", "doc", name] as const,
+    tree: () => ["Warehouse", "tree"] as const,
+    byParent: (parentWarehouse: string) =>
+      ["Warehouse", "list", "parent", parentWarehouse] as const,
   },
   stockEntry: {
     all: () => ["Stock Entry"] as const,

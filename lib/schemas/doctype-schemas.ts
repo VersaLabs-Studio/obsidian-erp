@@ -2738,20 +2738,35 @@ export const WarehouseSchema = z.object({
   docstatus: z.union([z.literal(0), z.literal(1), z.literal(2)]).optional(),
 });
 
-export const WarehouseCreateSchema = WarehouseSchema.pick({
-  warehouse_name: true,
-  company: true,
-}).extend({
-  disabled: z.union([z.literal(0), z.literal(1)]).optional(),
-  is_group: z.union([z.literal(0), z.literal(1)]).optional(),
+/**
+ * Warehouse Create Schema
+ * @doctype Warehouse
+ */
+export const WarehouseCreateSchema = z.object({
+  warehouse_name: z.string().min(1, "Warehouse Name is required"),
+  parent_warehouse: z.string().optional(),
+  is_group: z
+    .union([z.literal(0), z.literal(1)])
+    .optional()
+    .default(0),
+  warehouse_type: z.string().optional(),
+  company: z.string().optional(),
+  disabled: z
+    .union([z.literal(0), z.literal(1)])
+    .optional()
+    .default(0),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  country: z.string().optional(),
+  phone_no: z.string().optional(),
+  email_id: z.string().email().optional(),
+  address_line_1: z.string().optional(),
+  address_line_2: z.string().optional(),
 });
 
-export const WarehouseUpdateSchema = WarehouseSchema.partial().omit({
-  name: true,
-  creation: true,
-  owner: true,
-  docstatus: true,
-});
+export const WarehouseUpdateSchema = WarehouseCreateSchema.partial();
+
+export type WarehouseFormData = z.infer<typeof WarehouseCreateSchema>;
 
 export type WarehouseSchemaType = z.infer<typeof WarehouseSchema>;
 

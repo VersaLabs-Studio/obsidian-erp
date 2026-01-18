@@ -76,11 +76,12 @@ export const DOCTYPE_CONFIG: Record<string, DocTypeConfig> = {
     isSettings: true,
   },
   Warehouse: {
-    apiPath: "stock/settings/warehouse",
+    apiPath: "stock/warehouse",
     module: "Stock",
     labelField: "warehouse_name",
     searchFields: ["warehouse_name"],
-    isSettings: true,
+    defaultSortField: "creation",
+    defaultSortOrder: "desc",
   },
   "Stock Entry": {
     apiPath: "stock/stock-entries",
