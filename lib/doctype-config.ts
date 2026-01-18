@@ -347,6 +347,32 @@ export const DOCTYPE_CONFIG: Record<string, DocTypeConfig> = {
     searchFields: ["asset_category_name"],
     isSettings: true,
   },
+
+  // ============================================================================
+  // HR MODULE
+  // ============================================================================
+  Employee: {
+    apiPath: "hr/employee",
+    module: "HR",
+    labelField: "employee_name",
+    searchFields: ["employee_name", "employee", "user_id"],
+    defaultSortField: "creation",
+    defaultSortOrder: "desc",
+  },
+  Department: {
+    apiPath: "hr/settings/department",
+    module: "HR",
+    labelField: "department_name",
+    searchFields: ["department_name"],
+    isSettings: true,
+  },
+  Designation: {
+    apiPath: "hr/settings/designation",
+    module: "HR",
+    labelField: "designation_name",
+    searchFields: ["designation_name"],
+    isSettings: true,
+  },
 };
 
 // ============================================================================

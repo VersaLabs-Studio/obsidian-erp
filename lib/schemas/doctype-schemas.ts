@@ -548,11 +548,15 @@ export const EmployeeSchema = z.object({
 
 export const EmployeeCreateSchema = EmployeeSchema.pick({
   first_name: true,
+  last_name: true,
+  employee_name: true,
   gender: true,
   date_of_birth: true,
   date_of_joining: true,
   status: true,
   company: true,
+  department: true,
+  designation: true,
 }).extend({});
 
 export const EmployeeUpdateSchema = EmployeeSchema.partial().omit({
@@ -1802,7 +1806,7 @@ export const MaterialRequestUpdateSchema = MaterialRequestSchema.partial().omit(
     creation: true,
     owner: true,
     docstatus: true,
-  }
+  },
 );
 
 export type MaterialRequestSchemaType = z.infer<typeof MaterialRequestSchema>;
@@ -2252,7 +2256,7 @@ export const PurchaseReceiptUpdateSchema = PurchaseReceiptSchema.partial().omit(
     creation: true,
     owner: true,
     docstatus: true,
-  }
+  },
 );
 
 export type PurchaseReceiptSchemaType = z.infer<typeof PurchaseReceiptSchema>;
@@ -2447,7 +2451,7 @@ export const PurchaseInvoiceUpdateSchema = PurchaseInvoiceSchema.partial().omit(
     creation: true,
     owner: true,
     docstatus: true,
-  }
+  },
 );
 
 export type PurchaseInvoiceSchemaType = z.infer<typeof PurchaseInvoiceSchema>;
@@ -3907,7 +3911,7 @@ export const PaymentTermsTemplateSchema = z.object({
 export const PaymentTermsTemplateCreateSchema = PaymentTermsTemplateSchema.pick(
   {
     terms: true,
-  }
+  },
 ).extend({});
 
 export const PaymentTermsTemplateUpdateSchema =
@@ -4025,7 +4029,7 @@ export const PeriodClosingVoucherCreateSchema = PeriodClosingVoucherSchema.pick(
     period_end_date: true,
     closing_account_head: true,
     remarks: true,
-  }
+  },
 ).extend({});
 
 export const PeriodClosingVoucherUpdateSchema =

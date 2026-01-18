@@ -39,6 +39,7 @@ import {
   ClipboardList,
   X,
   Layers,
+  Briefcase,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
@@ -151,6 +152,14 @@ const navigation = [
     ],
   },
   {
+    title: "HR",
+    icon: Briefcase,
+    items: [
+      { title: "Employees", href: "/hr/employee", icon: Users },
+      { title: "Settings", href: "/hr/settings", icon: Settings },
+    ],
+  },
+  {
     title: "CRM",
     icon: Users,
     items: [
@@ -225,13 +234,13 @@ function NavSection({
             isActive
               ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
               : "text-muted-foreground hover:bg-secondary/80 hover:text-foreground",
-            isSidebarCollapsed && "justify-center px-2"
+            isSidebarCollapsed && "justify-center px-2",
           )}
         >
           <Icon
             className={cn(
               "h-[18px] w-[18px] transition-transform duration-300",
-              isActive && "scale-110"
+              isActive && "scale-110",
             )}
           />
           {!isSidebarCollapsed && <span>{section.title}</span>}
@@ -250,13 +259,13 @@ function NavSection({
           isActive
             ? "bg-secondary text-foreground"
             : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
-          isSidebarCollapsed && "justify-center px-2"
+          isSidebarCollapsed && "justify-center px-2",
         )}
       >
         <Icon
           className={cn(
             "h-[18px] w-[18px] transition-transform duration-300 group-hover:scale-110",
-            isActive && "text-primary"
+            isActive && "text-primary",
           )}
         />
         {!isSidebarCollapsed && (
@@ -265,7 +274,7 @@ function NavSection({
             <ChevronDown
               className={cn(
                 "h-4 w-4 text-muted-foreground transition-transform duration-300",
-                isOpen && "rotate-180"
+                isOpen && "rotate-180",
               )}
             />
           </>
@@ -277,7 +286,9 @@ function NavSection({
         <div
           className={cn(
             "grid transition-all duration-300 ease-out",
-            isOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+            isOpen
+              ? "grid-rows-[1fr] opacity-100"
+              : "grid-rows-[0fr] opacity-0",
           )}
         >
           <div className="overflow-hidden">
@@ -291,7 +302,7 @@ function NavSection({
                       (sibling) =>
                         sibling !== item &&
                         pathname.startsWith(sibling.href) &&
-                        sibling.href.length > item.href.length
+                        sibling.href.length > item.href.length,
                     ));
                 return (
                   <Link
@@ -305,13 +316,13 @@ function NavSection({
                         "group flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] transition-all duration-200",
                         isItemActive
                           ? "bg-primary text-primary-foreground font-medium shadow-md shadow-primary/10"
-                          : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground hover:translate-x-1"
+                          : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground hover:translate-x-1",
                       )}
                     >
                       <ItemIcon
                         className={cn(
                           "h-4 w-4 transition-all duration-200",
-                          isItemActive ? "scale-110" : "group-hover:scale-110"
+                          isItemActive ? "scale-110" : "group-hover:scale-110",
                         )}
                       />
                       <span>{item.title}</span>
@@ -341,7 +352,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   // Auto-expand section based on current path
   useEffect(() => {
     const activeSection = navigation.find((section) =>
-      section.items?.some((item) => pathname.startsWith(item.href))
+      section.items?.some((item) => pathname.startsWith(item.href)),
     );
     if (activeSection && !openSections.includes(activeSection.title)) {
       setOpenSections((prev) => [...prev, activeSection.title]);
@@ -350,7 +361,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   const toggleSection = (title: string) => {
     setOpenSections((prev) =>
-      prev.includes(title) ? prev.filter((t) => t !== title) : [...prev, title]
+      prev.includes(title) ? prev.filter((t) => t !== title) : [...prev, title],
     );
   };
 
@@ -361,7 +372,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <div
         className={cn(
           "flex items-center justify-between mb-6",
-          isMobile ? "px-2" : "px-1"
+          isMobile ? "px-2" : "px-1",
         )}
       >
         <div className="flex items-center gap-3 group cursor-pointer">
@@ -432,7 +443,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <div
               className={cn(
                 "flex items-center gap-3 p-2 rounded-xl cursor-pointer hover:bg-secondary/50 transition-all duration-300 group",
-                isSidebarCollapsed && !isMobile && "justify-center"
+                isSidebarCollapsed && !isMobile && "justify-center",
               )}
             >
               <Avatar className="h-9 w-9 ring-2 ring-background shadow-md transition-transform duration-300 group-hover:scale-105">
@@ -486,7 +497,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <aside
         className={cn(
           "hidden lg:flex flex-col m-3 rounded-2xl bg-card p-4 shadow-xl shadow-black/5 transition-all duration-500 ease-out",
-          isSidebarCollapsed ? "w-[72px]" : "w-[280px]"
+          isSidebarCollapsed ? "w-[72px]" : "w-[280px]",
         )}
       >
         <SidebarContent />
@@ -579,14 +590,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <div
         className={cn(
           "fixed inset-0 z-50 lg:hidden transition-all duration-300",
-          isMobileMenuOpen ? "visible" : "invisible"
+          isMobileMenuOpen ? "visible" : "invisible",
         )}
       >
         {/* Backdrop */}
         <div
           className={cn(
             "absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-300",
-            isMobileMenuOpen ? "opacity-100" : "opacity-0"
+            isMobileMenuOpen ? "opacity-100" : "opacity-0",
           )}
           onClick={() => setIsMobileMenuOpen(false)}
         />
@@ -595,7 +606,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <div
           className={cn(
             "absolute inset-y-0 left-0 w-80 max-w-[85vw] bg-card p-5 shadow-2xl flex flex-col transition-transform duration-300 ease-out",
-            isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+            isMobileMenuOpen ? "translate-x-0" : "-translate-x-full",
           )}
         >
           <SidebarContent isMobile />

@@ -18,9 +18,9 @@ interface PageHeaderProps {
   /** Custom back handler */
   onBack?: () => void;
   /** Small label above title */
-  label?: string;
+  label?: React.ReactNode;
   /** Alias for label */
-  subtitle?: string;
+  subtitle?: React.ReactNode;
   /** Main title */
   title: string;
   /** Status badge */
@@ -98,13 +98,13 @@ export function PageHeader({
         // Base styles - Floating pill design
         "flex items-center justify-between sticky top-0 z-20",
         "bg-card/80 backdrop-blur-xl rounded-full shadow-sm border border-border/40",
-        "p-2 pr-4",
+        "p-3 pr-4",
         "animate-in fade-in slide-in-from-top-2 duration-500",
         className
       )}
     >
       {/* Left section - min-w-0 prevents overflow, flex-1 allows shrinking */}
-      <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
+      <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
         {/* Back button - always visible */}
         <Button
           variant="ghost"
@@ -116,7 +116,7 @@ export function PageHeader({
         </Button>
 
         {/* Divider - hidden on mobile */}
-        <div className="h-8 w-[1px] bg-border/50 shrink-0 hidden sm:block" />
+        <div className="h-14 w-[1px] bg-border/50 shrink-0 hidden sm:block" />
 
         {/* Title container - truncates on overflow */}
         <div className="flex flex-col min-w-0">

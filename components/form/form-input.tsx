@@ -69,13 +69,14 @@ export function FormInput<T extends FieldValues>({
             <div className="relative">
               <Input
                 {...field}
+                value={field.value ?? ""}
                 type={type}
                 placeholder={placeholder}
                 disabled={disabled || loading}
                 className={cn(
                   "h-12 rounded-xl bg-secondary/30 hover:bg-secondary/50 focus:bg-card border-0",
                   loading && "pr-10",
-                  className
+                  className,
                 )}
               />
               {loading && (

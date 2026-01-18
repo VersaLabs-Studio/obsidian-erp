@@ -21,6 +21,11 @@ interface FormSwitchProps<T extends FieldValues> {
   className?: string;
   /** Whether switch is disabled */
   disabled?: boolean;
+  /** Value transformation */
+  transform?: {
+    input: (val: any) => boolean;
+    output: (val: boolean) => any;
+  };
 }
 
 /**
@@ -43,6 +48,7 @@ export function FormSwitch<T extends FieldValues>({
   description,
   className,
   disabled = false,
+  transform,
 }: FormSwitchProps<T>) {
   return (
     <FormField
@@ -65,8 +71,10 @@ export function FormSwitch<T extends FieldValues>({
           </div>
           <FormControl>
             <Switch
-              checked={field.value}
-              onCheckedChange={field.onChange}
+              checked={transform ? transform.input(field.value) : !!field.value}
+              onCheckedChange={(val) => {
+                field.onChange(transform ? transform.output(val) : val);
+              }}
               disabled={disabled}
               className="data-[state=checked]:bg-primary"
             />
