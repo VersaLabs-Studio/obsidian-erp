@@ -13,9 +13,9 @@ export const GET = createListHandler("Warehouse", {
     "city",
     "lft",
     "rgt",
-    "Warehouse.creation",
+    "creation",
   ],
-  defaultSort: { field: "Warehouse.creation", order: "desc" },
+  defaultSort: { field: "creation", order: "desc" },
   defaultLimit: 100,
 });
 
