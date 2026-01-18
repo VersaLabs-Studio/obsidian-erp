@@ -60,11 +60,12 @@ export function FormTextarea<T extends FieldValues>({
           <FormControl>
             <Textarea
               {...field}
+              value={field.value ?? ""}
               placeholder={placeholder}
               disabled={disabled}
               className={cn(
                 "rounded-xl bg-secondary/30 hover:bg-secondary/50 focus:bg-card border-0 resize-none transition-all duration-300",
-                className
+                className,
               )}
               style={{ minHeight }}
             />

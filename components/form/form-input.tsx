@@ -70,6 +70,15 @@ export function FormInput<T extends FieldValues>({
               <Input
                 {...field}
                 value={field.value ?? ""}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (type === "number") {
+                    // Convert to number, or undefined if empty to trigger Zod validation
+                    field.onChange(val === "" ? undefined : Number(val));
+                  } else {
+                    field.onChange(val);
+                  }
+                }}
                 type={type}
                 placeholder={placeholder}
                 disabled={disabled || loading}

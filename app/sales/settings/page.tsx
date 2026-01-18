@@ -22,6 +22,13 @@ const settingsItems = [
     icon: FileText,
     href: "/sales/settings/terms",
   },
+  {
+    title: "Partner Types",
+    description:
+      "Manage categories for sales partners (e.g. Agency, Reseller).",
+    icon: FileText,
+    href: "/sales/settings/sales-partner-type",
+  },
 ];
 
 export default function SalesSettingsPage() {

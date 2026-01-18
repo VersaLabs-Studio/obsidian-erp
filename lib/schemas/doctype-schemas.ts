@@ -5293,3 +5293,32 @@ export const CustomerUpdateSchema = CustomerSchema.partial().omit({
 });
 
 export type CustomerSchemaType = z.infer<typeof CustomerSchema>;
+
+/**
+ * Sales Partner Type Zod Schema
+ * @doctype Sales Partner Type
+ * @generated 2026-01-18T10:13:46.765Z
+ */
+export const SalesPartnerTypeSchema = z.object({
+  sales_partner_type: z.string().min(1, "Sales Partner Type is required"),
+  name: z.string().min(1, "ID is required"),
+  owner: z.string().optional(),
+  creation: z.string().optional(),
+  modified: z.string().optional(),
+  modified_by: z.string().optional(),
+  docstatus: z.union([z.literal(0), z.literal(1), z.literal(2)]).optional(),
+});
+
+export const SalesPartnerTypeCreateSchema = SalesPartnerTypeSchema.pick({
+  sales_partner_type: true,
+}).extend({
+});
+
+export const SalesPartnerTypeUpdateSchema = SalesPartnerTypeSchema.partial().omit({
+  name: true,
+  creation: true,
+  owner: true,
+  docstatus: true,
+});
+
+export type SalesPartnerTypeSchemaType = z.infer<typeof SalesPartnerTypeSchema>;

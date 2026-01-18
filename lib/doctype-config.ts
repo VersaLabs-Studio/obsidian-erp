@@ -248,6 +248,13 @@ export const DOCTYPE_CONFIG: Record<string, DocTypeConfig> = {
     searchFields: ["partner_name", "partner_type"],
     isSettings: true,
   },
+  "Sales Partner Type": {
+    apiPath: "sales/settings/sales-partner-type",
+    module: "Sales",
+    labelField: "name",
+    searchFields: ["name"],
+    isSettings: true,
+  },
 
   // ============================================================================
   // PURCHASING MODULE
