@@ -4445,16 +4445,33 @@ export const WorkstationSchema = z.object({
 /**
  * Workstation Create Schema
  * @doctype Workstation
+ * Enhanced with full DocType fields
  */
 export const WorkstationCreateSchema = z.object({
+  // Required fields
   workstation_name: z.string().min(1, "Workstation Name is required"),
   production_capacity: z.number().min(1).default(1),
+
+  // Optional classification
+  workstation_type: z.string().optional(),
+  plant_floor: z.string().optional(),
+  warehouse: z.string().optional(),
+
+  // Status fields
+  status: z
+    .enum(["Production", "Off", "Idle", "Problem", "Maintenance", "Setup"])
+    .optional(),
+
+  // Cost rates (ETB per hour)
   hour_rate: z.number().min(0).default(0),
   hour_rate_labour: z.number().min(0).optional().default(0),
   hour_rate_electricity: z.number().min(0).optional().default(0),
   hour_rate_consumable: z.number().min(0).optional().default(0),
+  hour_rate_rent: z.number().min(0).optional().default(0),
+
+  // Additional info
   description: z.string().optional(),
-  company: z.string().optional(),
+  holiday_list: z.string().optional(),
 });
 
 export const WorkstationUpdateSchema = WorkstationCreateSchema.partial();
