@@ -4298,26 +4298,6 @@ export const WorkOrderSchema = z.object({
   docstatus: z.union([z.literal(0), z.literal(1), z.literal(2)]).optional(),
 });
 
-export const WorkOrderCreateSchema = WorkOrderSchema.pick({
-  naming_series: true,
-  status: true,
-  production_item: true,
-  bom_no: true,
-  company: true,
-  qty: true,
-  fg_warehouse: true,
-  planned_start_date: true,
-}).extend({
-  description: z.string().optional(),
-});
-
-export const WorkOrderUpdateSchema = WorkOrderSchema.partial().omit({
-  name: true,
-  creation: true,
-  owner: true,
-  docstatus: true,
-});
-
 export type WorkOrderSchemaType = z.infer<typeof WorkOrderSchema>;
 
 /**
@@ -4383,6 +4363,80 @@ export type BOMFormData = z.input<typeof BOMCreateSchema>;
 export type BOMItemData = z.input<typeof BOMItemSchema>;
 export type BOMOperationData = z.input<typeof BOMOperationSchema>;
 export type BOMScrapItemData = z.input<typeof BOMScrapItemSchema>;
+
+/**
+ * Work Order Item (Child Table - Required Materials)
+ */
+export const WorkOrderItemSchema = z.object({
+  item_code: z.string().min(1),
+  item_name: z.string().optional(),
+  source_warehouse: z.string().optional(),
+  required_qty: z.number().min(0).default(0),
+  transferred_qty: z.number().optional(),
+  consumed_qty: z.number().optional(),
+  available_qty_at_source_warehouse: z.number().optional(),
+});
+
+/**
+ * Work Order Operation (Child Table)
+ */
+export const WorkOrderOperationSchema = z.object({
+  operation: z.string().min(1),
+  workstation: z.string().optional(),
+  time_in_mins: z.number().min(0).default(0),
+  planned_operating_cost: z.number().optional(),
+  actual_operating_cost: z.number().optional(),
+  completed_qty: z.number().optional(),
+  status: z.enum(["Pending", "Work in Progress", "Completed"]).optional(),
+});
+
+/**
+ * Work Order Create Schema
+ */
+export const WorkOrderCreateSchema = z.object({
+  naming_series: z.literal("MFG-WO-.YYYY.-").default("MFG-WO-.YYYY.-"),
+  production_item: z.string().min(1, "Item is required"),
+  bom_no: z.string().min(1, "BOM is required"),
+  company: z.string().min(1, "Company is required"),
+  qty: z.number().min(1, "Quantity must be at least 1"),
+  fg_warehouse: z.string().min(1, "Target warehouse is required"),
+  planned_start_date: z.string().min(1, "Planned start date is required"),
+
+  // Optional fields
+  sales_order: z.string().optional(),
+  project: z.string().optional(),
+  source_warehouse: z.string().optional(),
+  wip_warehouse: z.string().optional(),
+  scrap_warehouse: z.string().optional(),
+  planned_end_date: z.string().optional(),
+  expected_delivery_date: z.string().optional(),
+  material_request: z.string().optional(),
+  use_multi_level_bom: z.union([z.literal(0), z.literal(1)]).default(0),
+  skip_transfer: z.union([z.literal(0), z.literal(1)]).default(0),
+
+  // Child tables (auto-populated from BOM)
+  required_items: z.array(WorkOrderItemSchema).optional(),
+  operations: z.array(WorkOrderOperationSchema).optional(),
+});
+
+export const WorkOrderUpdateSchema = WorkOrderCreateSchema.partial().extend({
+  status: z
+    .enum([
+      "Draft",
+      "Submitted",
+      "Not Started",
+      "In Process",
+      "Completed",
+      "Stopped",
+      "Closed",
+      "Cancelled",
+    ])
+    .optional(),
+});
+
+export type WorkOrderFormData = z.input<typeof WorkOrderCreateSchema>;
+export type WorkOrderItemData = z.input<typeof WorkOrderItemSchema>;
+export type WorkOrderOperationData = z.input<typeof WorkOrderOperationSchema>;
 
 /**
  * Workstation Zod Schema

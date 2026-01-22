@@ -231,6 +231,13 @@ export const queryKeys = {
     list: (options?: FrappeListOptions) =>
       ["Work Order", "list", options] as const,
     doc: (name: string) => ["Work Order", "doc", name] as const,
+    bySalesOrder: (so: string) =>
+      ["Work Order", "list", "sales_order", so] as const,
+    byStatus: (status: string) =>
+      ["Work Order", "list", "status", status] as const,
+    byItem: (item: string) => ["Work Order", "list", "item", item] as const,
+    pendingMaterials: (name: string) =>
+      ["Work Order", name, "pending_materials"] as const,
   },
   workstation: {
     all: () => ["Workstation"] as const,

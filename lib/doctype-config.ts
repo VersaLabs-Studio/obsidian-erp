@@ -357,9 +357,21 @@ export const DOCTYPE_CONFIG: Record<string, DocTypeConfig> = {
     apiPath: "manufacturing/work-order",
     module: "Manufacturing",
     labelField: "name",
-    searchFields: ["name", "production_item"],
+    searchFields: ["name", "production_item", "item_name", "sales_order"],
     defaultSortField: "creation",
     defaultSortOrder: "desc",
+  },
+  "Work Order Item": {
+    apiPath: "manufacturing/work-order-item",
+    module: "Manufacturing",
+    labelField: "item_code",
+    isSettings: true,
+  },
+  "Work Order Operation": {
+    apiPath: "manufacturing/work-order-operation",
+    module: "Manufacturing",
+    labelField: "operation",
+    isSettings: true,
   },
   Workstation: {
     apiPath: "manufacturing/workstation",

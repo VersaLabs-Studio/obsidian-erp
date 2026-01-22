@@ -30,6 +30,7 @@ import {
   MapPin,
   Clock,
   User,
+  ClipboardList,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -188,6 +189,20 @@ export default function SalesOrderDetailPage() {
                     <Send className="h-4 w-4 mr-2" /> Submit
                   </Button>
                 </>
+              )}
+              {order.docstatus === 1 && !isCancelled && (
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    router.push(
+                      `/manufacturing/work-order/new?sales_order=${encodeURIComponent(name)}`,
+                    )
+                  }
+                  className="rounded-full shadow-sm hover:shadow-md transition-all bg-card"
+                >
+                  <ClipboardList className="h-4 w-4 mr-2" />
+                  Create Work Order
+                </Button>
               )}
 
               <Button
