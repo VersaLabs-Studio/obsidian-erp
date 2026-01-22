@@ -11,7 +11,7 @@ export type ModuleCategory =
   | "Accounting"
   | "CRM"
   | "Sales"
-  | "Purchasing"
+  | "Buying"
   | "Assets"
   | "HR"
   | "Settings";
@@ -83,13 +83,33 @@ export const DOCTYPE_CONFIG: Record<string, DocTypeConfig> = {
     defaultSortField: "creation",
     defaultSortOrder: "desc",
   },
-  "Stock Entry": {
-    apiPath: "stock/stock-entries",
+  "Material Request": {
+    apiPath: "stock/material-request",
     module: "Stock",
     labelField: "name",
-    searchFields: ["name"],
-    defaultSortField: "posting_date",
+    searchFields: ["name", "material_request_type", "status"],
+    defaultSortField: "creation",
     defaultSortOrder: "desc",
+  },
+  "Material Request Item": {
+    apiPath: "stock/material-request-item",
+    module: "Stock",
+    labelField: "item_code",
+    isSettings: true,
+  },
+  "Stock Entry": {
+    apiPath: "stock/stock-entry",
+    module: "Stock",
+    labelField: "name",
+    searchFields: ["name", "purpose", "work_order"],
+    defaultSortField: "creation",
+    defaultSortOrder: "desc",
+  },
+  "Stock Entry Detail": {
+    apiPath: "stock/stock-entry-detail",
+    module: "Stock",
+    labelField: "item_code",
+    isSettings: true,
   },
   "Delivery Note": {
     apiPath: "stock/delivery-notes",
@@ -265,23 +285,28 @@ export const DOCTYPE_CONFIG: Record<string, DocTypeConfig> = {
   },
 
   // ============================================================================
-  // PURCHASING MODULE
+  // BUYING MODULE
   // ============================================================================
   Supplier: {
-    apiPath: "purchasing/supplier",
-    module: "Purchasing",
+    apiPath: "buying/supplier",
+    module: "Buying",
     labelField: "supplier_name",
-    searchFields: ["supplier_name", "supplier_id"],
+    searchFields: ["name", "supplier_name", "supplier_group"],
+    defaultSortField: "supplier_name",
+  },
+  "Purchase Order": {
+    apiPath: "buying/purchase-order",
+    module: "Buying",
+    labelField: "name",
+    searchFields: ["name", "supplier", "supplier_name"],
     defaultSortField: "creation",
     defaultSortOrder: "desc",
   },
-  "Purchase Order": {
-    apiPath: "purchasing/purchase-order",
-    module: "Purchasing",
-    labelField: "name",
-    searchFields: ["name", "supplier_name"],
-    defaultSortField: "transaction_date",
-    defaultSortOrder: "desc",
+  "Purchase Order Item": {
+    apiPath: "buying/purchase-order-item",
+    module: "Buying",
+    labelField: "item_code",
+    isSettings: true,
   },
 
   // ============================================================================

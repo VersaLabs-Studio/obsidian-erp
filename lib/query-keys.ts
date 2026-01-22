@@ -53,11 +53,28 @@ export const queryKeys = {
     byParent: (parentWarehouse: string) =>
       ["Warehouse", "list", "parent", parentWarehouse] as const,
   },
+  materialRequest: {
+    all: () => ["Material Request"] as const,
+    list: (options?: FrappeListOptions) =>
+      ["Material Request", "list", options] as const,
+    doc: (name: string) => ["Material Request", "doc", name] as const,
+    byType: (type: string) =>
+      ["Material Request", "list", "type", type] as const,
+    byWorkOrder: (wo: string) =>
+      ["Material Request", "list", "work_order", wo] as const,
+    pending: () => ["Material Request", "list", "pending"] as const,
+  },
   stockEntry: {
     all: () => ["Stock Entry"] as const,
     list: (options?: FrappeListOptions) =>
       ["Stock Entry", "list", options] as const,
     doc: (name: string) => ["Stock Entry", "doc", name] as const,
+    byPurpose: (purpose: string) =>
+      ["Stock Entry", "list", "purpose", purpose] as const,
+    byWorkOrder: (wo: string) =>
+      ["Stock Entry", "list", "work_order", wo] as const,
+    byWarehouse: (wh: string) =>
+      ["Stock Entry", "list", "warehouse", wh] as const,
   },
   deliveryNote: {
     all: () => ["Delivery Note"] as const,
@@ -167,7 +184,7 @@ export const queryKeys = {
   },
 
   // ============================================================================
-  // PURCHASING MODULE
+  // BUYING MODULE
   // ============================================================================
   supplier: {
     all: () => ["Supplier"] as const,
@@ -180,6 +197,10 @@ export const queryKeys = {
     list: (options?: FrappeListOptions) =>
       ["Purchase Order", "list", options] as const,
     doc: (name: string) => ["Purchase Order", "doc", name] as const,
+    bySupplier: (supplier: string) =>
+      ["Purchase Order", "list", "supplier", supplier] as const,
+    toReceive: () => ["Purchase Order", "list", "to_receive"] as const,
+    toBill: () => ["Purchase Order", "list", "to_bill"] as const,
   },
 
   // ============================================================================

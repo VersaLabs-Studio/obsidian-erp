@@ -1,8 +1,10 @@
 // components/smart/empty-state.tsx
 // Pana ERP v3.0 - Empty State Component
 
+import React from "react";
 import { cn } from "@/lib/utils";
 import { LucideIcon, Package, Search, FileX } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 interface EmptyStateProps {
   /** Icon to display */
@@ -13,8 +15,14 @@ interface EmptyStateProps {
   description?: string;
   /** Whether this is a "no results" vs "no data" state */
   variant?: "no-data" | "no-results" | "error";
-  /** Action button/element */
-  action?: React.ReactNode;
+  /** Action button/element or configuration object */
+  action?:
+    | React.ReactNode
+    | {
+        label: string;
+        onClick: () => void;
+        icon?: LucideIcon;
+      };
   /** Additional CSS classes */
   className?: string;
 }
@@ -63,18 +71,44 @@ export function EmptyState({
   const config = variantConfig[variant];
   const Icon = icon || config.icon;
 
+  const renderAction = () => {
+    if (!action) return null;
+
+    // Check if action is a configuration object
+    if (
+      typeof action === "object" &&
+      "label" in action &&
+      "onClick" in action &&
+      !React.isValidElement(action)
+    ) {
+      const { label, onClick, icon: ActionIcon } = action as any;
+      return (
+        <Button
+          onClick={onClick}
+          variant="outline"
+          className="rounded-full px-6 border-primary/20 hover:border-primary/40 hover:bg-primary/5 text-primary font-bold shadow-sm"
+        >
+          {ActionIcon && <ActionIcon className="h-4 w-4 mr-2" />}
+          {label}
+        </Button>
+      );
+    }
+
+    return action as React.ReactNode;
+  };
+
   return (
     <div
       className={cn(
         "flex flex-col items-center justify-center py-16 px-4 text-center",
         "animate-in fade-in duration-500",
-        className
+        className,
       )}
     >
       <div
         className={cn(
           "w-20 h-20 rounded-3xl flex items-center justify-center mb-6",
-          "bg-muted/50"
+          "bg-muted/50",
         )}
       >
         <Icon
@@ -91,7 +125,7 @@ export function EmptyState({
         </p>
       )}
 
-      {action && <div className="mt-2">{action}</div>}
+      {action && <div className="mt-2">{renderAction()}</div>}
     </div>
   );
 }

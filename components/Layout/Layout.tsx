@@ -101,12 +101,34 @@ const navigation = [
       { title: "Items", href: "/stock/item", icon: Box },
       { title: "Warehouses", href: "/stock/warehouse", icon: Warehouse },
       {
+        title: "Material Requests",
+        href: "/stock/material-request",
+        icon: ShoppingCart,
+      },
+      {
         title: "Stock Entries",
         href: "/stock/stock-entry",
         icon: ArrowRightLeft,
       },
       { title: "Stock Balance", href: "/stock/balance", icon: Scale },
       { title: "Settings", href: "/stock/settings", icon: Settings },
+    ],
+  },
+  {
+    title: "Buying",
+    icon: ShoppingCart,
+    items: [
+      {
+        title: "Suppliers",
+        href: "/buying/supplier",
+        icon: Building2,
+      },
+      {
+        title: "Purchase Orders",
+        href: "/buying/purchase-order",
+        icon: ClipboardList,
+      },
+      { title: "Settings", href: "/buying/settings", icon: Settings },
     ],
   },
   {

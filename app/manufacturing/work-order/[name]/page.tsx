@@ -312,6 +312,20 @@ export default function WorkOrderDetailPage() {
                 </Button>
               )}
 
+            {(status === "Not Started" || status === "In Process") && (
+              <Button
+                variant="outline"
+                className="rounded-full h-9"
+                onClick={() =>
+                  router.push(
+                    `/stock/material-request/new?work_order=${encodeURIComponent(woName)}&type=Purchase`,
+                  )
+                }
+              >
+                <Plus className="h-4 w-4 mr-2" /> Request Materials
+              </Button>
+            )}
+
             {isDraft && (
               <Button
                 variant="ghost"
