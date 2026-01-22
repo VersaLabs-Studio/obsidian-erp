@@ -48,37 +48,44 @@ import { format, parseISO, isPast } from "date-fns";
 const STATUS_CONFIG = {
   Draft: {
     color: "text-slate-600",
-    bg: "bg-slate-100 dark:bg-slate-800",
+    bg: "bg-slate-50 dark:bg-slate-800/50",
+    border: "border-slate-200 dark:border-slate-700",
     icon: Pencil,
   },
   "Not Started": {
     color: "text-amber-600",
-    bg: "bg-amber-100 dark:bg-amber-900/30",
+    bg: "bg-amber-50 dark:bg-amber-900/10",
+    border: "border-amber-200 dark:border-amber-800/50",
     icon: Clock,
   },
   "In Process": {
     color: "text-blue-600",
-    bg: "bg-blue-100 dark:bg-blue-900/30",
+    bg: "bg-blue-50 dark:bg-blue-900/10",
+    border: "border-blue-200 dark:border-blue-800/50",
     icon: Play,
   },
   Completed: {
     color: "text-emerald-600",
-    bg: "bg-emerald-100 dark:bg-emerald-900/30",
+    bg: "bg-emerald-50 dark:bg-emerald-900/10",
+    border: "border-emerald-200 dark:border-emerald-800/50",
     icon: CheckCircle2,
   },
   Stopped: {
     color: "text-red-600",
-    bg: "bg-red-100 dark:bg-red-900/30",
+    bg: "bg-red-50 dark:bg-red-900/10",
+    border: "border-red-200 dark:border-red-800/50",
     icon: Pause,
   },
   Closed: {
     color: "text-gray-500",
-    bg: "bg-gray-100 dark:bg-gray-800",
+    bg: "bg-gray-50 dark:bg-gray-800/50",
+    border: "border-gray-200 dark:border-gray-700",
     icon: Archive,
   },
   Cancelled: {
     color: "text-gray-400",
-    bg: "bg-gray-100 dark:bg-gray-800",
+    bg: "bg-gray-50 dark:bg-gray-800/50",
+    border: "border-gray-200 dark:border-gray-700",
     icon: XCircle,
   },
 };
@@ -98,37 +105,42 @@ function WorkOrderCard({ wo, index, onView, onEdit, onDelete }) {
         "group relative bg-card rounded-2xl border p-6",
         "hover:shadow-xl hover:shadow-primary/5 hover:border-primary/20",
         "transition-all duration-300 cursor-pointer animate-in fade-in slide-in-from-bottom-4",
-        isOverdue ? "border-red-300 dark:border-red-800" : "border-border/50",
+        isOverdue
+          ? "border-red-300 dark:border-red-800 shadow-[0_0_15px_rgba(239,68,68,0.05)]"
+          : "border-border/50",
       )}
       style={{ animationDelay: `${index * 50}ms` }}
       onClick={onView}
     >
       {/* Overdue Badge */}
       {isOverdue && (
-        <div className="absolute -top-2 -right-2 px-2 py-1 bg-red-500 text-white text-[10px] font-bold rounded-full">
+        <div className="absolute -top-2 -right-2 px-3 py-1 bg-red-500 text-white text-[10px] font-black rounded-full shadow-lg shadow-red-500/20 tracking-wider">
           OVERDUE
         </div>
       )}
 
       {/* Header */}
-      <div className="flex items-start justify-between mb-4">
+      <div className="flex items-start justify-between mb-5">
         <div className="flex items-center gap-3">
           <div
             className={cn(
-              "h-12 w-12 rounded-xl flex items-center justify-center",
+              "h-12 w-12 rounded-xl flex items-center justify-center transition-all group-hover:scale-110 border",
               statusConfig.bg,
               statusConfig.color,
+              statusConfig.border,
             )}
           >
             <StatusIcon className="h-6 w-6" />
           </div>
-          <div>
-            <h3 className="font-bold text-foreground group-hover:text-primary transition-colors">
+          <div className="space-y-0.5">
+            <h3 className="font-black text-foreground group-hover:text-primary transition-colors tracking-tight">
               {wo.name}
             </h3>
-            <p className="text-sm text-muted-foreground line-clamp-1">
-              {wo.item_name || wo.production_item}
-            </p>
+            <div className="flex items-center gap-2">
+              <p className="text-xs font-bold text-muted-foreground line-clamp-1 uppercase tracking-widest">
+                {wo.production_item}
+              </p>
+            </div>
           </div>
         </div>
         <DropdownMenu>
@@ -141,12 +153,16 @@ function WorkOrderCard({ wo, index, onView, onEdit, onDelete }) {
               <MoreVertical className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-44 rounded-xl">
+          <DropdownMenuContent
+            align="end"
+            className="w-44 rounded-xl shadow-xl border-border/50"
+          >
             <DropdownMenuItem
               onClick={(e) => {
                 e.stopPropagation();
                 onView();
               }}
+              className="rounded-lg"
             >
               <Eye className="h-4 w-4 mr-2" /> View Details
             </DropdownMenuItem>
@@ -156,6 +172,7 @@ function WorkOrderCard({ wo, index, onView, onEdit, onDelete }) {
                   e.stopPropagation();
                   onEdit();
                 }}
+                className="rounded-lg"
               >
                 <Pencil className="h-4 w-4 mr-2" /> Edit
               </DropdownMenuItem>
@@ -166,7 +183,7 @@ function WorkOrderCard({ wo, index, onView, onEdit, onDelete }) {
                   e.stopPropagation();
                   onDelete();
                 }}
-                className="text-destructive"
+                className="text-destructive rounded-lg focus:bg-destructive/10 focus:text-destructive"
               >
                 <Trash2 className="h-4 w-4 mr-2" /> Delete
               </DropdownMenuItem>
@@ -175,62 +192,84 @@ function WorkOrderCard({ wo, index, onView, onEdit, onDelete }) {
         </DropdownMenu>
       </div>
 
-      {/* Progress Bar */}
       <div className="mb-4">
-        <div className="flex justify-between text-xs mb-1">
-          <span className="text-muted-foreground">Progress</span>
-          <span className="font-medium">
-            {wo.produced_qty || 0} / {wo.qty}
+        <p className="text-sm font-semibold text-foreground line-clamp-1 mb-1">
+          {wo.item_name || wo.production_item}
+        </p>
+        <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed opacity-70">
+          {wo.description ||
+            "No additional description provided for this production job."}
+        </p>
+      </div>
+
+      {/* Progress Bar */}
+      <div className="mb-5 p-3 bg-secondary/20 rounded-xl border border-border/10">
+        <div className="flex justify-between items-baseline mb-2">
+          <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+            Production Progress
+          </span>
+          <span className="text-xs font-bold text-primary">
+            {Math.round(progress)}%
           </span>
         </div>
         <div className="h-2 bg-secondary rounded-full overflow-hidden">
           <div
             className={cn(
-              "h-full rounded-full transition-all",
+              "h-full rounded-full transition-all duration-500",
               progress >= 100 ? "bg-emerald-500" : "bg-primary",
             )}
             style={{ width: `${Math.min(progress, 100)}%` }}
           />
         </div>
+        <div className="flex justify-between mt-1.5 text-[10px] font-bold">
+          <span className="text-muted-foreground">
+            Produced: {wo.produced_qty || 0}
+          </span>
+          <span className="text-foreground">Total: {wo.qty}</span>
+        </div>
       </div>
 
       {/* Info Grid */}
-      <div className="grid grid-cols-2 gap-3 text-xs">
-        <div className="flex items-center gap-1.5 text-muted-foreground">
-          <Package className="h-3.5 w-3.5" />
+      <div className="grid grid-cols-2 gap-y-3 gap-x-4 text-[11px]">
+        <div className="flex items-center gap-2 text-muted-foreground font-medium truncate">
+          <Package className="h-3.5 w-3.5 text-emerald-500" />
           <span className="truncate">{wo.bom_no}</span>
         </div>
-        <div className="flex items-center gap-1.5 text-muted-foreground">
-          <Factory className="h-3.5 w-3.5" />
+        <div className="flex items-center gap-2 text-muted-foreground font-medium truncate">
+          <Factory className="h-3.5 w-3.5 text-amber-500" />
           <span className="truncate">{wo.fg_warehouse}</span>
         </div>
         {wo.planned_start_date && (
-          <div className="flex items-center gap-1.5 text-muted-foreground">
-            <Calendar className="h-3.5 w-3.5" />
-            <span>{format(parseISO(wo.planned_start_date), "MMM d")}</span>
+          <div className="flex items-center gap-2 text-muted-foreground font-medium">
+            <Calendar className="h-3.5 w-3.5 text-blue-500" />
+            <span>
+              {format(parseISO(wo.planned_start_date), "MMM d, yyyy")}
+            </span>
           </div>
         )}
         {wo.sales_order && (
-          <div className="flex items-center gap-1.5 text-blue-600">
+          <div className="flex items-center gap-2 text-indigo-600 font-bold truncate">
             <ClipboardList className="h-3.5 w-3.5" />
             <span className="truncate">{wo.sales_order}</span>
           </div>
         )}
       </div>
 
-      {/* Status Badge */}
-      <div className="mt-4 pt-3 border-t border-border/50">
+      {/* Status & Company Footer */}
+      <div className="mt-5 pt-4 border-t border-border/50 flex items-center justify-between">
         <Badge
           className={cn(
-            "rounded-full text-xs",
+            "rounded-full text-[10px] font-bold px-3 py-0.5 border shadow-sm",
             statusConfig.bg,
             statusConfig.color,
-            "border-0",
+            statusConfig.border,
           )}
         >
-          <StatusIcon className="h-3 w-3 mr-1" />
           {wo.status}
         </Badge>
+        <div className="text-[10px] font-black uppercase tracking-tighter text-muted-foreground/50">
+          {wo.company}
+        </div>
       </div>
     </div>
   );
@@ -252,7 +291,9 @@ export default function WorkOrderListPage() {
       "status",
       "production_item",
       "item_name",
+      "description",
       "bom_no",
+      "company",
       "sales_order",
       "qty",
       "produced_qty",

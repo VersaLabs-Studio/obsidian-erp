@@ -1,7 +1,7 @@
 // @ts-nocheck
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, Suspense, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -96,6 +96,19 @@ function EditWorkOrderForm() {
 
   const selectedItem = form.watch("production_item");
   const selectedBom = form.watch("bom_no");
+  const workOrderQty = form.watch("qty");
+
+  // Fetch UOMs for whole number validation
+  const { data: uoms } = useFrappeList<Uom>("UOM", {
+    fields: ["name", "must_be_whole_number"],
+    limit: 1000,
+  });
+
+  const uomMap = useMemo(() => {
+    const map = new Map<string, number>();
+    uoms?.forEach((u) => map.set(u.name, u.must_be_whole_number || 0));
+    return map;
+  }, [uoms]);
 
   const { data: bomDetails } = useFrappeDoc<Bom>("BOM", selectedBom || "", {
     enabled: !!selectedBom,
@@ -103,30 +116,89 @@ function EditWorkOrderForm() {
 
   const updateMutation = useFrappeUpdate("Work Order", {
     onSuccess: () => {
-      toast.success("Work Order updated");
+      toast.success("Work Order updated Successfully");
       router.push(`/manufacturing/work-order/${encodeURIComponent(woName)}`);
     },
     onError: (err) => toast.error(err.message),
   });
 
   const onSubmit = (data: WorkOrderFormData) => {
+    if (!bomDetails) {
+      toast.error("BOM details not loaded yet.");
+      return;
+    }
+
+    if (!uoms && !uomMap.size) {
+      toast.error(
+        "UOM validation data is still loading. Please try again in a moment.",
+      );
+      return;
+    }
+
+    const ratio = data.qty / (bomDetails.quantity || 1);
+
+    // Discrete UOM keywords that almost always require whole numbers in ERP
+    const DISCRETE_UOMS = [
+      "Nos",
+      "Set",
+      "Unit",
+      "Pcs",
+      "Each",
+      "Box",
+      "Packet",
+    ];
+
+    // UOM Validation for parent qty
+    const itemUomMustBeInteger = uomMap.get(bomDetails.uom);
+    if (itemUomMustBeInteger === 1 && !Number.isInteger(data.qty)) {
+      toast.error(
+        `Quantity for item ${data.production_item} must be a whole number for UOM ${bomDetails.uom}`,
+      );
+      return;
+    }
+
+    // Format required_items from BOM with UOM validation
+    const required_items = [];
+    for (const item of bomDetails.items || []) {
+      let reqQty = item.qty * ratio;
+      const mustBeInt = uomMap.get(item.uom);
+
+      // Heuristic: If we know it must be int OR it's a known discrete UOM, round it
+      const isDiscrete = DISCRETE_UOMS.some((u) =>
+        item.uom?.toLowerCase().includes(u.toLowerCase()),
+      );
+
+      if ((mustBeInt === 1 || isDiscrete) && !Number.isInteger(reqQty)) {
+        // Use a small epsilon to avoid floating point issues (e.g. 30.000000004 should be 30)
+        if (Math.abs(reqQty - Math.round(reqQty)) < 0.0001) {
+          reqQty = Math.round(reqQty);
+        } else {
+          // Round up to nearest integer to satisfy Frappe's UOMMustBeIntegerError
+          reqQty = Math.ceil(reqQty);
+        }
+      }
+
+      required_items.push({
+        item_code: item.item_code,
+        item_name: item.item_name,
+        source_warehouse: data.source_warehouse || item.source_warehouse,
+        required_qty: reqQty,
+        doctype: "Work Order Item",
+      });
+    }
+
     const payload = {
       ...data,
-      required_items:
-        bomDetails?.items?.map((item: any) => ({
-          item_code: item.item_code,
-          item_name: item.item_name,
-          source_warehouse: data.source_warehouse,
-          required_qty: item.qty * (data.qty / (bomDetails.quantity || 1)),
-          doctype: "Work Order Item",
-        })) || [],
+      required_items,
       operations:
         bomDetails?.operations?.map((op: any) => ({
           operation: op.operation,
           workstation: op.workstation,
           time_in_mins: op.time_in_mins,
+          planned_operating_cost: op.operating_cost * ratio,
           doctype: "Work Order Operation",
         })) || [],
+      planned_operating_cost: (bomDetails.operating_cost || 0) * ratio,
     };
     updateMutation.mutate({ name: woName, data: payload });
   };
@@ -137,14 +209,25 @@ function EditWorkOrderForm() {
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Main Form */}
           <div className="lg:col-span-2 space-y-6">
             {/* Product & BOM */}
-            <div className="bg-card rounded-2xl border border-border/50 p-6 space-y-4">
-              <div className="flex items-center gap-2 font-semibold text-lg">
-                <Package className="h-5 w-5 text-primary" />
-                Product & Recipe
+            <div className="bg-card rounded-[2rem] border border-border/50 p-8 shadow-sm space-y-6">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                  <Package className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg tracking-tight">
+                    Product & Recipe
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Verify the item and Bill of Materials
+                  </p>
+                </div>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FormFrappeSelect
                   control={form.control}
                   name="production_item"
@@ -174,11 +257,11 @@ function EditWorkOrderForm() {
                   disabled={!selectedItem}
                 />
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-6 pt-2">
                 <FormInput
                   control={form.control}
                   name="qty"
-                  label="Quantity"
+                  label="Quantity to Produce"
                   type="number"
                   required
                 />
@@ -193,12 +276,22 @@ function EditWorkOrderForm() {
             </div>
 
             {/* Source & Scheduling */}
-            <div className="bg-card rounded-2xl border border-border/50 p-6 space-y-4">
-              <div className="flex items-center gap-2 font-semibold text-lg">
-                <FileText className="h-5 w-5 text-blue-500" />
-                Source & Scheduling
+            <div className="bg-card rounded-[2rem] border border-border/50 p-8 shadow-sm space-y-6">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                  <FileText className="h-5 w-5 text-blue-500" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg tracking-tight">
+                    Timeline & Source
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Update production dates and links
+                  </p>
+                </div>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FormFrappeSelect
                   control={form.control}
                   name="sales_order"
@@ -214,7 +307,7 @@ function EditWorkOrderForm() {
                   placeholder="Link to project..."
                 />
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
                 <FormInput
                   control={form.control}
                   name="planned_start_date"
@@ -235,22 +328,25 @@ function EditWorkOrderForm() {
                   type="date"
                 />
               </div>
-              <FormFrappeSelect
-                control={form.control}
-                name="material_request"
-                label="Material Request (Optional)"
-                doctype="Material Request"
-                placeholder="Link to MR..."
-              />
             </div>
 
             {/* Warehouses */}
-            <div className="bg-card rounded-2xl border border-border/50 p-6 space-y-4">
-              <div className="flex items-center gap-2 font-semibold text-lg">
-                <Factory className="h-5 w-5 text-amber-500" />
-                Warehouse Locations
+            <div className="bg-card rounded-[2rem] border border-border/50 p-8 shadow-sm space-y-6">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
+                  <Factory className="h-5 w-5 text-amber-500" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg tracking-tight">
+                    Logistics Update
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Modify warehouse assignments
+                  </p>
+                </div>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FormFrappeSelect
                   control={form.control}
                   name="source_warehouse"
@@ -285,55 +381,78 @@ function EditWorkOrderForm() {
                   filters={[["is_group", "=", 0]]}
                 />
               </div>
-              <FormSwitch
-                control={form.control}
-                name="skip_transfer"
-                label="Skip Material Transfer"
-                description="Check if materials don't need to be transferred to WIP"
-              />
+              <div className="pt-2">
+                <FormSwitch
+                  control={form.control}
+                  name="skip_transfer"
+                  label="Skip Material Transfer to WIP"
+                />
+              </div>
             </div>
           </div>
 
+          {/* Sidebar */}
           <div className="lg:col-span-1 space-y-6">
-            <div className="bg-card rounded-2xl border border-border/50 p-6 sticky top-6">
-              <h3 className="font-semibold mb-4">Summary</h3>
+            <div className="bg-card rounded-[2rem] border border-border/50 p-8 shadow-xl shadow-primary/5 sticky top-6">
+              <h3 className="font-bold text-lg mb-6 flex items-center gap-2">
+                <ClipboardList className="h-5 w-5 text-primary" />
+                Updated Metrics
+              </h3>
+
               {bomDetails ? (
-                <div className="space-y-3 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Batch Size</span>
-                    <span className="font-medium">
-                      {bomDetails.quantity} {bomDetails.uom}
-                    </span>
+                <div className="space-y-6">
+                  <div className="p-4 rounded-2xl bg-secondary/30 border border-border/50">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2">
+                      Recipe Info
+                    </p>
+                    <p className="font-bold text-sm truncate">
+                      {bomDetails.name}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Batch size: {bomDetails.quantity} {bomDetails.uom}
+                    </p>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Required Cost</span>
-                    <span className="font-bold text-primary">
-                      ETB{" "}
-                      {(
-                        bomDetails.total_cost *
-                        (form.watch("qty") / bomDetails.quantity)
-                      ).toFixed(2)}
-                    </span>
+
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-baseline pt-4 border-t border-border/50">
+                      <span className="text-muted-foreground text-sm font-medium">
+                        New Total (Est)
+                      </span>
+                      <span className="font-black text-xl text-primary">
+                        ETB{" "}
+                        {(
+                          (bomDetails.total_cost || 0) *
+                          (workOrderQty / bomDetails.quantity)
+                        ).toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                        })}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-center text-muted-foreground font-bold tracking-tight">
+                      Calculation updated based on new quantity
+                    </p>
                   </div>
+
+                  <Button
+                    type="submit"
+                    disabled={updateMutation.isPending}
+                    className="w-full mt-6 rounded-xl h-12 font-bold shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-all uppercase tracking-widest text-[11px]"
+                  >
+                    {updateMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : (
+                      <Save className="h-4 w-4 mr-2" />
+                    )}
+                    Save Changes
+                  </Button>
                 </div>
               ) : (
-                <p className="text-muted-foreground text-sm">
-                  BOM details loading...
-                </p>
+                <div className="py-10 text-center opacity-40">
+                  <p className="text-xs font-bold">
+                    Refining production estimates...
+                  </p>
+                </div>
               )}
-
-              <Button
-                type="submit"
-                disabled={updateMutation.isPending}
-                className="w-full mt-6 rounded-full"
-              >
-                {updateMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <Save className="h-4 w-4 mr-2" />
-                )}
-                Save Changes
-              </Button>
             </div>
           </div>
         </div>
