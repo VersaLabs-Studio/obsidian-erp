@@ -72,6 +72,7 @@ function EditBOMForm() {
       rm_cost_as_per: "Valuation Rate",
       items: [],
       operations: [],
+      scrap_items: [],
     },
   });
 
@@ -107,6 +108,14 @@ function EditBOMForm() {
             hour_rate: o.hour_rate,
             operating_cost: o.operating_cost,
           })) || [],
+        scrap_items:
+          bom.scrap_items?.map((s) => ({
+            item_code: s.item_code,
+            qty: s.qty,
+            uom: s.uom,
+            rate: s.rate,
+            amount: s.amount,
+          })) || [],
       });
       setWithOperations(bom.with_operations === 1);
     }
@@ -120,6 +129,16 @@ function EditBOMForm() {
   } = useFieldArray({
     control: form.control,
     name: "items",
+  });
+
+  // Scrap items array
+  const {
+    fields: scrapFields,
+    append: appendScrap,
+    remove: removeScrap,
+  } = useFieldArray({
+    control: form.control,
+    name: "scrap_items",
   });
 
   // Operation items array
@@ -221,6 +240,12 @@ function EditBOMForm() {
             doctype: "BOM Operation",
           }))
         : [],
+      scrap_items:
+        data.scrap_items?.map((scrap) => ({
+          ...scrap,
+          amount: (scrap.qty || 0) * (scrap.rate || 0),
+          doctype: "BOM Scrap Item",
+        })) || [],
     };
 
     updateMutation.mutate({ name: bomName, data: payload });
@@ -519,6 +544,106 @@ function EditBOMForm() {
                 )}
               </div>
             )}
+
+            {/* Scrap & Waste Section */}
+            <div className="bg-card rounded-2xl border border-border/50 p-6 space-y-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 font-semibold text-lg">
+                  <Trash2 className="h-5 w-5 text-amber-500" />
+                  Scrap & Waste
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full h-8"
+                  onClick={() =>
+                    appendScrap({
+                      item_code: "",
+                      qty: 0,
+                      uom: "Nos",
+                      rate: 0,
+                    })
+                  }
+                >
+                  <Plus className="h-3 w-3 mr-1" /> Add Scrap
+                </Button>
+              </div>
+
+              {scrapFields.length === 0 ? (
+                <div className="text-center py-8 border-2 border-dashed border-border/50 rounded-2xl">
+                  <p className="text-muted-foreground text-sm">
+                    No scrap/waste defined for this recipe
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {scrapFields.map((field, index) => (
+                    <div
+                      key={field.id}
+                      className="grid grid-cols-12 gap-2 items-start p-4 bg-secondary/20 rounded-xl relative group"
+                    >
+                      <div className="col-span-12 md:col-span-4">
+                        <FormFrappeSelect
+                          control={form.control}
+                          name={`scrap_items.${index}.item_code`}
+                          label="Scrap Item"
+                          doctype="Item"
+                          placeholder="Select..."
+                          onValueChange={(val, doc) => {
+                            if (doc) {
+                              form.setValue(
+                                `scrap_items.${index}.uom`,
+                                doc.stock_uom,
+                              );
+                              form.setValue(
+                                `scrap_items.${index}.rate`,
+                                doc.valuation_rate || 0,
+                              );
+                            }
+                          }}
+                        />
+                      </div>
+                      <div className="col-span-4 md:col-span-2">
+                        <FormInput
+                          control={form.control}
+                          name={`scrap_items.${index}.qty`}
+                          label="Qty"
+                          type="number"
+                        />
+                      </div>
+                      <div className="col-span-4 md:col-span-2">
+                        <FormFrappeSelect
+                          control={form.control}
+                          name={`scrap_items.${index}.uom`}
+                          label="UOM"
+                          doctype="UOM"
+                        />
+                      </div>
+                      <div className="col-span-4 md:col-span-2">
+                        <FormInput
+                          control={form.control}
+                          name={`scrap_items.${index}.rate`}
+                          label="Rate"
+                          type="number"
+                        />
+                      </div>
+                      <div className="col-span-2 md:col-span-2 flex items-end justify-end h-full">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-9 w-9 text-destructive hover:bg-destructive/10 rounded-full"
+                          onClick={() => removeScrap(index)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Cost Summary Sidebar */}
@@ -587,7 +712,7 @@ function EditBOMForm() {
               <div className="space-y-3 pt-4">
                 <Button
                   type="submit"
-                  disabled={updateMutation.isPending || bom?.docstatus === 1}
+                  disabled={updateMutation.isPending}
                   className="w-full rounded-full h-12 text-base shadow-lg shadow-primary/20 transition-all active:scale-95"
                 >
                   {updateMutation.isPending ? (

@@ -4345,6 +4345,18 @@ export const BOMOperationSchema = z.object({
 });
 
 /**
+ * BOM Scrap Item (Child Table Row)
+ */
+export const BOMScrapItemSchema = z.object({
+  item_code: z.string().min(1, "Item is required"),
+  item_name: z.string().optional(),
+  qty: z.number().min(0).default(0),
+  uom: z.string().optional(),
+  rate: z.number().min(0).default(0),
+  amount: z.number().optional(),
+});
+
+/**
  * BOM Create Schema
  */
 export const BOMCreateSchema = z.object({
@@ -4362,6 +4374,7 @@ export const BOMCreateSchema = z.object({
     .default("Valuation Rate"),
   items: z.array(BOMItemSchema).min(1, "At least one material is required"),
   operations: z.array(BOMOperationSchema).optional(),
+  scrap_items: z.array(BOMScrapItemSchema).optional(),
 });
 
 export const BOMUpdateSchema = BOMCreateSchema.partial();
@@ -4369,6 +4382,7 @@ export const BOMUpdateSchema = BOMCreateSchema.partial();
 export type BOMFormData = z.input<typeof BOMCreateSchema>;
 export type BOMItemData = z.input<typeof BOMItemSchema>;
 export type BOMOperationData = z.input<typeof BOMOperationSchema>;
+export type BOMScrapItemData = z.input<typeof BOMScrapItemSchema>;
 
 /**
  * Workstation Zod Schema

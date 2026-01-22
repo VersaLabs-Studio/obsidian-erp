@@ -347,6 +347,12 @@ export const DOCTYPE_CONFIG: Record<string, DocTypeConfig> = {
     labelField: "operation",
     isSettings: true,
   },
+  "BOM Scrap Item": {
+    apiPath: "manufacturing/bom-scrap-item",
+    module: "Manufacturing",
+    labelField: "item_code",
+    isSettings: true,
+  },
   "Work Order": {
     apiPath: "manufacturing/work-order",
     module: "Manufacturing",

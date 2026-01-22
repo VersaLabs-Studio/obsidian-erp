@@ -285,7 +285,6 @@ export default function BOMDetailPage() {
               </div>
             )}
           </InfoCard>
-
           {/* Operations Table */}
           {bom.with_operations === 1 && (
             <InfoCard
@@ -350,6 +349,66 @@ export default function BOMDetailPage() {
               )}
             </InfoCard>
           )}
+
+          {/* Scrap Table */}
+          <InfoCard
+            title={`Scrap & Waste (${bom.scrap_items?.length || 0})`}
+            icon={<Trash2 className="h-5 w-5 text-amber-500" />}
+          >
+            {bom.scrap_items?.length > 0 ? (
+              <div className="overflow-x-auto -mx-2">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border/50 text-muted-foreground">
+                      <th className="text-left py-3 px-2 font-medium">Item</th>
+                      <th className="text-right py-3 px-2 font-medium">
+                        Quantity
+                      </th>
+                      <th className="text-right py-3 px-2 font-medium">Rate</th>
+                      <th className="text-right py-3 px-2 font-medium">
+                        Amount
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bom.scrap_items.map((item: any, idx: number) => (
+                      <tr
+                        key={idx}
+                        className="border-b border-border/20 hover:bg-muted/30 transition-colors"
+                      >
+                        <td className="py-4 px-2 font-medium">
+                          {item.item_name || item.item_code}
+                          <span className="text-[10px] text-muted-foreground block mt-0.5">
+                            {item.item_code}
+                          </span>
+                        </td>
+                        <td className="text-right py-4 px-2 font-medium">
+                          {item.qty} {item.uom || "Nos"}
+                        </td>
+                        <td className="text-right py-4 px-2 text-muted-foreground">
+                          {bom.currency}{" "}
+                          {item.rate?.toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                          })}
+                        </td>
+                        <td className="text-right py-4 px-2 font-bold text-foreground">
+                          {bom.currency}{" "}
+                          {item.amount?.toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                          })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center py-10 opacity-40">
+                <Trash2 className="h-10 w-10 mx-auto mb-2" />
+                <p>No scrap or waste items defined</p>
+              </div>
+            )}
+          </InfoCard>
         </div>
 
         {/* Right Column - Cost Summary / Sticky Sidebar */}
