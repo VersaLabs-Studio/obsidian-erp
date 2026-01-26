@@ -81,6 +81,25 @@ export const queryKeys = {
     list: (options?: FrappeListOptions) =>
       ["Delivery Note", "list", options] as const,
     doc: (name: string) => ["Delivery Note", "doc", name] as const,
+    byCustomer: (customer: string) =>
+      ["Delivery Note", "list", "customer", customer] as const,
+    byStatus: (status: string) =>
+      ["Delivery Note", "list", "status", status] as const,
+    bySalesOrder: (so: string) =>
+      ["Delivery Note", "list", "sales_order", so] as const,
+    pendingBilling: () => ["Delivery Note", "list", "to_bill"] as const,
+  },
+  driver: {
+    all: () => ["Driver"] as const,
+    list: (options?: FrappeListOptions) => ["Driver", "list", options] as const,
+    doc: (name: string) => ["Driver", "doc", name] as const,
+    active: () => ["Driver", "list", "active"] as const,
+  },
+  vehicle: {
+    all: () => ["Vehicle"] as const,
+    list: (options?: FrappeListOptions) =>
+      ["Vehicle", "list", options] as const,
+    doc: (name: string) => ["Vehicle", "doc", name] as const,
   },
 
   // ============================================================================

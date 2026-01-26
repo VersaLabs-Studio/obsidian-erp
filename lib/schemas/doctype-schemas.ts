@@ -2705,31 +2705,21 @@ export type ProductBundleSchemaType = z.infer<typeof ProductBundleSchema>;
 /**
  * Warehouse Zod Schema
  * @doctype Warehouse
- * @generated 2026-01-14T18:05:48.299Z
  */
 export const WarehouseSchema = z.object({
-  disabled: z.union([z.literal(0), z.literal(1)]).optional(),
   warehouse_name: z.string().min(1, "Warehouse Name is required"),
-  is_group: z.union([z.literal(0), z.literal(1)]).optional(),
   parent_warehouse: z.string().optional(),
-  is_rejected_warehouse: z.union([z.literal(0), z.literal(1)]).optional(),
-  account: z.string().optional(),
-  company: z.string().min(1, "Company is required"),
-  address_html: z.string().optional(),
-  contact_html: z.string().optional(),
-  email_id: z.string().optional(),
-  phone_no: z.string().optional(),
-  mobile_no: z.string().optional(),
-  address_line_1: z.string().optional(),
-  address_line_2: z.string().optional(),
+  is_group: z.union([z.literal(0), z.literal(1)]).optional(),
+  warehouse_type: z.string().optional(),
+  company: z.string().optional(),
+  disabled: z.union([z.literal(0), z.literal(1)]).optional(),
   city: z.string().optional(),
   state: z.string().optional(),
-  pin: z.string().optional(),
-  warehouse_type: z.string().optional(),
-  default_in_transit_warehouse: z.string().optional(),
-  lft: z.number().int().optional(),
-  rgt: z.number().int().optional(),
-  old_parent: z.string().optional(),
+  country: z.string().optional(),
+  phone_no: z.string().optional(),
+  email_id: z.string().optional(),
+  address_line_1: z.string().optional(),
+  address_line_2: z.string().optional(),
   name: z.string().min(1, "ID is required"),
   owner: z.string().optional(),
   creation: z.string().optional(),
@@ -3051,28 +3041,74 @@ export const DeliveryNoteSchema = z.object({
   docstatus: z.union([z.literal(0), z.literal(1), z.literal(2)]).optional(),
 });
 
-export const DeliveryNoteCreateSchema = DeliveryNoteSchema.pick({
-  naming_series: true,
-  customer: true,
-  posting_date: true,
-  posting_time: true,
-  company: true,
-  currency: true,
-  conversion_rate: true,
-  selling_price_list: true,
-  price_list_currency: true,
-  plc_conversion_rate: true,
-  items: true,
-  status: true,
-}).extend({});
+// ============================================================================
+// DELIVERY NOTE SCHEMAS
+// ============================================================================
 
-export const DeliveryNoteUpdateSchema = DeliveryNoteSchema.partial().omit({
-  name: true,
-  creation: true,
-  owner: true,
-  docstatus: true,
+// Delivery Note Item (Child Table)
+export const DeliveryNoteItemSchema = z.object({
+  item_code: z.string().min(1, "Item is required"),
+  item_name: z.string().optional(),
+  description: z.string().optional(),
+  qty: z.number().min(0.001, "Quantity must be greater than 0"),
+  uom: z.string().optional(),
+  rate: z.number().min(0).optional(),
+  amount: z.number().optional(),
+  warehouse: z.string().optional(),
+  against_sales_order: z.string().optional(),
+  so_detail: z.string().optional(),
+  batch_no: z.string().optional(),
+  serial_no: z.string().optional(),
 });
 
+// Delivery Note Create Schema
+export const DeliveryNoteCreateSchema = z.object({
+  naming_series: z
+    .enum(["MAT-DN-.YYYY.-", "MAT-DN-RET-.YYYY.-"])
+    .default("MAT-DN-.YYYY.-"),
+  customer: z.string().min(1, "Customer is required"),
+  posting_date: z.string().min(1, "Posting date is required"),
+  posting_time: z.string().optional(),
+  company: z.string().min(1, "Company is required"),
+
+  // Items
+  items: z.array(DeliveryNoteItemSchema).min(1, "At least one item required"),
+  set_warehouse: z.string().optional(),
+
+  // Addressing
+  shipping_address_name: z.string().optional(),
+  dispatch_address_name: z.string().optional(),
+  customer_address: z.string().optional(),
+
+  // Logistics
+  transporter: z.string().optional(),
+  driver: z.string().optional(),
+  vehicle_no: z.string().optional(),
+  lr_no: z.string().optional(),
+  lr_date: z.string().optional(),
+
+  // Returns
+  is_return: z.union([z.literal(0), z.literal(1)]).optional(),
+  return_against: z.string().optional(),
+
+  // Settings
+  print_without_amount: z.union([z.literal(0), z.literal(1)]).default(1),
+
+  // Pricing (auto-calculated)
+  currency: z.string().default("ETB"),
+  conversion_rate: z.number().default(1),
+  selling_price_list: z.string().optional(),
+  price_list_currency: z.string().optional(),
+  plc_conversion_rate: z.number().optional(),
+
+  // Reference
+  po_no: z.string().optional(),
+  project: z.string().optional(),
+});
+
+export const DeliveryNoteUpdateSchema = DeliveryNoteCreateSchema.partial();
+export type DeliveryNoteFormData = z.input<typeof DeliveryNoteCreateSchema>;
+export type DeliveryNoteItemData = z.input<typeof DeliveryNoteItemSchema>;
 export type DeliveryNoteSchemaType = z.infer<typeof DeliveryNoteSchema>;
 
 /**
@@ -4439,31 +4475,35 @@ export type WorkOrderItemData = z.input<typeof WorkOrderItemSchema>;
 export type WorkOrderOperationData = z.input<typeof WorkOrderOperationSchema>;
 
 /**
+ * Sub Operation Schema (Child Table Row)
+ * This defines the structure of each row in the sub_operations child table.
+ * @doctype Sub Operation
+ */
+export const SubOperationSchema = z.object({
+  /** Link to another Operation DocType (the sub-operation) */
+  operation: z.string().min(1, "Sub-operation is required"),
+  /** Time in minutes for this sub-operation */
+  time_in_mins: z.number().min(0, "Time must be 0 or greater").default(0),
+});
+
+/**
  * Workstation Zod Schema
  * @doctype Workstation
- * @generated 2026-01-14T18:05:48.302Z
  */
 export const WorkstationSchema = z.object({
-  workstation_dashboard: z.string().optional(),
   workstation_name: z.string().min(1, "Workstation Name is required"),
+  production_capacity: z.number().optional(),
   workstation_type: z.string().optional(),
   plant_floor: z.string().optional(),
-  production_capacity: z.number().int(),
   warehouse: z.string().optional(),
-  status: z
-    .enum(["Production", "Off", "Idle", "Problem", "Maintenance", "Setup"])
-    .optional(),
-  on_status_image: z.string().optional(),
-  off_status_image: z.string().optional(),
+  status: z.string().optional(),
+  hour_rate: z.number().optional(),
+  hour_rate_labour: z.number().optional(),
   hour_rate_electricity: z.number().optional(),
   hour_rate_consumable: z.number().optional(),
   hour_rate_rent: z.number().optional(),
-  hour_rate_labour: z.number().optional(),
-  hour_rate: z.number().optional(),
   description: z.string().optional(),
   holiday_list: z.string().optional(),
-  working_hours: z.array(z.unknown()).optional(),
-  total_working_hours: z.number().optional(),
   name: z.string().min(1, "ID is required"),
   owner: z.string().optional(),
   creation: z.string().optional(),
@@ -4512,39 +4552,19 @@ export type WorkstationFormData = z.input<typeof WorkstationCreateSchema>;
 export type WorkstationSchemaType = z.infer<typeof WorkstationSchema>;
 
 /**
- * Operation Base Schema (Full Document)
+ * Operation Zod Schema
  * @doctype Operation
  */
 export const OperationSchema = z.object({
-  workstation: z.string().optional(),
-  is_corrective_operation: z.union([z.literal(0), z.literal(1)]).optional(),
-  create_job_card_based_on_batch_size: z
-    .union([z.literal(0), z.literal(1)])
-    .optional(),
-  quality_inspection_template: z.string().optional(),
-  batch_size: z.number().int().optional(),
-  sub_operations: z.array(z.unknown()).optional(),
-  total_operation_time: z.number().optional(),
-  description: z.string().optional(),
   name: z.string().min(1, "ID is required"),
+  workstation: z.string().optional(),
+  description: z.string().optional(),
+  sub_operations: z.array(SubOperationSchema).optional(),
   owner: z.string().optional(),
   creation: z.string().optional(),
   modified: z.string().optional(),
   modified_by: z.string().optional(),
   docstatus: z.union([z.literal(0), z.literal(1), z.literal(2)]).optional(),
-});
-
-/**
- * Sub Operation Schema (Child Table Row)
- * This defines the structure of each row in the sub_operations child table.
- * @doctype Sub Operation
- * @parent Operation
- */
-export const SubOperationSchema = z.object({
-  /** Link to another Operation DocType (the sub-operation) */
-  operation: z.string().min(1, "Sub-operation is required"),
-  /** Time in minutes for this sub-operation */
-  time_in_mins: z.number().min(0, "Time must be 0 or greater").default(0),
 });
 
 /**
@@ -5429,3 +5449,92 @@ export const ProjectUpdateSchema = ProjectSchema.partial().omit({
 });
 
 export type ProjectSchemaType = z.infer<typeof ProjectSchema>;
+
+/**
+ * Driver Zod Schema
+ * @doctype Driver
+ * @generated 2026-01-25T20:02:44.967Z
+ */
+export const DriverSchema = z.object({
+  naming_series: z.enum(["HR-DRI-.YYYY.-"]).optional(),
+  full_name: z.string().min(1, "Full Name is required"),
+  status: z.string().min(1, "Status is required"),
+  transporter: z.string().optional(),
+  employee: z.string().optional(),
+  cell_number: z.string().optional(),
+  address: z.string().optional(),
+  license_number: z.string().optional(),
+  issuing_date: z.string().optional(),
+  expiry_date: z.string().optional(),
+  driving_license_category: z.array(z.unknown()).optional(),
+  name: z.string().min(1, "ID is required"),
+  owner: z.string().optional(),
+  creation: z.string().optional(),
+  modified: z.string().optional(),
+  modified_by: z.string().optional(),
+  docstatus: z.union([z.literal(0), z.literal(1), z.literal(2)]).optional(),
+});
+
+export const DriverCreateSchema = z.object({
+  full_name: z.string().min(1, "Driver name is required"),
+  status: z.enum(["Active", "Left"]).default("Active"),
+  employee: z.string().optional(),
+  license_number: z.string().optional(),
+  issuing_date: z.string().optional(),
+  expiry_date: z.string().optional(),
+  cell_number: z.string().optional(),
+  transporter: z.string().optional(),
+});
+
+export const DriverUpdateSchema = DriverCreateSchema.partial();
+export type DriverFormData = z.input<typeof DriverCreateSchema>;
+export type DriverSchemaType = z.infer<typeof DriverSchema>;
+
+/**
+ * Vehicle Zod Schema
+ * @doctype Vehicle
+ * @generated 2026-01-25T20:02:44.967Z
+ */
+export const VehicleSchema = z.object({
+  license_plate: z.string().min(1, "License Plate is required"),
+  make: z.string().min(1, "Make is required"),
+  model: z.string().min(1, "Model is required"),
+  last_odometer: z.number().int(),
+  acquisition_date: z.string().optional(),
+  location: z.string().optional(),
+  chassis_no: z.string().optional(),
+  vehicle_value: z.number().optional(),
+  employee: z.string().optional(),
+  insurance_company: z.string().optional(),
+  policy_no: z.string().optional(),
+  start_date: z.string().optional(),
+  end_date: z.string().optional(),
+  fuel_type: z.string().min(1, "Fuel Type is required"),
+  uom: z.string().min(1, "Fuel UOM is required"),
+  carbon_check_date: z.string().optional(),
+  color: z.string().optional(),
+  wheels: z.number().int().optional(),
+  doors: z.number().int().optional(),
+  amended_from: z.string().optional(),
+  name: z.string().min(1, "ID is required"),
+  owner: z.string().optional(),
+  creation: z.string().optional(),
+  modified: z.string().optional(),
+  modified_by: z.string().optional(),
+  docstatus: z.union([z.literal(0), z.literal(1), z.literal(2)]).optional(),
+});
+
+export const VehicleCreateSchema = z.object({
+  license_plate: z.string().min(1, "License plate is required"),
+  make: z.string().optional(),
+  model: z.string().optional(),
+  fuel_type: z.enum(["Petrol", "Diesel", "Natural Gas", "Electric"]).optional(),
+  acquisition_date: z.string().optional(),
+  location: z.string().optional(),
+  insurance_company: z.string().optional(),
+  policy_no: z.string().optional(),
+});
+
+export const VehicleUpdateSchema = VehicleCreateSchema.partial();
+export type VehicleFormData = z.input<typeof VehicleCreateSchema>;
+export type VehicleSchemaType = z.infer<typeof VehicleSchema>;

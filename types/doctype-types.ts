@@ -9062,3 +9062,129 @@ export type SalesPartnerTypeCreateRequest = Pick<SalesPartnerType, "sales_partne
  * All fields optional for update
  */
 export type SalesPartnerTypeUpdateRequest = Partial<Omit<SalesPartnerType, "name" | "creation" | "owner" | "docstatus">>;
+
+/**
+ * Driver DocType
+ * @doctype Driver
+ * @generated 2026-01-25T20:02:44.960Z
+ */
+export interface Driver {
+  /** Series */
+  naming_series?: "HR-DRI-.YYYY.-";
+  /** Full Name */
+  full_name: string;
+  /** Status */
+  status: "Active" | "Suspended" | "Left";
+  /** Transporter - Applicable for external driver */
+  transporter?: string;
+  /** Employee */
+  employee?: string;
+  /** Cellphone Number */
+  cell_number?: string;
+  /** Address */
+  address?: string;
+  /** License Number */
+  license_number?: string;
+  /** Issuing Date */
+  issuing_date?: string;
+  /** Expiry Date */
+  expiry_date?: string;
+  /** Driving License Category */
+  driving_license_category?: unknown[];
+  /** ID */
+  name: string;
+  /** Owner */
+  owner?: string;
+  /** Created On */
+  creation?: string;
+  /** Modified On */
+  modified?: string;
+  /** Modified By */
+  modified_by?: string;
+  /** Document Status */
+  docstatus?: 0 | 1 | 2;
+}
+
+/**
+ * Driver Create Request
+ * Fields required to create a new Driver
+ */
+export type DriverCreateRequest = Pick<Driver, "full_name" | "status"> & Partial<Pick<Driver, "naming_series" | "transporter" | "employee" | "cell_number" | "address" | "license_number" | "issuing_date" | "expiry_date" | "driving_license_category">>;
+
+/**
+ * Driver Update Request
+ * All fields optional for update
+ */
+export type DriverUpdateRequest = Partial<Omit<Driver, "name" | "creation" | "owner" | "docstatus">>;
+
+/**
+ * Vehicle DocType
+ * @doctype Vehicle
+ * @generated 2026-01-25T20:02:44.967Z
+ */
+export interface Vehicle {
+  /** License Plate */
+  license_plate: string;
+  /** Make */
+  make: string;
+  /** Model */
+  model: string;
+  /** Odometer Value (Last) */
+  last_odometer: number;
+  /** Acquisition Date */
+  acquisition_date?: string;
+  /** Location */
+  location?: string;
+  /** Chassis No */
+  chassis_no?: string;
+  /** Vehicle Value */
+  vehicle_value?: number;
+  /** Employee */
+  employee?: string;
+  /** Insurance Company */
+  insurance_company?: string;
+  /** Policy No */
+  policy_no?: string;
+  /** Start Date */
+  start_date?: string;
+  /** End Date */
+  end_date?: string;
+  /** Fuel Type */
+  fuel_type: "Petrol" | "Diesel" | "Natural Gas" | "Electric";
+  /** Fuel UOM */
+  uom: string;
+  /** Last Carbon Check */
+  carbon_check_date?: string;
+  /** Color */
+  color?: string;
+  /** Wheels */
+  wheels?: number;
+  /** Doors */
+  doors?: number;
+  /** Amended From */
+  amended_from?: string;
+  /** ID */
+  name: string;
+  /** Owner */
+  owner?: string;
+  /** Created On */
+  creation?: string;
+  /** Modified On */
+  modified?: string;
+  /** Modified By */
+  modified_by?: string;
+  /** Document Status */
+  docstatus?: 0 | 1 | 2;
+}
+
+/**
+ * Vehicle Create Request
+ * Fields required to create a new Vehicle
+ */
+export type VehicleCreateRequest = Pick<Vehicle, "license_plate" | "make" | "model" | "last_odometer" | "fuel_type" | "uom"> & Partial<Pick<Vehicle, "acquisition_date" | "location" | "chassis_no" | "vehicle_value" | "employee" | "insurance_company" | "policy_no" | "start_date" | "end_date" | "carbon_check_date">>;
+
+/**
+ * Vehicle Update Request
+ * All fields optional for update
+ */
+export type VehicleUpdateRequest = Partial<Omit<Vehicle, "name" | "creation" | "owner" | "docstatus">>;

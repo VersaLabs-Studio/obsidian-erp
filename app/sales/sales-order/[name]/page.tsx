@@ -31,6 +31,7 @@ import {
   Clock,
   User,
   ClipboardList,
+  Truck,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -191,18 +192,32 @@ export default function SalesOrderDetailPage() {
                 </>
               )}
               {order.docstatus === 1 && !isCancelled && (
-                <Button
-                  variant="outline"
-                  onClick={() =>
-                    router.push(
-                      `/manufacturing/work-order/new?sales_order=${encodeURIComponent(name)}`,
-                    )
-                  }
-                  className="rounded-full shadow-sm hover:shadow-md transition-all bg-card"
-                >
-                  <ClipboardList className="h-4 w-4 mr-2" />
-                  Create Work Order
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() =>
+                      router.push(
+                        `/stock/delivery-note/new?sales_order=${encodeURIComponent(name)}&customer=${encodeURIComponent(order.customer)}`,
+                      )
+                    }
+                    className="rounded-full shadow-sm hover:shadow-md transition-all bg-card"
+                  >
+                    <Truck className="h-4 w-4 mr-2" />
+                    Create Delivery Note
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() =>
+                      router.push(
+                        `/manufacturing/work-order/new?sales_order=${encodeURIComponent(name)}`,
+                      )
+                    }
+                    className="rounded-full shadow-sm hover:shadow-md transition-all bg-card"
+                  >
+                    <ClipboardList className="h-4 w-4 mr-2" />
+                    Create Work Order
+                  </Button>
+                </div>
               )}
 
               <Button

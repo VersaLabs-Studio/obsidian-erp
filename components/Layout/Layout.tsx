@@ -100,6 +100,7 @@ const navigation = [
     items: [
       { title: "Items", href: "/stock/item", icon: Box },
       { title: "Warehouses", href: "/stock/warehouse", icon: Warehouse },
+      { title: "Delivery Notes", href: "/stock/delivery-note", icon: Truck },
       {
         title: "Material Requests",
         href: "/stock/material-request",
