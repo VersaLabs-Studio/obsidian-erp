@@ -45,6 +45,7 @@ import {
   Scale,
   Cpu,
   Cog,
+  BookOpen,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
@@ -159,7 +160,28 @@ const navigation = [
     title: "Accounting",
     icon: Calculator,
     items: [
-      { title: "Settings", href: "/accounting/settings", icon: Settings },
+      { title: "Dashboard", href: "/accounting", icon: LayoutDashboard },
+      {
+        title: "Sales Invoices",
+        href: "/accounting/sales-invoice",
+        icon: Receipt,
+      },
+      {
+        title: "Purchase Invoices",
+        href: "/accounting/purchase-invoice",
+        icon: Receipt,
+      },
+      {
+        title: "Payment Entries",
+        href: "/accounting/payment-entry",
+        icon: CreditCard,
+      },
+      {
+        title: "Journal Entries",
+        href: "/accounting/journal-entry",
+        icon: BookOpen,
+      },
+      { title: "Setup", href: "/accounting/setup", icon: Settings },
     ],
   },
   {

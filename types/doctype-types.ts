@@ -3874,7 +3874,7 @@ export type PurchaseReceiptUpdateRequest = Partial<
 /**
  * Purchase Invoice DocType
  * @doctype Purchase Invoice
- * @generated 2026-01-14T18:05:48.288Z
+ * @generated 2026-01-26T11:14:16.769Z
  */
 export interface PurchaseInvoice {
   /** Title */
@@ -4098,17 +4098,7 @@ export interface PurchaseInvoice {
   /** Terms and Conditions */
   terms?: string;
   /** Status */
-  status?:
-    | "Draft"
-    | "Return"
-    | "Debit Note Issued"
-    | "Submitted"
-    | "Paid"
-    | "Partly Paid"
-    | "Unpaid"
-    | "Overdue"
-    | "Cancelled"
-    | "Internal Transfer";
+  status?: "Draft" | "Return" | "Debit Note Issued" | "Submitted" | "Paid" | "Partly Paid" | "Unpaid" | "Overdue" | "Cancelled" | "Internal Transfer";
   /** Per Received */
   per_received?: number;
   /** Credit To */
@@ -4175,33 +4165,13 @@ export interface PurchaseInvoice {
  * Purchase Invoice Create Request
  * Fields required to create a new Purchase Invoice
  */
-export type PurchaseInvoiceCreateRequest = Pick<
-  PurchaseInvoice,
-  "naming_series" | "supplier" | "posting_date" | "items" | "credit_to"
-> &
-  Partial<
-    Pick<
-      PurchaseInvoice,
-      | "title"
-      | "supplier_name"
-      | "tax_id"
-      | "company"
-      | "posting_time"
-      | "set_posting_time"
-      | "due_date"
-      | "is_paid"
-      | "is_return"
-      | "return_against"
-    >
-  >;
+export type PurchaseInvoiceCreateRequest = Pick<PurchaseInvoice, "naming_series" | "supplier" | "posting_date" | "items" | "credit_to"> & Partial<Pick<PurchaseInvoice, "title" | "supplier_name" | "tax_id" | "company" | "posting_time" | "set_posting_time" | "due_date" | "is_paid" | "is_return" | "return_against">>;
 
 /**
  * Purchase Invoice Update Request
  * All fields optional for update
  */
-export type PurchaseInvoiceUpdateRequest = Partial<
-  Omit<PurchaseInvoice, "name" | "creation" | "owner" | "docstatus">
->;
+export type PurchaseInvoiceUpdateRequest = Partial<Omit<PurchaseInvoice, "name" | "creation" | "owner" | "docstatus">>;
 
 /**
  * Item DocType
@@ -5799,7 +5769,7 @@ export type StockLedgerEntryUpdateRequest = Partial<
 /**
  * Account DocType
  * @doctype Account
- * @generated 2026-01-14T18:05:48.290Z
+ * @generated 2026-01-26T11:14:16.770Z
  */
 export interface Account {
   /** Disable */
@@ -5854,38 +5824,18 @@ export interface Account {
  * Account Create Request
  * Fields required to create a new Account
  */
-export type AccountCreateRequest = Pick<
-  Account,
-  "account_name" | "company" | "parent_account"
-> &
-  Partial<
-    Pick<
-      Account,
-      | "disabled"
-      | "account_number"
-      | "is_group"
-      | "root_type"
-      | "report_type"
-      | "account_currency"
-      | "account_type"
-      | "tax_rate"
-      | "freeze_account"
-      | "balance_must_be"
-    >
-  >;
+export type AccountCreateRequest = Pick<Account, "account_name" | "company" | "parent_account"> & Partial<Pick<Account, "disabled" | "account_number" | "is_group" | "root_type" | "report_type" | "account_currency" | "account_type" | "tax_rate" | "freeze_account" | "balance_must_be">>;
 
 /**
  * Account Update Request
  * All fields optional for update
  */
-export type AccountUpdateRequest = Partial<
-  Omit<Account, "name" | "creation" | "owner" | "docstatus">
->;
+export type AccountUpdateRequest = Partial<Omit<Account, "name" | "creation" | "owner" | "docstatus">>;
 
 /**
  * Cost Center DocType
  * @doctype Cost Center
- * @generated 2026-01-14T18:05:48.290Z
+ * @generated 2026-01-26T11:14:16.770Z
  */
 export interface CostCenter {
   /** Cost Center Name */
@@ -5924,34 +5874,18 @@ export interface CostCenter {
  * Cost Center Create Request
  * Fields required to create a new Cost Center
  */
-export type CostCenterCreateRequest = Pick<
-  CostCenter,
-  "cost_center_name" | "parent_cost_center" | "company"
-> &
-  Partial<
-    Pick<
-      CostCenter,
-      | "cost_center_number"
-      | "is_group"
-      | "disabled"
-      | "lft"
-      | "rgt"
-      | "old_parent"
-    >
-  >;
+export type CostCenterCreateRequest = Pick<CostCenter, "cost_center_name" | "parent_cost_center" | "company"> & Partial<Pick<CostCenter, "cost_center_number" | "is_group" | "disabled" | "lft" | "rgt" | "old_parent">>;
 
 /**
  * Cost Center Update Request
  * All fields optional for update
  */
-export type CostCenterUpdateRequest = Partial<
-  Omit<CostCenter, "name" | "creation" | "owner" | "docstatus">
->;
+export type CostCenterUpdateRequest = Partial<Omit<CostCenter, "name" | "creation" | "owner" | "docstatus">>;
 
 /**
  * Journal Entry DocType
  * @doctype Journal Entry
- * @generated 2026-01-14T18:05:48.290Z
+ * @generated 2026-01-26T11:14:16.769Z
  */
 export interface JournalEntry {
   /** Is System Generated */
@@ -5959,23 +5893,7 @@ export interface JournalEntry {
   /** Title */
   title?: string;
   /** Entry Type */
-  voucher_type:
-    | "Journal Entry"
-    | "Inter Company Journal Entry"
-    | "Bank Entry"
-    | "Cash Entry"
-    | "Credit Card Entry"
-    | "Debit Note"
-    | "Credit Note"
-    | "Contra Entry"
-    | "Excise Entry"
-    | "Write Off Entry"
-    | "Opening Entry"
-    | "Depreciation Entry"
-    | "Exchange Rate Revaluation"
-    | "Exchange Gain Or Loss"
-    | "Deferred Revenue"
-    | "Deferred Expense";
+  voucher_type: "Journal Entry" | "Inter Company Journal Entry" | "Bank Entry" | "Cash Entry" | "Credit Card Entry" | "Debit Note" | "Credit Note" | "Contra Entry" | "Excise Entry" | "Write Off Entry" | "Opening Entry" | "Depreciation Entry" | "Exchange Rate Revaluation" | "Exchange Gain Or Loss" | "Deferred Revenue" | "Deferred Expense";
   /** Series */
   naming_series: "ACC-JV-.YYYY.-";
   /** Finance Book */
@@ -6076,38 +5994,18 @@ export interface JournalEntry {
  * Journal Entry Create Request
  * Fields required to create a new Journal Entry
  */
-export type JournalEntryCreateRequest = Pick<
-  JournalEntry,
-  "voucher_type" | "naming_series" | "company" | "posting_date" | "accounts"
-> &
-  Partial<
-    Pick<
-      JournalEntry,
-      | "is_system_generated"
-      | "title"
-      | "finance_book"
-      | "process_deferred_accounting"
-      | "reversal_of"
-      | "tax_withholding_category"
-      | "from_template"
-      | "apply_tds"
-      | "cheque_no"
-      | "cheque_date"
-    >
-  >;
+export type JournalEntryCreateRequest = Pick<JournalEntry, "voucher_type" | "naming_series" | "company" | "posting_date" | "accounts"> & Partial<Pick<JournalEntry, "is_system_generated" | "title" | "finance_book" | "process_deferred_accounting" | "reversal_of" | "tax_withholding_category" | "from_template" | "apply_tds" | "cheque_no" | "cheque_date">>;
 
 /**
  * Journal Entry Update Request
  * All fields optional for update
  */
-export type JournalEntryUpdateRequest = Partial<
-  Omit<JournalEntry, "name" | "creation" | "owner" | "docstatus">
->;
+export type JournalEntryUpdateRequest = Partial<Omit<JournalEntry, "name" | "creation" | "owner" | "docstatus">>;
 
 /**
  * Payment Entry DocType
  * @doctype Payment Entry
- * @generated 2026-01-14T18:05:48.290Z
+ * @generated 2026-01-26T11:14:16.769Z
  */
 export interface PaymentEntry {
   /** Series */
@@ -6266,51 +6164,18 @@ export interface PaymentEntry {
  * Payment Entry Create Request
  * Fields required to create a new Payment Entry
  */
-export type PaymentEntryCreateRequest = Pick<
-  PaymentEntry,
-  | "naming_series"
-  | "payment_type"
-  | "posting_date"
-  | "company"
-  | "paid_from"
-  | "paid_from_account_currency"
-  | "paid_to"
-  | "paid_to_account_currency"
-  | "paid_amount"
-  | "source_exchange_rate"
-  | "base_paid_amount"
-  | "received_amount"
-  | "target_exchange_rate"
-  | "base_received_amount"
-> &
-  Partial<
-    Pick<
-      PaymentEntry,
-      | "payment_order_status"
-      | "mode_of_payment"
-      | "party_type"
-      | "party"
-      | "party_name"
-      | "book_advance_payments_in_separate_party_account"
-      | "reconcile_on_advance_payment_date"
-      | "bank_account"
-      | "party_bank_account"
-      | "contact_person"
-    >
-  >;
+export type PaymentEntryCreateRequest = Pick<PaymentEntry, "naming_series" | "payment_type" | "posting_date" | "company" | "paid_from" | "paid_from_account_currency" | "paid_to" | "paid_to_account_currency" | "paid_amount" | "source_exchange_rate" | "base_paid_amount" | "received_amount" | "target_exchange_rate" | "base_received_amount"> & Partial<Pick<PaymentEntry, "payment_order_status" | "mode_of_payment" | "party_type" | "party" | "party_name" | "book_advance_payments_in_separate_party_account" | "reconcile_on_advance_payment_date" | "bank_account" | "party_bank_account" | "contact_person">>;
 
 /**
  * Payment Entry Update Request
  * All fields optional for update
  */
-export type PaymentEntryUpdateRequest = Partial<
-  Omit<PaymentEntry, "name" | "creation" | "owner" | "docstatus">
->;
+export type PaymentEntryUpdateRequest = Partial<Omit<PaymentEntry, "name" | "creation" | "owner" | "docstatus">>;
 
 /**
  * Sales Invoice DocType
  * @doctype Sales Invoice
- * @generated 2026-01-14T18:05:48.290Z
+ * @generated 2026-01-26T11:14:16.760Z
  */
 export interface SalesInvoice {
   /** Title */
@@ -6586,20 +6451,7 @@ export interface SalesInvoice {
   /** Update Auto Repeat Reference */
   update_auto_repeat_reference?: unknown;
   /** Status */
-  status?:
-    | "Draft"
-    | "Return"
-    | "Credit Note Issued"
-    | "Submitted"
-    | "Paid"
-    | "Partly Paid"
-    | "Unpaid"
-    | "Unpaid and Discounted"
-    | "Partly Paid and Discounted"
-    | "Overdue and Discounted"
-    | "Overdue"
-    | "Cancelled"
-    | "Internal Transfer";
+  status?: "Draft" | "Return" | "Credit Note Issued" | "Submitted" | "Paid" | "Partly Paid" | "Unpaid" | "Unpaid and Discounted" | "Partly Paid and Discounted" | "Overdue and Discounted" | "Overdue" | "Cancelled" | "Internal Transfer";
   /** Inter Company Invoice Reference */
   inter_company_invoice_reference?: string;
   /** Campaign */
@@ -6634,50 +6486,18 @@ export interface SalesInvoice {
  * Sales Invoice Create Request
  * Fields required to create a new Sales Invoice
  */
-export type SalesInvoiceCreateRequest = Pick<
-  SalesInvoice,
-  | "naming_series"
-  | "company"
-  | "posting_date"
-  | "currency"
-  | "conversion_rate"
-  | "selling_price_list"
-  | "price_list_currency"
-  | "plc_conversion_rate"
-  | "items"
-  | "base_net_total"
-  | "base_grand_total"
-  | "grand_total"
-  | "debit_to"
-> &
-  Partial<
-    Pick<
-      SalesInvoice,
-      | "title"
-      | "customer"
-      | "customer_name"
-      | "tax_id"
-      | "company_tax_id"
-      | "posting_time"
-      | "set_posting_time"
-      | "due_date"
-      | "is_pos"
-      | "pos_profile"
-    >
-  >;
+export type SalesInvoiceCreateRequest = Pick<SalesInvoice, "naming_series" | "company" | "posting_date" | "currency" | "conversion_rate" | "selling_price_list" | "price_list_currency" | "plc_conversion_rate" | "items" | "base_net_total" | "base_grand_total" | "grand_total" | "debit_to"> & Partial<Pick<SalesInvoice, "title" | "customer" | "customer_name" | "tax_id" | "company_tax_id" | "posting_time" | "set_posting_time" | "due_date" | "is_pos" | "pos_profile">>;
 
 /**
  * Sales Invoice Update Request
  * All fields optional for update
  */
-export type SalesInvoiceUpdateRequest = Partial<
-  Omit<SalesInvoice, "name" | "creation" | "owner" | "docstatus">
->;
+export type SalesInvoiceUpdateRequest = Partial<Omit<SalesInvoice, "name" | "creation" | "owner" | "docstatus">>;
 
 /**
  * Payment Terms Template DocType
  * @doctype Payment Terms Template
- * @generated 2026-01-14T18:05:48.293Z
+ * @generated 2026-01-26T11:14:16.770Z
  */
 export interface PaymentTermsTemplate {
   /** Template Name */
@@ -6704,29 +6524,18 @@ export interface PaymentTermsTemplate {
  * Payment Terms Template Create Request
  * Fields required to create a new Payment Terms Template
  */
-export type PaymentTermsTemplateCreateRequest = Pick<
-  PaymentTermsTemplate,
-  "terms"
-> &
-  Partial<
-    Pick<
-      PaymentTermsTemplate,
-      "template_name" | "allocate_payment_based_on_payment_terms"
-    >
-  >;
+export type PaymentTermsTemplateCreateRequest = Pick<PaymentTermsTemplate, "terms"> & Partial<Pick<PaymentTermsTemplate, "template_name" | "allocate_payment_based_on_payment_terms">>;
 
 /**
  * Payment Terms Template Update Request
  * All fields optional for update
  */
-export type PaymentTermsTemplateUpdateRequest = Partial<
-  Omit<PaymentTermsTemplate, "name" | "creation" | "owner" | "docstatus">
->;
+export type PaymentTermsTemplateUpdateRequest = Partial<Omit<PaymentTermsTemplate, "name" | "creation" | "owner" | "docstatus">>;
 
 /**
  * Mode of Payment DocType
  * @doctype Mode of Payment
- * @generated 2026-01-14T18:05:48.293Z
+ * @generated 2026-01-26T11:14:16.770Z
  */
 export interface ModeOfPayment {
   /** Mode of Payment */
@@ -6755,24 +6564,18 @@ export interface ModeOfPayment {
  * Mode of Payment Create Request
  * Fields required to create a new Mode of Payment
  */
-export type ModeOfPaymentCreateRequest = Pick<
-  ModeOfPayment,
-  "mode_of_payment"
-> &
-  Partial<Pick<ModeOfPayment, "enabled" | "type" | "accounts">>;
+export type ModeOfPaymentCreateRequest = Pick<ModeOfPayment, "mode_of_payment"> & Partial<Pick<ModeOfPayment, "enabled" | "type" | "accounts">>;
 
 /**
  * Mode of Payment Update Request
  * All fields optional for update
  */
-export type ModeOfPaymentUpdateRequest = Partial<
-  Omit<ModeOfPayment, "name" | "creation" | "owner" | "docstatus">
->;
+export type ModeOfPaymentUpdateRequest = Partial<Omit<ModeOfPayment, "name" | "creation" | "owner" | "docstatus">>;
 
 /**
  * Fiscal Year DocType
  * @doctype Fiscal Year
- * @generated 2026-01-14T18:05:48.293Z
+ * @generated 2026-01-26T11:14:16.770Z
  */
 export interface FiscalYear {
   /** Year Name - For e.g. 2012, 2012-13 */
@@ -6807,24 +6610,13 @@ export interface FiscalYear {
  * Fiscal Year Create Request
  * Fields required to create a new Fiscal Year
  */
-export type FiscalYearCreateRequest = Pick<
-  FiscalYear,
-  "year" | "year_start_date" | "year_end_date"
-> &
-  Partial<
-    Pick<
-      FiscalYear,
-      "disabled" | "is_short_year" | "companies" | "auto_created"
-    >
-  >;
+export type FiscalYearCreateRequest = Pick<FiscalYear, "year" | "year_start_date" | "year_end_date"> & Partial<Pick<FiscalYear, "disabled" | "is_short_year" | "companies" | "auto_created">>;
 
 /**
  * Fiscal Year Update Request
  * All fields optional for update
  */
-export type FiscalYearUpdateRequest = Partial<
-  Omit<FiscalYear, "name" | "creation" | "owner" | "docstatus">
->;
+export type FiscalYearUpdateRequest = Partial<Omit<FiscalYear, "name" | "creation" | "owner" | "docstatus">>;
 
 /**
  * Period Closing Voucher DocType
@@ -9188,3 +8980,540 @@ export type VehicleCreateRequest = Pick<Vehicle, "license_plate" | "make" | "mod
  * All fields optional for update
  */
 export type VehicleUpdateRequest = Partial<Omit<Vehicle, "name" | "creation" | "owner" | "docstatus">>;
+
+/**
+ * Sales Invoice Item DocType
+ * @doctype Sales Invoice Item
+ * @generated 2026-01-26T11:14:16.769Z
+ */
+export interface SalesInvoiceItem {
+  /** Barcode */
+  barcode?: string;
+  /** Has Item Scanned */
+  has_item_scanned?: 0 | 1;
+  /** Item */
+  item_code?: string;
+  /** Item Name */
+  item_name: string;
+  /** Customer's Item Code */
+  customer_item_code?: string;
+  /** Description */
+  description?: string;
+  /** Item Group */
+  item_group?: string;
+  /** Brand Name */
+  brand?: string;
+  /** Image */
+  image?: string;
+  /** Image View */
+  image_view?: unknown;
+  /** Quantity */
+  qty?: number;
+  /** Stock UOM */
+  stock_uom?: string;
+  /** UOM */
+  uom: string;
+  /** UOM Conversion Factor */
+  conversion_factor: number;
+  /** Qty as per Stock UOM */
+  stock_qty?: number;
+  /** Price List Rate */
+  price_list_rate?: number;
+  /** Price List Rate (Company Currency) */
+  base_price_list_rate?: number;
+  /** Margin Type */
+  margin_type?: "Percentage" | "Amount";
+  /** Margin Rate or Amount */
+  margin_rate_or_amount?: number;
+  /** Rate With Margin */
+  rate_with_margin?: number;
+  /** Discount (%) on Price List Rate with Margin */
+  discount_percentage?: number;
+  /** Discount Amount */
+  discount_amount?: number;
+  /** Distributed Discount Amount */
+  distributed_discount_amount?: number;
+  /** Rate With Margin (Company Currency) */
+  base_rate_with_margin?: number;
+  /** Rate */
+  rate: number;
+  /** Amount */
+  amount: number;
+  /** Item Tax Template */
+  item_tax_template?: string;
+  /** Rate (Company Currency) */
+  base_rate: number;
+  /** Amount (Company Currency) */
+  base_amount: number;
+  /** Pricing Rules */
+  pricing_rules?: string;
+  /** Rate of Stock UOM */
+  stock_uom_rate?: number;
+  /** Is Free Item */
+  is_free_item?: 0 | 1;
+  /** Grant Commission */
+  grant_commission?: 0 | 1;
+  /** Net Rate */
+  net_rate?: number;
+  /** Net Amount */
+  net_amount?: number;
+  /** Net Rate (Company Currency) */
+  base_net_rate?: number;
+  /** Net Amount (Company Currency) */
+  base_net_amount?: number;
+  /** Delivered By Supplier */
+  delivered_by_supplier?: 0 | 1;
+  /** Income Account */
+  income_account: string;
+  /** Is Fixed Asset */
+  is_fixed_asset?: 0 | 1;
+  /** Asset */
+  asset?: string;
+  /** Finance Book */
+  finance_book?: string;
+  /** Expense Account */
+  expense_account?: string;
+  /** Discount Account */
+  discount_account?: string;
+  /** Deferred Revenue Account */
+  deferred_revenue_account?: string;
+  /** Service Stop Date */
+  service_stop_date?: string;
+  /** Enable Deferred Revenue */
+  enable_deferred_revenue?: 0 | 1;
+  /** Service Start Date */
+  service_start_date?: string;
+  /** Service End Date */
+  service_end_date?: string;
+  /** Weight Per Unit */
+  weight_per_unit?: number;
+  /** Total Weight */
+  total_weight?: number;
+  /** Weight UOM */
+  weight_uom?: string;
+  /** Warehouse */
+  warehouse?: string;
+  /** Target Warehouse */
+  target_warehouse?: string;
+  /** Quality Inspection */
+  quality_inspection?: string;
+  /** Pick Serial / Batch No */
+  pick_serial_and_batch?: unknown;
+  /** Serial and Batch Bundle */
+  serial_and_batch_bundle?: string;
+  /** Use Serial No / Batch Fields */
+  use_serial_batch_fields?: 0 | 1;
+  /** Allow Zero Valuation Rate */
+  allow_zero_valuation_rate?: 0 | 1;
+  /** Incoming Rate (Costing) */
+  incoming_rate?: number;
+  /** Item Tax Rate */
+  item_tax_rate?: string;
+  /** Available Batch Qty at Warehouse */
+  actual_batch_qty?: number;
+  /** Serial No */
+  serial_no?: string;
+  /** Batch No */
+  batch_no?: string;
+  /** Qty (Warehouse) */
+  actual_qty?: number;
+  /** Qty (Company) */
+  company_total_stock?: number;
+  /** Sales Order */
+  sales_order?: string;
+  /** Sales Order Item */
+  so_detail?: string;
+  /** Sales Invoice Item */
+  sales_invoice_item?: string;
+  /** Delivery Note */
+  delivery_note?: string;
+  /** Delivery Note Item */
+  dn_detail?: string;
+  /** Delivered Qty */
+  delivered_qty?: number;
+  /** POS Invoice */
+  pos_invoice?: string;
+  /** POS Invoice Item */
+  pos_invoice_item?: string;
+  /** Purchase Order */
+  purchase_order?: string;
+  /** Purchase Order Item */
+  purchase_order_item?: string;
+  /** Cost Center */
+  cost_center: string;
+  /** Project */
+  project?: string;
+  /** Page Break */
+  page_break?: 0 | 1;
+  /** ID */
+  name: string;
+  /** Owner */
+  owner?: string;
+  /** Created On */
+  creation?: string;
+  /** Modified On */
+  modified?: string;
+  /** Modified By */
+  modified_by?: string;
+  /** Document Status */
+  docstatus?: 0 | 1 | 2;
+}
+
+/**
+ * Sales Invoice Item Create Request
+ * Fields required to create a new Sales Invoice Item
+ */
+export type SalesInvoiceItemCreateRequest = Pick<SalesInvoiceItem, "item_name" | "uom" | "conversion_factor" | "rate" | "amount" | "base_rate" | "base_amount" | "income_account" | "cost_center"> & Partial<Pick<SalesInvoiceItem, "barcode" | "has_item_scanned" | "item_code" | "customer_item_code" | "description" | "item_group" | "brand" | "image" | "image_view" | "qty">>;
+
+/**
+ * Sales Invoice Item Update Request
+ * All fields optional for update
+ */
+export type SalesInvoiceItemUpdateRequest = Partial<Omit<SalesInvoiceItem, "name" | "creation" | "owner" | "docstatus">>;
+
+/**
+ * Purchase Invoice Item DocType
+ * @doctype Purchase Invoice Item
+ * @generated 2026-01-26T11:14:16.769Z
+ */
+export interface PurchaseInvoiceItem {
+  /** Item */
+  item_code?: string;
+  /** Product Bundle */
+  product_bundle?: string;
+  /** Item Name */
+  item_name: string;
+  /** Description */
+  description?: string;
+  /** Brand */
+  brand?: string;
+  /** Item Group */
+  item_group?: string;
+  /** Image */
+  image?: string;
+  /** Image View */
+  image_view?: unknown;
+  /** Received Qty */
+  received_qty?: number;
+  /** Accepted Qty */
+  qty: number;
+  /** Rejected Qty */
+  rejected_qty?: number;
+  /** UOM */
+  uom: string;
+  /** UOM Conversion Factor */
+  conversion_factor: number;
+  /** Stock UOM */
+  stock_uom?: string;
+  /** Accepted Qty in Stock UOM */
+  stock_qty: number;
+  /** Price List Rate */
+  price_list_rate?: number;
+  /** Price List Rate (Company Currency) */
+  base_price_list_rate?: number;
+  /** Margin Type */
+  margin_type?: "Percentage" | "Amount";
+  /** Margin Rate or Amount */
+  margin_rate_or_amount?: number;
+  /** Rate With Margin */
+  rate_with_margin?: number;
+  /** Discount on Price List Rate (%) */
+  discount_percentage?: number;
+  /** Discount Amount */
+  discount_amount?: number;
+  /** Distributed Discount Amount */
+  distributed_discount_amount?: number;
+  /** Rate With Margin (Company Currency) */
+  base_rate_with_margin?: number;
+  /** Rate */
+  rate: number;
+  /** Amount */
+  amount: number;
+  /** Item Tax Template */
+  item_tax_template?: string;
+  /** Rate (Company Currency) */
+  base_rate: number;
+  /** Amount (Company Currency) */
+  base_amount: number;
+  /** Pricing Rules */
+  pricing_rules?: string;
+  /** Rate of Stock UOM */
+  stock_uom_rate?: number;
+  /** Is Free Item */
+  is_free_item?: 0 | 1;
+  /** Apply TDS */
+  apply_tds?: 0 | 1;
+  /** Net Rate */
+  net_rate?: number;
+  /** Net Amount */
+  net_amount?: number;
+  /** Net Rate (Company Currency) */
+  base_net_rate?: number;
+  /** Net Amount (Company Currency) */
+  base_net_amount?: number;
+  /** Valuation Rate */
+  valuation_rate?: number;
+  /** Sales Incoming Rate - Valuation rate for the item as per Sales Invoice (Only for Internal Transfers) */
+  sales_incoming_rate?: number;
+  /** Item Tax Amount Included in Value */
+  item_tax_amount?: number;
+  /** Landed Cost Voucher Amount */
+  landed_cost_voucher_amount?: number;
+  /** Raw Materials Supplied Cost */
+  rm_supp_cost?: number;
+  /** Accepted Warehouse */
+  warehouse?: string;
+  /** Add Serial / Batch No */
+  add_serial_batch_bundle?: unknown;
+  /** Serial and Batch Bundle */
+  serial_and_batch_bundle?: string;
+  /** Use Serial No / Batch Fields */
+  use_serial_batch_fields?: 0 | 1;
+  /** From Warehouse */
+  from_warehouse?: string;
+  /** Quality Inspection */
+  quality_inspection?: string;
+  /** Rejected Warehouse */
+  rejected_warehouse?: string;
+  /** Rejected Serial and Batch Bundle */
+  rejected_serial_and_batch_bundle?: string;
+  /** Serial No */
+  serial_no?: string;
+  /** Rejected Serial No */
+  rejected_serial_no?: string;
+  /** Batch No */
+  batch_no?: string;
+  /** Manufacturer */
+  manufacturer?: string;
+  /** Manufacturer Part Number */
+  manufacturer_part_no?: string;
+  /** Expense Head */
+  expense_account?: string;
+  /** WIP Composite Asset */
+  wip_composite_asset?: string;
+  /** Is Fixed Asset */
+  is_fixed_asset?: 0 | 1;
+  /** Asset Location */
+  asset_location?: string;
+  /** Asset Category */
+  asset_category?: string;
+  /** Deferred Expense Account */
+  deferred_expense_account?: string;
+  /** Service Stop Date */
+  service_stop_date?: string;
+  /** Enable Deferred Expense */
+  enable_deferred_expense?: 0 | 1;
+  /** Service Start Date */
+  service_start_date?: string;
+  /** Service End Date */
+  service_end_date?: string;
+  /** Allow Zero Valuation Rate */
+  allow_zero_valuation_rate?: 0 | 1;
+  /** Item Tax Rate - Tax detail table fetched from item master as a string and stored in this field.
+Used for Taxes and Charges */
+  item_tax_rate?: string;
+  /** BOM */
+  bom?: string;
+  /** Include Exploded Items */
+  include_exploded_items?: 0 | 1;
+  /** Purchase Invoice Item */
+  purchase_invoice_item?: string;
+  /** Purchase Order */
+  purchase_order?: string;
+  /** Purchase Order Item */
+  po_detail?: string;
+  /** Purchase Receipt */
+  purchase_receipt?: string;
+  /** Purchase Receipt Detail */
+  pr_detail?: string;
+  /** Sales Invoice Item */
+  sales_invoice_item?: string;
+  /** Material Request */
+  material_request?: string;
+  /** Material Request Item */
+  material_request_item?: string;
+  /** Weight Per Unit */
+  weight_per_unit?: number;
+  /** Total Weight */
+  total_weight?: number;
+  /** Weight UOM */
+  weight_uom?: string;
+  /** Project */
+  project?: string;
+  /** Cost Center */
+  cost_center?: string;
+  /** Page Break */
+  page_break?: 0 | 1;
+  /** ID */
+  name: string;
+  /** Owner */
+  owner?: string;
+  /** Created On */
+  creation?: string;
+  /** Modified On */
+  modified?: string;
+  /** Modified By */
+  modified_by?: string;
+  /** Document Status */
+  docstatus?: 0 | 1 | 2;
+}
+
+/**
+ * Purchase Invoice Item Create Request
+ * Fields required to create a new Purchase Invoice Item
+ */
+export type PurchaseInvoiceItemCreateRequest = Pick<PurchaseInvoiceItem, "item_name" | "qty" | "uom" | "conversion_factor" | "stock_qty" | "rate" | "amount" | "base_rate" | "base_amount"> & Partial<Pick<PurchaseInvoiceItem, "item_code" | "product_bundle" | "description" | "brand" | "item_group" | "image" | "image_view" | "received_qty" | "rejected_qty" | "stock_uom">>;
+
+/**
+ * Purchase Invoice Item Update Request
+ * All fields optional for update
+ */
+export type PurchaseInvoiceItemUpdateRequest = Partial<Omit<PurchaseInvoiceItem, "name" | "creation" | "owner" | "docstatus">>;
+
+/**
+ * Payment Entry Reference DocType
+ * @doctype Payment Entry Reference
+ * @generated 2026-01-26T11:14:16.769Z
+ */
+export interface PaymentEntryReference {
+  /** Type */
+  reference_doctype: string;
+  /** Name */
+  reference_name: string;
+  /** Due Date */
+  due_date?: string;
+  /** Supplier Invoice No */
+  bill_no?: string;
+  /** Payment Term */
+  payment_term?: string;
+  /** Payment Term Outstanding */
+  payment_term_outstanding?: number;
+  /** Account Type */
+  account_type?: string;
+  /** Payment Type */
+  payment_type?: string;
+  /** Reconcile Effect On */
+  reconcile_effect_on?: string;
+  /** Grand Total */
+  total_amount?: number;
+  /** Outstanding */
+  outstanding_amount?: number;
+  /** Allocated */
+  allocated_amount?: number;
+  /** Exchange Rate */
+  exchange_rate?: number;
+  /** Exchange Gain/Loss */
+  exchange_gain_loss?: number;
+  /** Account */
+  account?: string;
+  /** Payment Request */
+  payment_request?: string;
+  /** Payment Request Outstanding */
+  payment_request_outstanding?: number;
+  /** Advance Voucher Type */
+  advance_voucher_type?: string;
+  /** Advance Voucher No */
+  advance_voucher_no?: string;
+  /** ID */
+  name: string;
+  /** Owner */
+  owner?: string;
+  /** Created On */
+  creation?: string;
+  /** Modified On */
+  modified?: string;
+  /** Modified By */
+  modified_by?: string;
+  /** Document Status */
+  docstatus?: 0 | 1 | 2;
+}
+
+/**
+ * Payment Entry Reference Create Request
+ * Fields required to create a new Payment Entry Reference
+ */
+export type PaymentEntryReferenceCreateRequest = Pick<PaymentEntryReference, "reference_doctype" | "reference_name"> & Partial<Pick<PaymentEntryReference, "due_date" | "bill_no" | "payment_term" | "payment_term_outstanding" | "account_type" | "payment_type" | "reconcile_effect_on" | "total_amount" | "outstanding_amount" | "allocated_amount">>;
+
+/**
+ * Payment Entry Reference Update Request
+ * All fields optional for update
+ */
+export type PaymentEntryReferenceUpdateRequest = Partial<Omit<PaymentEntryReference, "name" | "creation" | "owner" | "docstatus">>;
+
+/**
+ * Journal Entry Account DocType
+ * @doctype Journal Entry Account
+ * @generated 2026-01-26T11:14:16.770Z
+ */
+export interface JournalEntryAccount {
+  /** Account */
+  account: string;
+  /** Account Type */
+  account_type?: string;
+  /** Bank Account */
+  bank_account?: string;
+  /** Party Type */
+  party_type?: string;
+  /** Party */
+  party?: string;
+  /** Cost Center - If Income or Expense */
+  cost_center?: string;
+  /** Project */
+  project?: string;
+  /** Account Currency */
+  account_currency?: string;
+  /** Exchange Rate */
+  exchange_rate?: number;
+  /** Debit */
+  debit_in_account_currency?: number;
+  /** Debit in Company Currency */
+  debit?: number;
+  /** Credit */
+  credit_in_account_currency?: number;
+  /** Credit in Company Currency */
+  credit?: number;
+  /** Reference Type */
+  reference_type?: "Sales Invoice" | "Purchase Invoice" | "Journal Entry" | "Sales Order" | "Purchase Order" | "Expense Claim" | "Asset" | "Loan" | "Payroll Entry" | "Employee Advance" | "Exchange Rate Revaluation" | "Invoice Discounting" | "Fees" | "Full and Final Statement" | "Payment Entry";
+  /** Reference Name */
+  reference_name?: string;
+  /** Reference Due Date */
+  reference_due_date?: string;
+  /** Reference Detail No */
+  reference_detail_no?: string;
+  /** Advance Voucher Type */
+  advance_voucher_type?: string;
+  /** Advance Voucher No */
+  advance_voucher_no?: string;
+  /** Is Tax Withholding Account */
+  is_tax_withholding_account?: 0 | 1;
+  /** Is Advance */
+  is_advance?: "No" | "Yes";
+  /** User Remark */
+  user_remark?: string;
+  /** Against Account */
+  against_account?: string;
+  /** ID */
+  name: string;
+  /** Owner */
+  owner?: string;
+  /** Created On */
+  creation?: string;
+  /** Modified On */
+  modified?: string;
+  /** Modified By */
+  modified_by?: string;
+  /** Document Status */
+  docstatus?: 0 | 1 | 2;
+}
+
+/**
+ * Journal Entry Account Create Request
+ * Fields required to create a new Journal Entry Account
+ */
+export type JournalEntryAccountCreateRequest = Pick<JournalEntryAccount, "account"> & Partial<Pick<JournalEntryAccount, "account_type" | "bank_account" | "party_type" | "party" | "cost_center" | "project" | "account_currency" | "exchange_rate" | "debit_in_account_currency" | "debit">>;
+
+/**
+ * Journal Entry Account Update Request
+ * All fields optional for update
+ */
+export type JournalEntryAccountUpdateRequest = Partial<Omit<JournalEntryAccount, "name" | "creation" | "owner" | "docstatus">>;

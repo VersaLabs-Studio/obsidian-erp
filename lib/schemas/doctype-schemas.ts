@@ -2261,200 +2261,8 @@ export const PurchaseReceiptUpdateSchema = PurchaseReceiptSchema.partial().omit(
 
 export type PurchaseReceiptSchemaType = z.infer<typeof PurchaseReceiptSchema>;
 
-/**
- * Purchase Invoice Zod Schema
- * @doctype Purchase Invoice
- * @generated 2026-01-14T18:05:48.298Z
- */
-export const PurchaseInvoiceSchema = z.object({
-  title: z.string().optional(),
-  naming_series: z.string().min(1, "Series is required"),
-  supplier: z.string().min(1, "Supplier is required"),
-  supplier_name: z.string().optional(),
-  tax_id: z.string().optional(),
-  company: z.string().optional(),
-  posting_date: z.string().min(1, "Date is required"),
-  posting_time: z.string().optional(),
-  set_posting_time: z.union([z.literal(0), z.literal(1)]).optional(),
-  due_date: z.string().optional(),
-  is_paid: z.union([z.literal(0), z.literal(1)]).optional(),
-  is_return: z.union([z.literal(0), z.literal(1)]).optional(),
-  return_against: z.string().optional(),
-  update_outstanding_for_self: z.union([z.literal(0), z.literal(1)]).optional(),
-  update_billed_amount_in_purchase_order: z
-    .union([z.literal(0), z.literal(1)])
-    .optional(),
-  update_billed_amount_in_purchase_receipt: z
-    .union([z.literal(0), z.literal(1)])
-    .optional(),
-  apply_tds: z.union([z.literal(0), z.literal(1)]).optional(),
-  tax_withholding_category: z.string().optional(),
-  amended_from: z.string().optional(),
-  bill_no: z.string().optional(),
-  bill_date: z.string().optional(),
-  cost_center: z.string().optional(),
-  project: z.string().optional(),
-  currency: z.string().optional(),
-  conversion_rate: z.number().optional(),
-  use_transaction_date_exchange_rate: z
-    .union([z.literal(0), z.literal(1)])
-    .optional(),
-  buying_price_list: z.string().optional(),
-  price_list_currency: z.string().optional(),
-  plc_conversion_rate: z.number().optional(),
-  ignore_pricing_rule: z.union([z.literal(0), z.literal(1)]).optional(),
-  scan_barcode: z.string().optional(),
-  last_scanned_warehouse: z.string().optional(),
-  update_stock: z.union([z.literal(0), z.literal(1)]).optional(),
-  set_warehouse: z.string().optional(),
-  set_from_warehouse: z.string().optional(),
-  is_subcontracted: z.union([z.literal(0), z.literal(1)]).optional(),
-  rejected_warehouse: z.string().optional(),
-  supplier_warehouse: z.string().optional(),
-  items: z.array(z.unknown()),
-  total_qty: z.number().optional(),
-  total_net_weight: z.number().optional(),
-  base_total: z.number().optional(),
-  base_net_total: z.number().optional(),
-  total: z.number().optional(),
-  net_total: z.number().optional(),
-  tax_withholding_net_total: z.number().optional(),
-  base_tax_withholding_net_total: z.number().optional(),
-  tax_category: z.string().optional(),
-  taxes_and_charges: z.string().optional(),
-  shipping_rule: z.string().optional(),
-  incoterm: z.string().optional(),
-  named_place: z.string().optional(),
-  taxes: z.array(z.unknown()).optional(),
-  base_taxes_and_charges_added: z.number().optional(),
-  base_taxes_and_charges_deducted: z.number().optional(),
-  base_total_taxes_and_charges: z.number().optional(),
-  taxes_and_charges_added: z.number().optional(),
-  taxes_and_charges_deducted: z.number().optional(),
-  total_taxes_and_charges: z.number().optional(),
-  base_grand_total: z.number().optional(),
-  base_rounding_adjustment: z.number().optional(),
-  base_rounded_total: z.number().optional(),
-  base_in_words: z.string().optional(),
-  grand_total: z.number().optional(),
-  rounding_adjustment: z.number().optional(),
-  use_company_roundoff_cost_center: z
-    .union([z.literal(0), z.literal(1)])
-    .optional(),
-  rounded_total: z.number().optional(),
-  in_words: z.string().optional(),
-  total_advance: z.number().optional(),
-  outstanding_amount: z.number().optional(),
-  disable_rounded_total: z.union([z.literal(0), z.literal(1)]).optional(),
-  apply_discount_on: z.enum(["Grand Total", "Net Total"]).optional(),
-  base_discount_amount: z.number().optional(),
-  additional_discount_percentage: z.number().optional(),
-  discount_amount: z.number().optional(),
-  tax_withheld_vouchers: z.array(z.unknown()).optional(),
-  other_charges_calculation: z.string().optional(),
-  pricing_rules: z.array(z.unknown()).optional(),
-  supplied_items: z.array(z.unknown()).optional(),
-  mode_of_payment: z.string().optional(),
-  base_paid_amount: z.number().optional(),
-  clearance_date: z.string().optional(),
-  cash_bank_account: z.string().optional(),
-  paid_amount: z.number().optional(),
-  allocate_advances_automatically: z
-    .union([z.literal(0), z.literal(1)])
-    .optional(),
-  only_include_allocated_payments: z
-    .union([z.literal(0), z.literal(1)])
-    .optional(),
-  get_advances: z.unknown().optional(),
-  advances: z.array(z.unknown()).optional(),
-  advance_tax: z.array(z.unknown()).optional(),
-  write_off_amount: z.number().optional(),
-  base_write_off_amount: z.number().optional(),
-  write_off_account: z.string().optional(),
-  write_off_cost_center: z.string().optional(),
-  supplier_address: z.string().optional(),
-  address_display: z.string().optional(),
-  contact_person: z.string().optional(),
-  contact_display: z.string().optional(),
-  contact_mobile: z.string().optional(),
-  contact_email: z.string().optional(),
-  dispatch_address: z.string().optional(),
-  dispatch_address_display: z.string().optional(),
-  shipping_address: z.string().optional(),
-  shipping_address_display: z.string().optional(),
-  billing_address: z.string().optional(),
-  billing_address_display: z.string().optional(),
-  payment_terms_template: z.string().optional(),
-  ignore_default_payment_terms_template: z
-    .union([z.literal(0), z.literal(1)])
-    .optional(),
-  payment_schedule: z.array(z.unknown()).optional(),
-  tc_name: z.string().optional(),
-  terms: z.string().optional(),
-  status: z
-    .enum([
-      "Draft",
-      "Return",
-      "Debit Note Issued",
-      "Submitted",
-      "Paid",
-      "Partly Paid",
-      "Unpaid",
-      "Overdue",
-      "Cancelled",
-      "Internal Transfer",
-    ])
-    .optional(),
-  per_received: z.number().optional(),
-  credit_to: z.string().min(1, "Credit To is required"),
-  party_account_currency: z.string().optional(),
-  is_opening: z.enum(["No", "Yes"]).optional(),
-  against_expense_account: z.string().optional(),
-  unrealized_profit_loss_account: z.string().optional(),
-  subscription: z.string().optional(),
-  auto_repeat: z.string().optional(),
-  update_auto_repeat_reference: z.unknown().optional(),
-  from_date: z.string().optional(),
-  to_date: z.string().optional(),
-  letter_head: z.string().optional(),
-  group_same_items: z.union([z.literal(0), z.literal(1)]).optional(),
-  select_print_heading: z.string().optional(),
-  language: z.string().optional(),
-  on_hold: z.union([z.literal(0), z.literal(1)]).optional(),
-  release_date: z.string().optional(),
-  hold_comment: z.string().optional(),
-  is_internal_supplier: z.union([z.literal(0), z.literal(1)]).optional(),
-  represents_company: z.string().optional(),
-  supplier_group: z.string().optional(),
-  inter_company_invoice_reference: z.string().optional(),
-  is_old_subcontracting_flow: z.union([z.literal(0), z.literal(1)]).optional(),
-  remarks: z.string().optional(),
-  name: z.string().min(1, "ID is required"),
-  owner: z.string().optional(),
-  creation: z.string().optional(),
-  modified: z.string().optional(),
-  modified_by: z.string().optional(),
-  docstatus: z.union([z.literal(0), z.literal(1), z.literal(2)]).optional(),
-});
-
-export const PurchaseInvoiceCreateSchema = PurchaseInvoiceSchema.pick({
-  naming_series: true,
-  supplier: true,
-  posting_date: true,
-  items: true,
-  credit_to: true,
-}).extend({});
-
-export const PurchaseInvoiceUpdateSchema = PurchaseInvoiceSchema.partial().omit(
-  {
-    name: true,
-    creation: true,
-    owner: true,
-    docstatus: true,
-  },
-);
-
-export type PurchaseInvoiceSchemaType = z.infer<typeof PurchaseInvoiceSchema>;
+/** Purchase Invoice moved to ACCOUNTING MODULE section at end of file */
+// Purchase Invoice removed
 
 /**
  * Item Zod Schema
@@ -2703,32 +2511,6 @@ export const ProductBundleUpdateSchema = ProductBundleSchema.partial().omit({
 export type ProductBundleSchemaType = z.infer<typeof ProductBundleSchema>;
 
 /**
- * Warehouse Zod Schema
- * @doctype Warehouse
- */
-export const WarehouseSchema = z.object({
-  warehouse_name: z.string().min(1, "Warehouse Name is required"),
-  parent_warehouse: z.string().optional(),
-  is_group: z.union([z.literal(0), z.literal(1)]).optional(),
-  warehouse_type: z.string().optional(),
-  company: z.string().optional(),
-  disabled: z.union([z.literal(0), z.literal(1)]).optional(),
-  city: z.string().optional(),
-  state: z.string().optional(),
-  country: z.string().optional(),
-  phone_no: z.string().optional(),
-  email_id: z.string().optional(),
-  address_line_1: z.string().optional(),
-  address_line_2: z.string().optional(),
-  name: z.string().min(1, "ID is required"),
-  owner: z.string().optional(),
-  creation: z.string().optional(),
-  modified: z.string().optional(),
-  modified_by: z.string().optional(),
-  docstatus: z.union([z.literal(0), z.literal(1), z.literal(2)]).optional(),
-});
-
-/**
  * Warehouse Create Schema
  * @doctype Warehouse
  */
@@ -2758,7 +2540,7 @@ export const WarehouseUpdateSchema = WarehouseCreateSchema.partial();
 
 export type WarehouseFormData = z.infer<typeof WarehouseCreateSchema>;
 
-export type WarehouseSchemaType = z.infer<typeof WarehouseSchema>;
+export type WarehouseSchemaType = z.infer<typeof WarehouseCreateSchema>;
 
 /**
  * UOM Zod Schema
@@ -3439,7 +3221,7 @@ export type StockLedgerEntrySchemaType = z.infer<typeof StockLedgerEntrySchema>;
 /**
  * Account Zod Schema
  * @doctype Account
- * @generated 2026-01-14T18:05:48.299Z
+ * @generated 2026-01-26T11:14:16.771Z
  */
 export const AccountSchema = z.object({
   disabled: z.union([z.literal(0), z.literal(1)]).optional(),
@@ -3469,549 +3251,75 @@ export const AccountSchema = z.object({
   docstatus: z.union([z.literal(0), z.literal(1), z.literal(2)]).optional(),
 });
 
-export const AccountCreateSchema = AccountSchema.pick({
-  account_name: true,
-  company: true,
-  parent_account: true,
-}).extend({
-  disabled: z.union([z.literal(0), z.literal(1)]).optional(),
-  is_group: z.union([z.literal(0), z.literal(1)]).optional(),
-});
-
-export const AccountUpdateSchema = AccountSchema.partial().omit({
-  name: true,
-  creation: true,
-  owner: true,
-  docstatus: true,
-});
-
-export type AccountSchemaType = z.infer<typeof AccountSchema>;
-
-/**
- * Cost Center Zod Schema
- * @doctype Cost Center
- * @generated 2026-01-14T18:05:48.299Z
- */
-export const CostCenterSchema = z.object({
-  cost_center_name: z.string().min(1, "Cost Center Name is required"),
-  cost_center_number: z.string().optional(),
-  parent_cost_center: z.string().min(1, "Parent Cost Center is required"),
-  company: z.string().min(1, "Company is required"),
-  is_group: z.union([z.literal(0), z.literal(1)]).optional(),
-  disabled: z.union([z.literal(0), z.literal(1)]).optional(),
-  lft: z.number().int().optional(),
-  rgt: z.number().int().optional(),
-  old_parent: z.string().optional(),
-  name: z.string().min(1, "ID is required"),
-  owner: z.string().optional(),
-  creation: z.string().optional(),
-  modified: z.string().optional(),
-  modified_by: z.string().optional(),
-  docstatus: z.union([z.literal(0), z.literal(1), z.literal(2)]).optional(),
-});
-
-export const CostCenterCreateSchema = CostCenterSchema.pick({
-  cost_center_name: true,
-  parent_cost_center: true,
-  company: true,
-}).extend({
-  disabled: z.union([z.literal(0), z.literal(1)]).optional(),
-  is_group: z.union([z.literal(0), z.literal(1)]).optional(),
-});
-
-export const CostCenterUpdateSchema = CostCenterSchema.partial().omit({
-  name: true,
-  creation: true,
-  owner: true,
-  docstatus: true,
-});
+// Account & Cost Center moved
 
 export type CostCenterSchemaType = z.infer<typeof CostCenterSchema>;
 
-/**
- * Journal Entry Zod Schema
- * @doctype Journal Entry
- * @generated 2026-01-14T18:05:48.301Z
- */
-export const JournalEntrySchema = z.object({
-  is_system_generated: z.union([z.literal(0), z.literal(1)]).optional(),
-  title: z.string().optional(),
-  voucher_type: z.string().min(1, "Entry Type is required"),
-  naming_series: z.string().min(1, "Series is required"),
-  finance_book: z.string().optional(),
-  process_deferred_accounting: z.string().optional(),
-  reversal_of: z.string().optional(),
-  tax_withholding_category: z.string().optional(),
-  from_template: z.string().optional(),
-  company: z.string().min(1, "Company is required"),
-  posting_date: z.string().min(1, "Posting Date is required"),
-  apply_tds: z.union([z.literal(0), z.literal(1)]).optional(),
-  accounts: z.array(z.unknown()),
-  cheque_no: z.string().optional(),
-  cheque_date: z.string().optional(),
-  user_remark: z.string().optional(),
-  total_debit: z.number().optional(),
-  total_credit: z.number().optional(),
-  difference: z.number().optional(),
-  get_balance: z.unknown().optional(),
-  multi_currency: z.union([z.literal(0), z.literal(1)]).optional(),
-  total_amount_currency: z.string().optional(),
-  total_amount: z.number().optional(),
-  total_amount_in_words: z.string().optional(),
-  clearance_date: z.string().optional(),
-  remark: z.string().optional(),
-  paid_loan: z.string().optional(),
-  inter_company_journal_entry_reference: z.string().optional(),
-  bill_no: z.string().optional(),
-  bill_date: z.string().optional(),
-  due_date: z.string().optional(),
-  write_off_based_on: z
-    .enum(["Accounts Receivable", "Accounts Payable"])
-    .optional(),
-  get_outstanding_invoices: z.unknown().optional(),
-  write_off_amount: z.number().optional(),
-  pay_to_recd_from: z.string().optional(),
-  letter_head: z.string().optional(),
-  select_print_heading: z.string().optional(),
-  mode_of_payment: z.string().optional(),
-  payment_order: z.string().optional(),
-  party_not_required: z.union([z.literal(0), z.literal(1)]).optional(),
-  is_opening: z.enum(["No", "Yes"]).optional(),
-  stock_entry: z.string().optional(),
-  auto_repeat: z.string().optional(),
-  amended_from: z.string().optional(),
-  name: z.string().min(1, "ID is required"),
-  owner: z.string().optional(),
-  creation: z.string().optional(),
-  modified: z.string().optional(),
-  modified_by: z.string().optional(),
-  docstatus: z.union([z.literal(0), z.literal(1), z.literal(2)]).optional(),
+// Journal Entry moved
+
+// Accounting transactions moved to consolidated section at end of file.
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MODE OF PAYMENT
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const ModeOfPaymentAccountSchema = z.object({
+  company: z.string().min(1),
+  default_account: z.string().min(1),
 });
 
-export const JournalEntryCreateSchema = JournalEntrySchema.pick({
-  voucher_type: true,
-  naming_series: true,
-  company: true,
-  posting_date: true,
-  accounts: true,
-}).extend({});
-
-export const JournalEntryUpdateSchema = JournalEntrySchema.partial().omit({
-  name: true,
-  creation: true,
-  owner: true,
-  docstatus: true,
+export const ModeOfPaymentCreateSchema = z.object({
+  mode_of_payment: z.string().min(1, "Mode of payment name is required"),
+  type: z.enum(["Cash", "Bank", "General", "Phone"]).default("General"),
+  enabled: z.union([z.literal(0), z.literal(1)]).default(1),
+  accounts: z.array(ModeOfPaymentAccountSchema).optional(),
 });
 
-export type JournalEntrySchemaType = z.infer<typeof JournalEntrySchema>;
-
-/**
- * Payment Entry Zod Schema
- * @doctype Payment Entry
- * @generated 2026-01-14T18:05:48.301Z
- */
-export const PaymentEntrySchema = z.object({
-  naming_series: z.string().min(1, "Series is required"),
-  payment_type: z.string().min(1, "Payment Type is required"),
-  payment_order_status: z.enum(["Initiated", "Payment Ordered"]).optional(),
-  posting_date: z.string().min(1, "Posting Date is required"),
-  company: z.string().min(1, "Company is required"),
-  mode_of_payment: z.string().optional(),
-  party_type: z.string().optional(),
-  party: z.string().optional(),
-  party_name: z.string().optional(),
-  book_advance_payments_in_separate_party_account: z
-    .union([z.literal(0), z.literal(1)])
-    .optional(),
-  reconcile_on_advance_payment_date: z
-    .union([z.literal(0), z.literal(1)])
-    .optional(),
-  bank_account: z.string().optional(),
-  party_bank_account: z.string().optional(),
-  contact_person: z.string().optional(),
-  contact_email: z.string().optional(),
-  party_balance: z.number().optional(),
-  paid_from: z.string().min(1, "Account Paid From is required"),
-  paid_from_account_type: z.string().optional(),
-  paid_from_account_currency: z
-    .string()
-    .min(1, "Account Currency (From) is required"),
-  paid_from_account_balance: z.number().optional(),
-  paid_to: z.string().min(1, "Account Paid To is required"),
-  paid_to_account_type: z.string().optional(),
-  paid_to_account_currency: z
-    .string()
-    .min(1, "Account Currency (To) is required"),
-  paid_to_account_balance: z.number().optional(),
-  paid_amount: z.number(),
-  paid_amount_after_tax: z.number().optional(),
-  source_exchange_rate: z.number(),
-  base_paid_amount: z.number(),
-  base_paid_amount_after_tax: z.number().optional(),
-  received_amount: z.number(),
-  received_amount_after_tax: z.number().optional(),
-  target_exchange_rate: z.number(),
-  base_received_amount: z.number(),
-  base_received_amount_after_tax: z.number().optional(),
-  get_outstanding_invoices: z.unknown().optional(),
-  get_outstanding_orders: z.unknown().optional(),
-  references: z.array(z.unknown()).optional(),
-  total_allocated_amount: z.number().optional(),
-  base_total_allocated_amount: z.number().optional(),
-  unallocated_amount: z.number().optional(),
-  difference_amount: z.number().optional(),
-  write_off_difference_amount: z.unknown().optional(),
-  purchase_taxes_and_charges_template: z.string().optional(),
-  sales_taxes_and_charges_template: z.string().optional(),
-  apply_tax_withholding_amount: z
-    .union([z.literal(0), z.literal(1)])
-    .optional(),
-  tax_withholding_category: z.string().optional(),
-  taxes: z.array(z.unknown()).optional(),
-  base_total_taxes_and_charges: z.number().optional(),
-  total_taxes_and_charges: z.number().optional(),
-  deductions: z.array(z.unknown()).optional(),
-  reference_no: z.string().optional(),
-  reference_date: z.string().optional(),
-  clearance_date: z.string().optional(),
-  project: z.string().optional(),
-  cost_center: z.string().optional(),
-  status: z.enum(["Draft", "Submitted", "Cancelled"]).optional(),
-  custom_remarks: z.union([z.literal(0), z.literal(1)]).optional(),
-  remarks: z.string().optional(),
-  base_in_words: z.string().optional(),
-  is_opening: z.enum(["No", "Yes"]).optional(),
-  letter_head: z.string().optional(),
-  print_heading: z.string().optional(),
-  bank: z.string().optional(),
-  bank_account_no: z.string().optional(),
-  payment_order: z.string().optional(),
-  in_words: z.string().optional(),
-  auto_repeat: z.string().optional(),
-  amended_from: z.string().optional(),
-  title: z.string().optional(),
-  name: z.string().min(1, "ID is required"),
-  owner: z.string().optional(),
-  creation: z.string().optional(),
-  modified: z.string().optional(),
-  modified_by: z.string().optional(),
-  docstatus: z.union([z.literal(0), z.literal(1), z.literal(2)]).optional(),
-});
-
-export const PaymentEntryCreateSchema = PaymentEntrySchema.pick({
-  naming_series: true,
-  payment_type: true,
-  posting_date: true,
-  company: true,
-  paid_from: true,
-  paid_from_account_currency: true,
-  paid_to: true,
-  paid_to_account_currency: true,
-  paid_amount: true,
-  source_exchange_rate: true,
-  base_paid_amount: true,
-  received_amount: true,
-  target_exchange_rate: true,
-  base_received_amount: true,
-}).extend({});
-
-export const PaymentEntryUpdateSchema = PaymentEntrySchema.partial().omit({
-  name: true,
-  creation: true,
-  owner: true,
-  docstatus: true,
-});
-
-export type PaymentEntrySchemaType = z.infer<typeof PaymentEntrySchema>;
-
-/**
- * Sales Invoice Zod Schema
- * @doctype Sales Invoice
- * @generated 2026-01-14T18:05:48.301Z
- */
-export const SalesInvoiceSchema = z.object({
-  title: z.string().optional(),
-  naming_series: z.string().min(1, "Series is required"),
-  customer: z.string().optional(),
-  customer_name: z.string().optional(),
-  tax_id: z.string().optional(),
-  company: z.string().min(1, "Company is required"),
-  company_tax_id: z.string().optional(),
-  posting_date: z.string().min(1, "Date is required"),
-  posting_time: z.string().optional(),
-  set_posting_time: z.union([z.literal(0), z.literal(1)]).optional(),
-  due_date: z.string().optional(),
-  is_pos: z.union([z.literal(0), z.literal(1)]).optional(),
-  pos_profile: z.string().optional(),
-  is_consolidated: z.union([z.literal(0), z.literal(1)]).optional(),
-  is_return: z.union([z.literal(0), z.literal(1)]).optional(),
-  return_against: z.string().optional(),
-  update_outstanding_for_self: z.union([z.literal(0), z.literal(1)]).optional(),
-  update_billed_amount_in_sales_order: z
-    .union([z.literal(0), z.literal(1)])
-    .optional(),
-  update_billed_amount_in_delivery_note: z
-    .union([z.literal(0), z.literal(1)])
-    .optional(),
-  is_debit_note: z.union([z.literal(0), z.literal(1)]).optional(),
-  amended_from: z.string().optional(),
-  cost_center: z.string().optional(),
-  project: z.string().optional(),
-  currency: z.string().min(1, "Currency is required"),
-  conversion_rate: z.number(),
-  selling_price_list: z.string().min(1, "Price List is required"),
-  price_list_currency: z.string().min(1, "Price List Currency is required"),
-  plc_conversion_rate: z.number(),
-  ignore_pricing_rule: z.union([z.literal(0), z.literal(1)]).optional(),
-  scan_barcode: z.string().optional(),
-  update_stock: z.union([z.literal(0), z.literal(1)]).optional(),
-  last_scanned_warehouse: z.string().optional(),
-  set_warehouse: z.string().optional(),
-  set_target_warehouse: z.string().optional(),
-  items: z.array(z.unknown()),
-  total_qty: z.number().optional(),
-  total_net_weight: z.number().optional(),
-  base_total: z.number().optional(),
-  base_net_total: z.number(),
-  total: z.number().optional(),
-  net_total: z.number().optional(),
-  tax_category: z.string().optional(),
-  taxes_and_charges: z.string().optional(),
-  shipping_rule: z.string().optional(),
-  incoterm: z.string().optional(),
-  named_place: z.string().optional(),
-  taxes: z.array(z.unknown()).optional(),
-  base_total_taxes_and_charges: z.number().optional(),
-  total_taxes_and_charges: z.number().optional(),
-  base_grand_total: z.number(),
-  base_rounding_adjustment: z.number().optional(),
-  base_rounded_total: z.number().optional(),
-  base_in_words: z.string().optional(),
-  grand_total: z.number(),
-  rounding_adjustment: z.number().optional(),
-  use_company_roundoff_cost_center: z
-    .union([z.literal(0), z.literal(1)])
-    .optional(),
-  rounded_total: z.number().optional(),
-  in_words: z.string().optional(),
-  total_advance: z.number().optional(),
-  outstanding_amount: z.number().optional(),
-  disable_rounded_total: z.union([z.literal(0), z.literal(1)]).optional(),
-  apply_discount_on: z.enum(["Grand Total", "Net Total"]).optional(),
-  base_discount_amount: z.number().optional(),
-  is_cash_or_non_trade_discount: z
-    .union([z.literal(0), z.literal(1)])
-    .optional(),
-  additional_discount_account: z.string().optional(),
-  additional_discount_percentage: z.number().optional(),
-  discount_amount: z.number().optional(),
-  other_charges_calculation: z.string().optional(),
-  pricing_rules: z.array(z.unknown()).optional(),
-  packed_items: z.array(z.unknown()).optional(),
-  product_bundle_help: z.string().optional(),
-  timesheets: z.array(z.unknown()).optional(),
-  total_billing_hours: z.number().optional(),
-  total_billing_amount: z.number().optional(),
-  cash_bank_account: z.string().optional(),
-  payments: z.array(z.unknown()).optional(),
-  base_paid_amount: z.number().optional(),
-  paid_amount: z.number().optional(),
-  base_change_amount: z.number().optional(),
-  change_amount: z.number().optional(),
-  account_for_change_amount: z.string().optional(),
-  allocate_advances_automatically: z
-    .union([z.literal(0), z.literal(1)])
-    .optional(),
-  only_include_allocated_payments: z
-    .union([z.literal(0), z.literal(1)])
-    .optional(),
-  get_advances: z.unknown().optional(),
-  advances: z.array(z.unknown()).optional(),
-  write_off_amount: z.number().optional(),
-  base_write_off_amount: z.number().optional(),
-  write_off_outstanding_amount_automatically: z
-    .union([z.literal(0), z.literal(1)])
-    .optional(),
-  write_off_account: z.string().optional(),
-  write_off_cost_center: z.string().optional(),
-  redeem_loyalty_points: z.union([z.literal(0), z.literal(1)]).optional(),
-  loyalty_points: z.number().int().optional(),
-  loyalty_amount: z.number().optional(),
-  loyalty_program: z.string().optional(),
-  loyalty_redemption_account: z.string().optional(),
-  loyalty_redemption_cost_center: z.string().optional(),
-  customer_address: z.string().optional(),
-  address_display: z.string().optional(),
-  contact_person: z.string().optional(),
-  contact_display: z.string().optional(),
-  contact_mobile: z.string().optional(),
-  contact_email: z.string().optional(),
-  territory: z.string().optional(),
-  shipping_address_name: z.string().optional(),
-  shipping_address: z.string().optional(),
-  dispatch_address_name: z.string().optional(),
-  dispatch_address: z.string().optional(),
-  company_address: z.string().optional(),
-  company_address_display: z.string().optional(),
-  company_contact_person: z.string().optional(),
-  ignore_default_payment_terms_template: z
-    .union([z.literal(0), z.literal(1)])
-    .optional(),
-  payment_terms_template: z.string().optional(),
-  payment_schedule: z.array(z.unknown()).optional(),
-  tc_name: z.string().optional(),
-  terms: z.string().optional(),
-  po_no: z.string().optional(),
-  po_date: z.string().optional(),
-  debit_to: z.string().min(1, "Debit To is required"),
-  party_account_currency: z.string().optional(),
-  is_opening: z.enum(["No", "Yes"]).optional(),
-  unrealized_profit_loss_account: z.string().optional(),
-  against_income_account: z.string().optional(),
-  sales_partner: z.string().optional(),
-  amount_eligible_for_commission: z.number().optional(),
-  commission_rate: z.number().optional(),
-  total_commission: z.number().optional(),
-  sales_team: z.array(z.unknown()).optional(),
-  letter_head: z.string().optional(),
-  group_same_items: z.union([z.literal(0), z.literal(1)]).optional(),
-  select_print_heading: z.string().optional(),
-  language: z.string().optional(),
-  subscription: z.string().optional(),
-  from_date: z.string().optional(),
-  auto_repeat: z.string().optional(),
-  to_date: z.string().optional(),
-  update_auto_repeat_reference: z.unknown().optional(),
-  status: z
-    .enum([
-      "Draft",
-      "Return",
-      "Credit Note Issued",
-      "Submitted",
-      "Paid",
-      "Partly Paid",
-      "Unpaid",
-      "Unpaid and Discounted",
-      "Partly Paid and Discounted",
-      "Overdue and Discounted",
-      "Overdue",
-      "Cancelled",
-      "Internal Transfer",
-    ])
-    .optional(),
-  inter_company_invoice_reference: z.string().optional(),
-  campaign: z.string().optional(),
-  represents_company: z.string().optional(),
-  source: z.string().optional(),
-  customer_group: z.string().optional(),
-  is_internal_customer: z.union([z.literal(0), z.literal(1)]).optional(),
-  is_discounted: z.union([z.literal(0), z.literal(1)]).optional(),
-  remarks: z.string().optional(),
-  name: z.string().min(1, "ID is required"),
-  owner: z.string().optional(),
-  creation: z.string().optional(),
-  modified: z.string().optional(),
-  modified_by: z.string().optional(),
-  docstatus: z.union([z.literal(0), z.literal(1), z.literal(2)]).optional(),
-});
-
-export const SalesInvoiceCreateSchema = SalesInvoiceSchema.pick({
-  naming_series: true,
-  company: true,
-  posting_date: true,
-  currency: true,
-  conversion_rate: true,
-  selling_price_list: true,
-  price_list_currency: true,
-  plc_conversion_rate: true,
-  items: true,
-  base_net_total: true,
-  base_grand_total: true,
-  grand_total: true,
-  debit_to: true,
-}).extend({});
-
-export const SalesInvoiceUpdateSchema = SalesInvoiceSchema.partial().omit({
-  name: true,
-  creation: true,
-  owner: true,
-  docstatus: true,
-});
-
-export type SalesInvoiceSchemaType = z.infer<typeof SalesInvoiceSchema>;
-
-/**
- * Payment Terms Template Zod Schema
- * @doctype Payment Terms Template
- * @generated 2026-01-14T18:05:48.301Z
- */
-export const PaymentTermsTemplateSchema = z.object({
-  template_name: z.string().optional(),
-  allocate_payment_based_on_payment_terms: z
-    .union([z.literal(0), z.literal(1)])
-    .optional(),
-  terms: z.array(z.unknown()),
-  name: z.string().min(1, "ID is required"),
-  owner: z.string().optional(),
-  creation: z.string().optional(),
-  modified: z.string().optional(),
-  modified_by: z.string().optional(),
-  docstatus: z.union([z.literal(0), z.literal(1), z.literal(2)]).optional(),
-});
-
-export const PaymentTermsTemplateCreateSchema = PaymentTermsTemplateSchema.pick(
-  {
-    terms: true,
-  },
-).extend({});
-
-export const PaymentTermsTemplateUpdateSchema =
-  PaymentTermsTemplateSchema.partial().omit({
-    name: true,
-    creation: true,
-    owner: true,
-    docstatus: true,
-  });
-
-export type PaymentTermsTemplateSchemaType = z.infer<
-  typeof PaymentTermsTemplateSchema
->;
-
-/**
- * Mode of Payment Zod Schema
- * @doctype Mode of Payment
- * @generated 2026-01-14T18:05:48.301Z
- */
-export const ModeOfPaymentSchema = z.object({
-  mode_of_payment: z.string().min(1, "Mode of Payment is required"),
-  enabled: z.union([z.literal(0), z.literal(1)]).optional(),
-  type: z.enum(["Cash", "Bank", "General", "Phone"]).optional(),
-  accounts: z.array(z.unknown()).optional(),
-  name: z.string().min(1, "ID is required"),
-  owner: z.string().optional(),
-  creation: z.string().optional(),
-  modified: z.string().optional(),
-  modified_by: z.string().optional(),
-  docstatus: z.union([z.literal(0), z.literal(1), z.literal(2)]).optional(),
-});
-
-export const ModeOfPaymentCreateSchema = ModeOfPaymentSchema.pick({
-  mode_of_payment: true,
-}).extend({});
-
-export const ModeOfPaymentUpdateSchema = ModeOfPaymentSchema.partial().omit({
-  name: true,
-  creation: true,
-  owner: true,
-  docstatus: true,
-});
+export const ModeOfPaymentUpdateSchema = ModeOfPaymentCreateSchema.partial();
+export type ModeOfPaymentFormData = z.input<typeof ModeOfPaymentCreateSchema>;
 
 export type ModeOfPaymentSchemaType = z.infer<typeof ModeOfPaymentSchema>;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PAYMENT TERMS TEMPLATE
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const PaymentTermSchema = z.object({
+  payment_term: z.string().optional(),
+  description: z.string().optional(),
+  invoice_portion: z.number().min(0).max(100),
+  due_date_based_on: z
+    .enum([
+      "Day(s) after invoice date",
+      "Day(s) after the end of the invoice month",
+      "Month(s) after the end of the invoice month",
+    ])
+    .default("Day(s) after invoice date"),
+  credit_days: z.number().min(0).default(0),
+  credit_months: z.number().min(0).default(0),
+  mode_of_payment: z.string().optional(),
+});
+
+export const PaymentTermsTemplateCreateSchema = z.object({
+  template_name: z.string().min(1, "Template name is required"),
+  allocate_payment_based_on_payment_terms: z
+    .union([z.literal(0), z.literal(1)])
+    .default(0),
+  terms: z
+    .array(PaymentTermSchema)
+    .min(1, "At least one payment term is required"),
+});
+
+export const PaymentTermsTemplateUpdateSchema =
+  PaymentTermsTemplateCreateSchema.partial();
+export type PaymentTermsTemplateFormData = z.input<
+  typeof PaymentTermsTemplateCreateSchema
+>;
 
 /**
  * Fiscal Year Zod Schema
  * @doctype Fiscal Year
- * @generated 2026-01-14T18:05:48.301Z
+ * @generated 2026-01-26T11:14:16.771Z
  */
 export const FiscalYearSchema = z.object({
   year: z.string().min(1, "Year Name is required"),
@@ -4487,32 +3795,6 @@ export const SubOperationSchema = z.object({
 });
 
 /**
- * Workstation Zod Schema
- * @doctype Workstation
- */
-export const WorkstationSchema = z.object({
-  workstation_name: z.string().min(1, "Workstation Name is required"),
-  production_capacity: z.number().optional(),
-  workstation_type: z.string().optional(),
-  plant_floor: z.string().optional(),
-  warehouse: z.string().optional(),
-  status: z.string().optional(),
-  hour_rate: z.number().optional(),
-  hour_rate_labour: z.number().optional(),
-  hour_rate_electricity: z.number().optional(),
-  hour_rate_consumable: z.number().optional(),
-  hour_rate_rent: z.number().optional(),
-  description: z.string().optional(),
-  holiday_list: z.string().optional(),
-  name: z.string().min(1, "ID is required"),
-  owner: z.string().optional(),
-  creation: z.string().optional(),
-  modified: z.string().optional(),
-  modified_by: z.string().optional(),
-  docstatus: z.union([z.literal(0), z.literal(1), z.literal(2)]).optional(),
-});
-
-/**
  * Workstation Create Schema
  * @doctype Workstation
  * Enhanced with full DocType fields
@@ -4549,23 +3831,7 @@ export const WorkstationUpdateSchema = WorkstationCreateSchema.partial();
 // Use z.input for Form Initialization to handle defaults correctly
 export type WorkstationFormData = z.input<typeof WorkstationCreateSchema>;
 
-export type WorkstationSchemaType = z.infer<typeof WorkstationSchema>;
-
-/**
- * Operation Zod Schema
- * @doctype Operation
- */
-export const OperationSchema = z.object({
-  name: z.string().min(1, "ID is required"),
-  workstation: z.string().optional(),
-  description: z.string().optional(),
-  sub_operations: z.array(SubOperationSchema).optional(),
-  owner: z.string().optional(),
-  creation: z.string().optional(),
-  modified: z.string().optional(),
-  modified_by: z.string().optional(),
-  docstatus: z.union([z.literal(0), z.literal(1), z.literal(2)]).optional(),
-});
+export type WorkstationSchemaType = z.infer<typeof WorkstationCreateSchema>;
 
 /**
  * Operation Create Schema
@@ -4592,7 +3858,7 @@ export const OperationUpdateSchema = z.object({
 export type SubOperationData = z.infer<typeof SubOperationSchema>;
 export type OperationFormData = z.input<typeof OperationCreateSchema>;
 export type OperationUpdateData = z.input<typeof OperationUpdateSchema>;
-export type OperationSchemaType = z.infer<typeof OperationSchema>;
+export type OperationSchemaType = z.infer<typeof OperationCreateSchema>;
 
 /**
  * Production Plan Zod Schema
@@ -5538,3 +4804,246 @@ export const VehicleCreateSchema = z.object({
 export const VehicleUpdateSchema = VehicleCreateSchema.partial();
 export type VehicleFormData = z.input<typeof VehicleCreateSchema>;
 export type VehicleSchemaType = z.infer<typeof VehicleSchema>;
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ACCOUNTING MODULE - CONSOLIDATED SCHEMAS
+// ─────────────────────────────────────────────────────────────────────────────
+
+// --- Setup & Master Data ---
+
+export const AccountCreateSchema = z.object({
+  account_name: z.string().min(1, "Account name is required"),
+  account_number: z.string().optional(),
+  parent_account: z.string().min(1, "Parent account is required"),
+  company: z.string().min(1, "Company is required"),
+  root_type: z
+    .enum(["Asset", "Liability", "Income", "Expense", "Equity"])
+    .optional(),
+  report_type: z.enum(["Balance Sheet", "Profit and Loss"]).optional(),
+  account_type: z.string().optional(),
+  account_currency: z.string().optional(),
+  is_group: z.union([z.literal(0), z.literal(1)]).default(0),
+  freeze_account: z.enum(["No", "Yes"]).default("No"),
+  balance_must_be: z.enum(["Debit", "Credit"]).optional(),
+  disabled: z.union([z.literal(0), z.literal(1)]).default(0),
+});
+
+export const AccountUpdateSchema = AccountCreateSchema.partial();
+export type AccountFormData = z.input<typeof AccountCreateSchema>;
+
+export const CostCenterCreateSchema = z.object({
+  cost_center_name: z.string().min(1, "Cost center name is required"),
+  cost_center_number: z.string().optional(),
+  parent_cost_center: z.string().min(1, "Parent cost center is required"),
+  company: z.string().min(1, "Company is required"),
+  is_group: z.union([z.literal(0), z.literal(1)]).default(0),
+  disabled: z.union([z.literal(0), z.literal(1)]).default(0),
+});
+
+export const CostCenterUpdateSchema = CostCenterCreateSchema.partial();
+export type CostCenterFormData = z.input<typeof CostCenterCreateSchema>;
+
+// --- Transactions: Invoices ---
+
+export const SalesInvoiceItemSchema = z.object({
+  item_code: z.string().min(1, "Item is required"),
+  item_name: z.string().optional(),
+  description: z.string().optional(),
+  qty: z.number().min(0.001, "Quantity must be greater than 0"),
+  uom: z.string().optional(),
+  rate: z.number().min(0, "Rate must be 0 or greater"),
+  amount: z.number().optional(),
+  income_account: z.string().optional(),
+  cost_center: z.string().optional(),
+  expense_account: z.string().optional(), // for update stock
+  warehouse: z.string().optional(),
+  target_warehouse: z.string().optional(),
+  // References
+  sales_order: z.string().optional(),
+  so_detail: z.string().optional(),
+  delivery_note: z.string().optional(),
+  dn_detail: z.string().optional(),
+});
+
+export const SalesInvoiceCreateSchema = z.object({
+  naming_series: z.string().default("ACC-SINV-.YYYY.-"),
+  customer: z.string().min(1, "Customer is required"),
+  posting_date: z.string().min(1, "Posting date is required"),
+  posting_time: z.string().optional(),
+  due_date: z.string().optional(),
+  company: z.string().min(1, "Company is required"),
+
+  // Items
+  items: z.array(SalesInvoiceItemSchema).min(1, "At least one item is required"),
+
+  // Accounting
+  debit_to: z.string().min(1, "Debit To (Receivable Account) is required"),
+  cost_center: z.string().optional(),
+
+  // Pricing
+  currency: z.string().default("ETB"),
+  conversion_rate: z.number().default(1),
+  selling_price_list: z.string().optional(),
+
+  // Taxes
+  taxes_and_charges: z.string().optional(),
+  taxes: z.array(z.any()).optional(),
+
+  // Terms
+  payment_terms_template: z.string().optional(),
+
+  // Points/Offers
+  redeem_loyalty_points: z.union([z.literal(0), z.literal(1)]).default(0),
+
+  // Returns
+  is_return: z.union([z.literal(0), z.literal(1)]).default(0),
+  return_against: z.string().optional(),
+
+  // Reference
+  project: z.string().optional(),
+  remarks: z.string().optional(),
+});
+
+export const SalesInvoiceUpdateSchema = SalesInvoiceCreateSchema.partial();
+
+export const PurchaseInvoiceItemSchema = z.object({
+  item_code: z.string().min(1, "Item is required"),
+  item_name: z.string().optional(),
+  description: z.string().optional(),
+  qty: z.number().min(0.001, "Quantity must be greater than 0"),
+  uom: z.string().optional(),
+  rate: z.number().min(0, "Rate must be 0 or greater"),
+  amount: z.number().optional(),
+  expense_account: z.string().optional(),
+  cost_center: z.string().optional(),
+  warehouse: z.string().optional(),
+  purchase_order: z.string().optional(),
+  po_detail: z.string().optional(),
+  purchase_receipt: z.string().optional(),
+  pr_detail: z.string().optional(),
+});
+
+export const PurchaseInvoiceCreateSchema = z.object({
+  naming_series: z.string().default("ACC-PINV-.YYYY.-"),
+  supplier: z.string().min(1, "Supplier is required"),
+  posting_date: z.string().min(1, "Posting date is required"),
+  posting_time: z.string().optional(),
+  due_date: z.string().optional(),
+  company: z.string().min(1, "Company is required"),
+  bill_no: z.string().optional(),
+  bill_date: z.string().optional(),
+  items: z
+    .array(PurchaseInvoiceItemSchema)
+    .min(1, "At least one item is required"),
+  credit_to: z.string().min(1, "Credit To (Payable Account) is required"),
+  cost_center: z.string().optional(),
+  currency: z.string().default("ETB"),
+  conversion_rate: z.number().default(1),
+  buying_price_list: z.string().optional(),
+  taxes_and_charges: z.string().optional(),
+  taxes: z.array(z.any()).optional(),
+  payment_terms_template: z.string().optional(),
+  is_return: z.union([z.literal(0), z.literal(1)]).default(0),
+  return_against: z.string().optional(),
+  project: z.string().optional(),
+  remarks: z.string().optional(),
+});
+
+export const PurchaseInvoiceUpdateSchema =
+  PurchaseInvoiceCreateSchema.partial();
+
+// --- Transactions: Payments & Journals ---
+
+export const PaymentEntryReferenceSchema = z.object({
+  reference_doctype: z.enum(["Sales Invoice", "Purchase Invoice", "Journal Entry"]),
+  reference_name: z.string().min(1),
+  allocated_amount: z.number().min(0),
+  exchange_rate: z.number().default(1),
+});
+
+export const PaymentEntryCreateSchema = z.object({
+  naming_series: z.string().default("ACC-PAY-.YYYY.-"),
+  payment_type: z.enum(["Receive", "Pay", "Internal Transfer"]),
+  posting_date: z.string().min(1, "Posting date is required"),
+  company: z.string().min(1, "Company is required"),
+
+  // Party
+  party_type: z.enum(["Customer", "Supplier", "Shareholder", "Employee"]).optional(),
+  party: z.string().optional(),
+
+  // Accounts
+  paid_from: z.string().min(1, "Paid from account is required"),
+  paid_to: z.string().min(1, "Paid to account is required"),
+
+  // Amounts
+  paid_amount: z.number().min(0),
+  received_amount: z.number().min(0),
+
+  // Mode & Reference
+  mode_of_payment: z.string().optional(),
+  reference_no: z.string().optional(),
+  reference_date: z.string().optional(),
+
+  // Allocated References
+  references: z.array(PaymentEntryReferenceSchema).optional(),
+
+  // Others
+  project: z.string().optional(),
+  cost_center: z.string().optional(),
+  remarks: z.string().optional(),
+});
+
+export const PaymentEntryUpdateSchema = PaymentEntryCreateSchema.partial();
+
+export const JournalEntryAccountSchema = z.object({
+  account: z.string().min(1, "Account is required"),
+  debit: z.number().default(0),
+  credit: z.number().default(0),
+  debit_in_account_currency: z.number().optional(),
+  credit_in_account_currency: z.number().optional(),
+  exchange_rate: z.number().default(1),
+  party_type: z.string().optional(),
+  party: z.string().optional(),
+  cost_center: z.string().optional(),
+  project: z.string().optional(),
+  reference_type: z.string().optional(),
+  reference_name: z.string().optional(),
+  user_remark: z.string().optional(),
+});
+
+export const JournalEntryCreateSchema = z.object({
+  naming_series: z.string().default("ACC-JV-.YYYY.-"),
+  voucher_type: z
+    .enum([
+      "Journal Entry",
+      "Inter Company Journal Entry",
+      "Bank Entry",
+      "Cash Entry",
+      "Credit Note",
+      "Debit Note",
+      "Opening Entry",
+      "Depreciation Entry",
+    ])
+    .default("Journal Entry"),
+  posting_date: z.string().min(1, "Posting date is required"),
+  company: z.string().min(1, "Company is required"),
+  accounts: z
+    .array(JournalEntryAccountSchema)
+    .min(2, "At least two accounts are required for a journal entry"),
+  cheque_no: z.string().optional(),
+  cheque_date: z.string().optional(),
+  user_remark: z.string().optional(),
+  remark: z.string().optional(),
+});
+
+export const JournalEntryUpdateSchema = JournalEntryCreateSchema.partial();
+
+export type SalesInvoiceFormData = z.input<typeof SalesInvoiceCreateSchema>;
+export type SalesInvoiceItemData = z.input<typeof SalesInvoiceItemSchema>;
+export type PurchaseInvoiceFormData = z.input<typeof PurchaseInvoiceCreateSchema>;
+export type PurchaseInvoiceItemData = z.input<typeof PurchaseInvoiceItemSchema>;
+export type PaymentEntryFormData = z.input<typeof PaymentEntryCreateSchema>;
+export type PaymentEntryReferenceData = z.input<typeof PaymentEntryReferenceSchema>;
+export type JournalEntryFormData = z.input<typeof JournalEntryCreateSchema>;
+export type JournalEntryAccountData = z.input<typeof JournalEntryAccountSchema>;

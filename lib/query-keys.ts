@@ -225,6 +225,54 @@ export const queryKeys = {
   // ============================================================================
   // ACCOUNTING MODULE
   // ============================================================================
+  salesInvoice: {
+    all: () => ["Sales Invoice"] as const,
+    list: (options?: FrappeListOptions) =>
+      ["Sales Invoice", "list", options] as const,
+    doc: (name: string) => ["Sales Invoice", "doc", name] as const,
+    byCustomer: (customer: string) =>
+      ["Sales Invoice", "list", "customer", customer] as const,
+    byStatus: (status: string) =>
+      ["Sales Invoice", "list", "status", status] as const,
+    byDeliveryNote: (dn: string) =>
+      ["Sales Invoice", "list", "delivery_note", dn] as const,
+    bySalesOrder: (so: string) =>
+      ["Sales Invoice", "list", "sales_order", so] as const,
+    overdue: () => ["Sales Invoice", "list", "overdue"] as const,
+    unpaid: () => ["Sales Invoice", "list", "unpaid"] as const,
+  },
+  purchaseInvoice: {
+    all: () => ["Purchase Invoice"] as const,
+    list: (options?: FrappeListOptions) =>
+      ["Purchase Invoice", "list", options] as const,
+    doc: (name: string) => ["Purchase Invoice", "doc", name] as const,
+    bySupplier: (supplier: string) =>
+      ["Purchase Invoice", "list", "supplier", supplier] as const,
+    byStatus: (status: string) =>
+      ["Purchase Invoice", "list", "status", status] as const,
+    overdue: () => ["Purchase Invoice", "list", "overdue"] as const,
+    unpaid: () => ["Purchase Invoice", "list", "unpaid"] as const,
+  },
+  paymentEntry: {
+    all: () => ["Payment Entry"] as const,
+    list: (options?: FrappeListOptions) =>
+      ["Payment Entry", "list", options] as const,
+    doc: (name: string) => ["Payment Entry", "doc", name] as const,
+    byParty: (partyType: string, party: string) =>
+      ["Payment Entry", "list", partyType, party] as const,
+    byType: (paymentType: string) =>
+      ["Payment Entry", "list", "type", paymentType] as const,
+    forInvoice: (doctype: string, name: string) =>
+      ["Payment Entry", "list", "invoice", doctype, name] as const,
+  },
+  journalEntry: {
+    all: () => ["Journal Entry"] as const,
+    list: (options?: FrappeListOptions) =>
+      ["Journal Entry", "list", options] as const,
+    doc: (name: string) => ["Journal Entry", "doc", name] as const,
+    byType: (voucherType: string) =>
+      ["Journal Entry", "list", "type", voucherType] as const,
+  },
   company: {
     all: () => ["Company"] as const,
     list: (options?: FrappeListOptions) =>
@@ -236,12 +284,41 @@ export const queryKeys = {
     list: (options?: FrappeListOptions) =>
       ["Account", "list", options] as const,
     doc: (name: string) => ["Account", "doc", name] as const,
+    tree: (company: string) => ["Account", "tree", company] as const,
+    byType: (accountType: string) =>
+      ["Account", "list", "type", accountType] as const,
+    receivable: (company: string) =>
+      ["Account", "list", "receivable", company] as const,
+    payable: (company: string) =>
+      ["Account", "list", "payable", company] as const,
+    bank: (company: string) => ["Account", "list", "bank", company] as const,
+    cash: (company: string) => ["Account", "list", "cash", company] as const,
   },
-  paymentEntry: {
-    all: () => ["Payment Entry"] as const,
+  costCenter: {
+    all: () => ["Cost Center"] as const,
     list: (options?: FrappeListOptions) =>
-      ["Payment Entry", "list", options] as const,
-    doc: (name: string) => ["Payment Entry", "doc", name] as const,
+      ["Cost Center", "list", options] as const,
+    doc: (name: string) => ["Cost Center", "doc", name] as const,
+    tree: (company: string) => ["Cost Center", "tree", company] as const,
+  },
+  modeOfPayment: {
+    all: () => ["Mode of Payment"] as const,
+    list: (options?: FrappeListOptions) =>
+      ["Mode of Payment", "list", options] as const,
+    doc: (name: string) => ["Mode of Payment", "doc", name] as const,
+    enabled: () => ["Mode of Payment", "list", "enabled"] as const,
+  },
+  paymentTermsTemplate: {
+    all: () => ["Payment Terms Template"] as const,
+    list: (options?: FrappeListOptions) =>
+      ["Payment Terms Template", "list", options] as const,
+    doc: (name: string) => ["Payment Terms Template", "doc", name] as const,
+  },
+  fiscalYear: {
+    all: () => ["Fiscal Year"] as const,
+    list: (options?: FrappeListOptions) =>
+      ["Fiscal Year", "list", options] as const,
+    current: () => ["Fiscal Year", "current"] as const,
   },
   currency: {
     all: () => ["Currency"] as const,

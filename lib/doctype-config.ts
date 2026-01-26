@@ -332,6 +332,60 @@ export const DOCTYPE_CONFIG: Record<string, DocTypeConfig> = {
   // ============================================================================
   // ACCOUNTING MODULE
   // ============================================================================
+  "Sales Invoice": {
+    apiPath: "accounting/sales-invoice",
+    module: "Accounting",
+    labelField: "name",
+    searchFields: ["name", "customer", "customer_name", "status"],
+    defaultSortField: "posting_date",
+    defaultSortOrder: "desc",
+  },
+  "Sales Invoice Item": {
+    apiPath: "accounting/sales-invoice-item",
+    module: "Accounting",
+    labelField: "item_code",
+    isSettings: true,
+  },
+  "Purchase Invoice": {
+    apiPath: "accounting/purchase-invoice",
+    module: "Accounting",
+    labelField: "name",
+    searchFields: ["name", "supplier", "supplier_name", "status", "bill_no"],
+    defaultSortField: "posting_date",
+    defaultSortOrder: "desc",
+  },
+  "Purchase Invoice Item": {
+    apiPath: "accounting/purchase-invoice-item",
+    module: "Accounting",
+    labelField: "item_code",
+    isSettings: true,
+  },
+  "Payment Entry": {
+    apiPath: "accounting/payment-entry",
+    module: "Accounting",
+    labelField: "name",
+    searchFields: ["name", "party", "party_name", "mode_of_payment"],
+    defaultSortField: "posting_date",
+    defaultSortOrder: "desc",
+  },
+  "Payment Entry Reference": {
+    apiPath: "accounting/payment-entry-reference",
+    module: "Accounting",
+    isSettings: true,
+  },
+  "Journal Entry": {
+    apiPath: "accounting/journal-entry",
+    module: "Accounting",
+    labelField: "name",
+    searchFields: ["name", "voucher_type", "cheque_no"],
+    defaultSortField: "posting_date",
+    defaultSortOrder: "desc",
+  },
+  "Journal Entry Account": {
+    apiPath: "accounting/journal-entry-account",
+    module: "Accounting",
+    isSettings: true,
+  },
   Company: {
     apiPath: "accounting/settings/company",
     module: "Accounting",
@@ -340,19 +394,39 @@ export const DOCTYPE_CONFIG: Record<string, DocTypeConfig> = {
     isSettings: true,
   },
   Account: {
-    apiPath: "accounting/account",
+    apiPath: "accounting/setup/account",
     module: "Accounting",
     labelField: "account_name",
-    searchFields: ["account_name", "account_number"],
+    searchFields: ["account_name", "account_number", "account_type"],
     isSettings: true,
   },
-  "Payment Entry": {
-    apiPath: "accounting/payment-entry",
+  "Cost Center": {
+    apiPath: "accounting/setup/cost-center",
     module: "Accounting",
-    labelField: "name",
-    searchFields: ["name", "party_name"],
-    defaultSortField: "posting_date",
-    defaultSortOrder: "desc",
+    labelField: "cost_center_name",
+    searchFields: ["cost_center_name"],
+    isSettings: true,
+  },
+  "Mode of Payment": {
+    apiPath: "accounting/setup/mode-of-payment",
+    module: "Accounting",
+    labelField: "mode_of_payment",
+    searchFields: ["mode_of_payment"],
+    isSettings: true,
+  },
+  "Payment Terms Template": {
+    apiPath: "accounting/setup/payment-terms-template",
+    module: "Accounting",
+    labelField: "template_name",
+    searchFields: ["template_name"],
+    isSettings: true,
+  },
+  "Fiscal Year": {
+    apiPath: "accounting/setup/fiscal-year",
+    module: "Accounting",
+    labelField: "year",
+    searchFields: ["year"],
+    isSettings: true,
   },
   Currency: {
     apiPath: "accounting/currency",
