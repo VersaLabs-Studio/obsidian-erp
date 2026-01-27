@@ -810,6 +810,18 @@ export const LeadSchema = z.object({
 
 export const LeadCreateSchema = LeadSchema.pick({
   status: true,
+  first_name: true,
+  last_name: true,
+  lead_name: true,
+  email_id: true,
+  mobile_no: true,
+  phone: true,
+  company_name: true,
+  industry: true,
+  territory: true,
+  source: true,
+  type: true,
+  request_type: true,
 }).extend({
   disabled: z.union([z.literal(0), z.literal(1)]).optional(),
 });
@@ -3251,9 +3263,7 @@ export const AccountSchema = z.object({
   docstatus: z.union([z.literal(0), z.literal(1), z.literal(2)]).optional(),
 });
 
-// Account & Cost Center moved
-
-export type CostCenterSchemaType = z.infer<typeof CostCenterSchema>;
+// Account & Cost Center schemas are auto-generated above.
 
 // Journal Entry moved
 
@@ -3278,7 +3288,8 @@ export const ModeOfPaymentCreateSchema = z.object({
 export const ModeOfPaymentUpdateSchema = ModeOfPaymentCreateSchema.partial();
 export type ModeOfPaymentFormData = z.input<typeof ModeOfPaymentCreateSchema>;
 
-export type ModeOfPaymentSchemaType = z.infer<typeof ModeOfPaymentSchema>;
+// ModeOfPaymentSchemaType derived from CreateSchema
+export type ModeOfPaymentSchemaType = z.infer<typeof ModeOfPaymentCreateSchema>;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PAYMENT TERMS TEMPLATE
@@ -4805,7 +4816,6 @@ export const VehicleUpdateSchema = VehicleCreateSchema.partial();
 export type VehicleFormData = z.input<typeof VehicleCreateSchema>;
 export type VehicleSchemaType = z.infer<typeof VehicleSchema>;
 
-
 // ─────────────────────────────────────────────────────────────────────────────
 // ACCOUNTING MODULE - CONSOLIDATED SCHEMAS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -4875,7 +4885,9 @@ export const SalesInvoiceCreateSchema = z.object({
   company: z.string().min(1, "Company is required"),
 
   // Items
-  items: z.array(SalesInvoiceItemSchema).min(1, "At least one item is required"),
+  items: z
+    .array(SalesInvoiceItemSchema)
+    .min(1, "At least one item is required"),
 
   // Accounting
   debit_to: z.string().min(1, "Debit To (Receivable Account) is required"),
@@ -4956,7 +4968,11 @@ export const PurchaseInvoiceUpdateSchema =
 // --- Transactions: Payments & Journals ---
 
 export const PaymentEntryReferenceSchema = z.object({
-  reference_doctype: z.enum(["Sales Invoice", "Purchase Invoice", "Journal Entry"]),
+  reference_doctype: z.enum([
+    "Sales Invoice",
+    "Purchase Invoice",
+    "Journal Entry",
+  ]),
   reference_name: z.string().min(1),
   allocated_amount: z.number().min(0),
   exchange_rate: z.number().default(1),
@@ -4969,7 +4985,9 @@ export const PaymentEntryCreateSchema = z.object({
   company: z.string().min(1, "Company is required"),
 
   // Party
-  party_type: z.enum(["Customer", "Supplier", "Shareholder", "Employee"]).optional(),
+  party_type: z
+    .enum(["Customer", "Supplier", "Shareholder", "Employee"])
+    .optional(),
   party: z.string().optional(),
 
   // Accounts
@@ -5041,9 +5059,13 @@ export const JournalEntryUpdateSchema = JournalEntryCreateSchema.partial();
 
 export type SalesInvoiceFormData = z.input<typeof SalesInvoiceCreateSchema>;
 export type SalesInvoiceItemData = z.input<typeof SalesInvoiceItemSchema>;
-export type PurchaseInvoiceFormData = z.input<typeof PurchaseInvoiceCreateSchema>;
+export type PurchaseInvoiceFormData = z.input<
+  typeof PurchaseInvoiceCreateSchema
+>;
 export type PurchaseInvoiceItemData = z.input<typeof PurchaseInvoiceItemSchema>;
 export type PaymentEntryFormData = z.input<typeof PaymentEntryCreateSchema>;
-export type PaymentEntryReferenceData = z.input<typeof PaymentEntryReferenceSchema>;
+export type PaymentEntryReferenceData = z.input<
+  typeof PaymentEntryReferenceSchema
+>;
 export type JournalEntryFormData = z.input<typeof JournalEntryCreateSchema>;
 export type JournalEntryAccountData = z.input<typeof JournalEntryAccountSchema>;

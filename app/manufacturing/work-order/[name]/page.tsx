@@ -26,6 +26,7 @@ import {
   ArrowRightLeft,
   LayoutDashboard,
   BarChart3,
+  Plus,
 } from "lucide-react";
 import {
   useFrappeDoc,

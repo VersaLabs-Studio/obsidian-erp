@@ -1326,6 +1326,15 @@ export type LeadCreateRequest = Pick<Lead, "status"> &
       | "gender"
       | "source"
       | "lead_owner"
+      | "email_id"
+      | "mobile_no"
+      | "phone"
+      | "company_name"
+      | "industry"
+      | "territory"
+      | "type"
+      | "request_type"
+      | "disabled"
     >
   >;
 
@@ -4098,7 +4107,17 @@ export interface PurchaseInvoice {
   /** Terms and Conditions */
   terms?: string;
   /** Status */
-  status?: "Draft" | "Return" | "Debit Note Issued" | "Submitted" | "Paid" | "Partly Paid" | "Unpaid" | "Overdue" | "Cancelled" | "Internal Transfer";
+  status?:
+    | "Draft"
+    | "Return"
+    | "Debit Note Issued"
+    | "Submitted"
+    | "Paid"
+    | "Partly Paid"
+    | "Unpaid"
+    | "Overdue"
+    | "Cancelled"
+    | "Internal Transfer";
   /** Per Received */
   per_received?: number;
   /** Credit To */
@@ -4165,13 +4184,33 @@ export interface PurchaseInvoice {
  * Purchase Invoice Create Request
  * Fields required to create a new Purchase Invoice
  */
-export type PurchaseInvoiceCreateRequest = Pick<PurchaseInvoice, "naming_series" | "supplier" | "posting_date" | "items" | "credit_to"> & Partial<Pick<PurchaseInvoice, "title" | "supplier_name" | "tax_id" | "company" | "posting_time" | "set_posting_time" | "due_date" | "is_paid" | "is_return" | "return_against">>;
+export type PurchaseInvoiceCreateRequest = Pick<
+  PurchaseInvoice,
+  "naming_series" | "supplier" | "posting_date" | "items" | "credit_to"
+> &
+  Partial<
+    Pick<
+      PurchaseInvoice,
+      | "title"
+      | "supplier_name"
+      | "tax_id"
+      | "company"
+      | "posting_time"
+      | "set_posting_time"
+      | "due_date"
+      | "is_paid"
+      | "is_return"
+      | "return_against"
+    >
+  >;
 
 /**
  * Purchase Invoice Update Request
  * All fields optional for update
  */
-export type PurchaseInvoiceUpdateRequest = Partial<Omit<PurchaseInvoice, "name" | "creation" | "owner" | "docstatus">>;
+export type PurchaseInvoiceUpdateRequest = Partial<
+  Omit<PurchaseInvoice, "name" | "creation" | "owner" | "docstatus">
+>;
 
 /**
  * Item DocType
@@ -5824,13 +5863,33 @@ export interface Account {
  * Account Create Request
  * Fields required to create a new Account
  */
-export type AccountCreateRequest = Pick<Account, "account_name" | "company" | "parent_account"> & Partial<Pick<Account, "disabled" | "account_number" | "is_group" | "root_type" | "report_type" | "account_currency" | "account_type" | "tax_rate" | "freeze_account" | "balance_must_be">>;
+export type AccountCreateRequest = Pick<
+  Account,
+  "account_name" | "company" | "parent_account"
+> &
+  Partial<
+    Pick<
+      Account,
+      | "disabled"
+      | "account_number"
+      | "is_group"
+      | "root_type"
+      | "report_type"
+      | "account_currency"
+      | "account_type"
+      | "tax_rate"
+      | "freeze_account"
+      | "balance_must_be"
+    >
+  >;
 
 /**
  * Account Update Request
  * All fields optional for update
  */
-export type AccountUpdateRequest = Partial<Omit<Account, "name" | "creation" | "owner" | "docstatus">>;
+export type AccountUpdateRequest = Partial<
+  Omit<Account, "name" | "creation" | "owner" | "docstatus">
+>;
 
 /**
  * Cost Center DocType
@@ -5874,13 +5933,29 @@ export interface CostCenter {
  * Cost Center Create Request
  * Fields required to create a new Cost Center
  */
-export type CostCenterCreateRequest = Pick<CostCenter, "cost_center_name" | "parent_cost_center" | "company"> & Partial<Pick<CostCenter, "cost_center_number" | "is_group" | "disabled" | "lft" | "rgt" | "old_parent">>;
+export type CostCenterCreateRequest = Pick<
+  CostCenter,
+  "cost_center_name" | "parent_cost_center" | "company"
+> &
+  Partial<
+    Pick<
+      CostCenter,
+      | "cost_center_number"
+      | "is_group"
+      | "disabled"
+      | "lft"
+      | "rgt"
+      | "old_parent"
+    >
+  >;
 
 /**
  * Cost Center Update Request
  * All fields optional for update
  */
-export type CostCenterUpdateRequest = Partial<Omit<CostCenter, "name" | "creation" | "owner" | "docstatus">>;
+export type CostCenterUpdateRequest = Partial<
+  Omit<CostCenter, "name" | "creation" | "owner" | "docstatus">
+>;
 
 /**
  * Journal Entry DocType
@@ -5893,7 +5968,23 @@ export interface JournalEntry {
   /** Title */
   title?: string;
   /** Entry Type */
-  voucher_type: "Journal Entry" | "Inter Company Journal Entry" | "Bank Entry" | "Cash Entry" | "Credit Card Entry" | "Debit Note" | "Credit Note" | "Contra Entry" | "Excise Entry" | "Write Off Entry" | "Opening Entry" | "Depreciation Entry" | "Exchange Rate Revaluation" | "Exchange Gain Or Loss" | "Deferred Revenue" | "Deferred Expense";
+  voucher_type:
+    | "Journal Entry"
+    | "Inter Company Journal Entry"
+    | "Bank Entry"
+    | "Cash Entry"
+    | "Credit Card Entry"
+    | "Debit Note"
+    | "Credit Note"
+    | "Contra Entry"
+    | "Excise Entry"
+    | "Write Off Entry"
+    | "Opening Entry"
+    | "Depreciation Entry"
+    | "Exchange Rate Revaluation"
+    | "Exchange Gain Or Loss"
+    | "Deferred Revenue"
+    | "Deferred Expense";
   /** Series */
   naming_series: "ACC-JV-.YYYY.-";
   /** Finance Book */
@@ -5994,13 +6085,33 @@ export interface JournalEntry {
  * Journal Entry Create Request
  * Fields required to create a new Journal Entry
  */
-export type JournalEntryCreateRequest = Pick<JournalEntry, "voucher_type" | "naming_series" | "company" | "posting_date" | "accounts"> & Partial<Pick<JournalEntry, "is_system_generated" | "title" | "finance_book" | "process_deferred_accounting" | "reversal_of" | "tax_withholding_category" | "from_template" | "apply_tds" | "cheque_no" | "cheque_date">>;
+export type JournalEntryCreateRequest = Pick<
+  JournalEntry,
+  "voucher_type" | "naming_series" | "company" | "posting_date" | "accounts"
+> &
+  Partial<
+    Pick<
+      JournalEntry,
+      | "is_system_generated"
+      | "title"
+      | "finance_book"
+      | "process_deferred_accounting"
+      | "reversal_of"
+      | "tax_withholding_category"
+      | "from_template"
+      | "apply_tds"
+      | "cheque_no"
+      | "cheque_date"
+    >
+  >;
 
 /**
  * Journal Entry Update Request
  * All fields optional for update
  */
-export type JournalEntryUpdateRequest = Partial<Omit<JournalEntry, "name" | "creation" | "owner" | "docstatus">>;
+export type JournalEntryUpdateRequest = Partial<
+  Omit<JournalEntry, "name" | "creation" | "owner" | "docstatus">
+>;
 
 /**
  * Payment Entry DocType
@@ -6164,13 +6275,46 @@ export interface PaymentEntry {
  * Payment Entry Create Request
  * Fields required to create a new Payment Entry
  */
-export type PaymentEntryCreateRequest = Pick<PaymentEntry, "naming_series" | "payment_type" | "posting_date" | "company" | "paid_from" | "paid_from_account_currency" | "paid_to" | "paid_to_account_currency" | "paid_amount" | "source_exchange_rate" | "base_paid_amount" | "received_amount" | "target_exchange_rate" | "base_received_amount"> & Partial<Pick<PaymentEntry, "payment_order_status" | "mode_of_payment" | "party_type" | "party" | "party_name" | "book_advance_payments_in_separate_party_account" | "reconcile_on_advance_payment_date" | "bank_account" | "party_bank_account" | "contact_person">>;
+export type PaymentEntryCreateRequest = Pick<
+  PaymentEntry,
+  | "naming_series"
+  | "payment_type"
+  | "posting_date"
+  | "company"
+  | "paid_from"
+  | "paid_from_account_currency"
+  | "paid_to"
+  | "paid_to_account_currency"
+  | "paid_amount"
+  | "source_exchange_rate"
+  | "base_paid_amount"
+  | "received_amount"
+  | "target_exchange_rate"
+  | "base_received_amount"
+> &
+  Partial<
+    Pick<
+      PaymentEntry,
+      | "payment_order_status"
+      | "mode_of_payment"
+      | "party_type"
+      | "party"
+      | "party_name"
+      | "book_advance_payments_in_separate_party_account"
+      | "reconcile_on_advance_payment_date"
+      | "bank_account"
+      | "party_bank_account"
+      | "contact_person"
+    >
+  >;
 
 /**
  * Payment Entry Update Request
  * All fields optional for update
  */
-export type PaymentEntryUpdateRequest = Partial<Omit<PaymentEntry, "name" | "creation" | "owner" | "docstatus">>;
+export type PaymentEntryUpdateRequest = Partial<
+  Omit<PaymentEntry, "name" | "creation" | "owner" | "docstatus">
+>;
 
 /**
  * Sales Invoice DocType
@@ -6451,7 +6595,20 @@ export interface SalesInvoice {
   /** Update Auto Repeat Reference */
   update_auto_repeat_reference?: unknown;
   /** Status */
-  status?: "Draft" | "Return" | "Credit Note Issued" | "Submitted" | "Paid" | "Partly Paid" | "Unpaid" | "Unpaid and Discounted" | "Partly Paid and Discounted" | "Overdue and Discounted" | "Overdue" | "Cancelled" | "Internal Transfer";
+  status?:
+    | "Draft"
+    | "Return"
+    | "Credit Note Issued"
+    | "Submitted"
+    | "Paid"
+    | "Partly Paid"
+    | "Unpaid"
+    | "Unpaid and Discounted"
+    | "Partly Paid and Discounted"
+    | "Overdue and Discounted"
+    | "Overdue"
+    | "Cancelled"
+    | "Internal Transfer";
   /** Inter Company Invoice Reference */
   inter_company_invoice_reference?: string;
   /** Campaign */
@@ -6486,13 +6643,45 @@ export interface SalesInvoice {
  * Sales Invoice Create Request
  * Fields required to create a new Sales Invoice
  */
-export type SalesInvoiceCreateRequest = Pick<SalesInvoice, "naming_series" | "company" | "posting_date" | "currency" | "conversion_rate" | "selling_price_list" | "price_list_currency" | "plc_conversion_rate" | "items" | "base_net_total" | "base_grand_total" | "grand_total" | "debit_to"> & Partial<Pick<SalesInvoice, "title" | "customer" | "customer_name" | "tax_id" | "company_tax_id" | "posting_time" | "set_posting_time" | "due_date" | "is_pos" | "pos_profile">>;
+export type SalesInvoiceCreateRequest = Pick<
+  SalesInvoice,
+  | "naming_series"
+  | "company"
+  | "posting_date"
+  | "currency"
+  | "conversion_rate"
+  | "selling_price_list"
+  | "price_list_currency"
+  | "plc_conversion_rate"
+  | "items"
+  | "base_net_total"
+  | "base_grand_total"
+  | "grand_total"
+  | "debit_to"
+> &
+  Partial<
+    Pick<
+      SalesInvoice,
+      | "title"
+      | "customer"
+      | "customer_name"
+      | "tax_id"
+      | "company_tax_id"
+      | "posting_time"
+      | "set_posting_time"
+      | "due_date"
+      | "is_pos"
+      | "pos_profile"
+    >
+  >;
 
 /**
  * Sales Invoice Update Request
  * All fields optional for update
  */
-export type SalesInvoiceUpdateRequest = Partial<Omit<SalesInvoice, "name" | "creation" | "owner" | "docstatus">>;
+export type SalesInvoiceUpdateRequest = Partial<
+  Omit<SalesInvoice, "name" | "creation" | "owner" | "docstatus">
+>;
 
 /**
  * Payment Terms Template DocType
@@ -6524,13 +6713,24 @@ export interface PaymentTermsTemplate {
  * Payment Terms Template Create Request
  * Fields required to create a new Payment Terms Template
  */
-export type PaymentTermsTemplateCreateRequest = Pick<PaymentTermsTemplate, "terms"> & Partial<Pick<PaymentTermsTemplate, "template_name" | "allocate_payment_based_on_payment_terms">>;
+export type PaymentTermsTemplateCreateRequest = Pick<
+  PaymentTermsTemplate,
+  "terms"
+> &
+  Partial<
+    Pick<
+      PaymentTermsTemplate,
+      "template_name" | "allocate_payment_based_on_payment_terms"
+    >
+  >;
 
 /**
  * Payment Terms Template Update Request
  * All fields optional for update
  */
-export type PaymentTermsTemplateUpdateRequest = Partial<Omit<PaymentTermsTemplate, "name" | "creation" | "owner" | "docstatus">>;
+export type PaymentTermsTemplateUpdateRequest = Partial<
+  Omit<PaymentTermsTemplate, "name" | "creation" | "owner" | "docstatus">
+>;
 
 /**
  * Mode of Payment DocType
@@ -6564,13 +6764,19 @@ export interface ModeOfPayment {
  * Mode of Payment Create Request
  * Fields required to create a new Mode of Payment
  */
-export type ModeOfPaymentCreateRequest = Pick<ModeOfPayment, "mode_of_payment"> & Partial<Pick<ModeOfPayment, "enabled" | "type" | "accounts">>;
+export type ModeOfPaymentCreateRequest = Pick<
+  ModeOfPayment,
+  "mode_of_payment"
+> &
+  Partial<Pick<ModeOfPayment, "enabled" | "type" | "accounts">>;
 
 /**
  * Mode of Payment Update Request
  * All fields optional for update
  */
-export type ModeOfPaymentUpdateRequest = Partial<Omit<ModeOfPayment, "name" | "creation" | "owner" | "docstatus">>;
+export type ModeOfPaymentUpdateRequest = Partial<
+  Omit<ModeOfPayment, "name" | "creation" | "owner" | "docstatus">
+>;
 
 /**
  * Fiscal Year DocType
@@ -6610,13 +6816,24 @@ export interface FiscalYear {
  * Fiscal Year Create Request
  * Fields required to create a new Fiscal Year
  */
-export type FiscalYearCreateRequest = Pick<FiscalYear, "year" | "year_start_date" | "year_end_date"> & Partial<Pick<FiscalYear, "disabled" | "is_short_year" | "companies" | "auto_created">>;
+export type FiscalYearCreateRequest = Pick<
+  FiscalYear,
+  "year" | "year_start_date" | "year_end_date"
+> &
+  Partial<
+    Pick<
+      FiscalYear,
+      "disabled" | "is_short_year" | "companies" | "auto_created"
+    >
+  >;
 
 /**
  * Fiscal Year Update Request
  * All fields optional for update
  */
-export type FiscalYearUpdateRequest = Partial<Omit<FiscalYear, "name" | "creation" | "owner" | "docstatus">>;
+export type FiscalYearUpdateRequest = Partial<
+  Omit<FiscalYear, "name" | "creation" | "owner" | "docstatus">
+>;
 
 /**
  * Period Closing Voucher DocType
@@ -7260,13 +7477,33 @@ export interface Bom {
  * BOM Create Request
  * Fields required to create a new BOM
  */
-export type BomCreateRequest = Pick<Bom, "item" | "company" | "quantity" | "currency" | "conversion_rate" | "items"> & Partial<Pick<Bom, "uom" | "is_active" | "is_default" | "allow_alternative_item" | "set_rate_of_sub_assembly_item_based_on_bom" | "project" | "image" | "rm_cost_as_per" | "buying_price_list" | "price_list_currency">>;
+export type BomCreateRequest = Pick<
+  Bom,
+  "item" | "company" | "quantity" | "currency" | "conversion_rate" | "items"
+> &
+  Partial<
+    Pick<
+      Bom,
+      | "uom"
+      | "is_active"
+      | "is_default"
+      | "allow_alternative_item"
+      | "set_rate_of_sub_assembly_item_based_on_bom"
+      | "project"
+      | "image"
+      | "rm_cost_as_per"
+      | "buying_price_list"
+      | "price_list_currency"
+    >
+  >;
 
 /**
  * BOM Update Request
  * All fields optional for update
  */
-export type BomUpdateRequest = Partial<Omit<Bom, "name" | "creation" | "owner" | "docstatus">>;
+export type BomUpdateRequest = Partial<
+  Omit<Bom, "name" | "creation" | "owner" | "docstatus">
+>;
 
 /**
  * Workstation DocType
@@ -8847,13 +9084,18 @@ export interface SalesPartnerType {
  * Sales Partner Type Create Request
  * Fields required to create a new Sales Partner Type
  */
-export type SalesPartnerTypeCreateRequest = Pick<SalesPartnerType, "sales_partner_type">;
+export type SalesPartnerTypeCreateRequest = Pick<
+  SalesPartnerType,
+  "sales_partner_type"
+>;
 
 /**
  * Sales Partner Type Update Request
  * All fields optional for update
  */
-export type SalesPartnerTypeUpdateRequest = Partial<Omit<SalesPartnerType, "name" | "creation" | "owner" | "docstatus">>;
+export type SalesPartnerTypeUpdateRequest = Partial<
+  Omit<SalesPartnerType, "name" | "creation" | "owner" | "docstatus">
+>;
 
 /**
  * Driver DocType
@@ -8901,13 +9143,29 @@ export interface Driver {
  * Driver Create Request
  * Fields required to create a new Driver
  */
-export type DriverCreateRequest = Pick<Driver, "full_name" | "status"> & Partial<Pick<Driver, "naming_series" | "transporter" | "employee" | "cell_number" | "address" | "license_number" | "issuing_date" | "expiry_date" | "driving_license_category">>;
+export type DriverCreateRequest = Pick<Driver, "full_name" | "status"> &
+  Partial<
+    Pick<
+      Driver,
+      | "naming_series"
+      | "transporter"
+      | "employee"
+      | "cell_number"
+      | "address"
+      | "license_number"
+      | "issuing_date"
+      | "expiry_date"
+      | "driving_license_category"
+    >
+  >;
 
 /**
  * Driver Update Request
  * All fields optional for update
  */
-export type DriverUpdateRequest = Partial<Omit<Driver, "name" | "creation" | "owner" | "docstatus">>;
+export type DriverUpdateRequest = Partial<
+  Omit<Driver, "name" | "creation" | "owner" | "docstatus">
+>;
 
 /**
  * Vehicle DocType
@@ -8973,13 +9231,33 @@ export interface Vehicle {
  * Vehicle Create Request
  * Fields required to create a new Vehicle
  */
-export type VehicleCreateRequest = Pick<Vehicle, "license_plate" | "make" | "model" | "last_odometer" | "fuel_type" | "uom"> & Partial<Pick<Vehicle, "acquisition_date" | "location" | "chassis_no" | "vehicle_value" | "employee" | "insurance_company" | "policy_no" | "start_date" | "end_date" | "carbon_check_date">>;
+export type VehicleCreateRequest = Pick<
+  Vehicle,
+  "license_plate" | "make" | "model" | "last_odometer" | "fuel_type" | "uom"
+> &
+  Partial<
+    Pick<
+      Vehicle,
+      | "acquisition_date"
+      | "location"
+      | "chassis_no"
+      | "vehicle_value"
+      | "employee"
+      | "insurance_company"
+      | "policy_no"
+      | "start_date"
+      | "end_date"
+      | "carbon_check_date"
+    >
+  >;
 
 /**
  * Vehicle Update Request
  * All fields optional for update
  */
-export type VehicleUpdateRequest = Partial<Omit<Vehicle, "name" | "creation" | "owner" | "docstatus">>;
+export type VehicleUpdateRequest = Partial<
+  Omit<Vehicle, "name" | "creation" | "owner" | "docstatus">
+>;
 
 /**
  * Sales Invoice Item DocType
@@ -9163,13 +9441,41 @@ export interface SalesInvoiceItem {
  * Sales Invoice Item Create Request
  * Fields required to create a new Sales Invoice Item
  */
-export type SalesInvoiceItemCreateRequest = Pick<SalesInvoiceItem, "item_name" | "uom" | "conversion_factor" | "rate" | "amount" | "base_rate" | "base_amount" | "income_account" | "cost_center"> & Partial<Pick<SalesInvoiceItem, "barcode" | "has_item_scanned" | "item_code" | "customer_item_code" | "description" | "item_group" | "brand" | "image" | "image_view" | "qty">>;
+export type SalesInvoiceItemCreateRequest = Pick<
+  SalesInvoiceItem,
+  | "item_name"
+  | "uom"
+  | "conversion_factor"
+  | "rate"
+  | "amount"
+  | "base_rate"
+  | "base_amount"
+  | "income_account"
+  | "cost_center"
+> &
+  Partial<
+    Pick<
+      SalesInvoiceItem,
+      | "barcode"
+      | "has_item_scanned"
+      | "item_code"
+      | "customer_item_code"
+      | "description"
+      | "item_group"
+      | "brand"
+      | "image"
+      | "image_view"
+      | "qty"
+    >
+  >;
 
 /**
  * Sales Invoice Item Update Request
  * All fields optional for update
  */
-export type SalesInvoiceItemUpdateRequest = Partial<Omit<SalesInvoiceItem, "name" | "creation" | "owner" | "docstatus">>;
+export type SalesInvoiceItemUpdateRequest = Partial<
+  Omit<SalesInvoiceItem, "name" | "creation" | "owner" | "docstatus">
+>;
 
 /**
  * Purchase Invoice Item DocType
@@ -9362,13 +9668,41 @@ Used for Taxes and Charges */
  * Purchase Invoice Item Create Request
  * Fields required to create a new Purchase Invoice Item
  */
-export type PurchaseInvoiceItemCreateRequest = Pick<PurchaseInvoiceItem, "item_name" | "qty" | "uom" | "conversion_factor" | "stock_qty" | "rate" | "amount" | "base_rate" | "base_amount"> & Partial<Pick<PurchaseInvoiceItem, "item_code" | "product_bundle" | "description" | "brand" | "item_group" | "image" | "image_view" | "received_qty" | "rejected_qty" | "stock_uom">>;
+export type PurchaseInvoiceItemCreateRequest = Pick<
+  PurchaseInvoiceItem,
+  | "item_name"
+  | "qty"
+  | "uom"
+  | "conversion_factor"
+  | "stock_qty"
+  | "rate"
+  | "amount"
+  | "base_rate"
+  | "base_amount"
+> &
+  Partial<
+    Pick<
+      PurchaseInvoiceItem,
+      | "item_code"
+      | "product_bundle"
+      | "description"
+      | "brand"
+      | "item_group"
+      | "image"
+      | "image_view"
+      | "received_qty"
+      | "rejected_qty"
+      | "stock_uom"
+    >
+  >;
 
 /**
  * Purchase Invoice Item Update Request
  * All fields optional for update
  */
-export type PurchaseInvoiceItemUpdateRequest = Partial<Omit<PurchaseInvoiceItem, "name" | "creation" | "owner" | "docstatus">>;
+export type PurchaseInvoiceItemUpdateRequest = Partial<
+  Omit<PurchaseInvoiceItem, "name" | "creation" | "owner" | "docstatus">
+>;
 
 /**
  * Payment Entry Reference DocType
@@ -9432,13 +9766,33 @@ export interface PaymentEntryReference {
  * Payment Entry Reference Create Request
  * Fields required to create a new Payment Entry Reference
  */
-export type PaymentEntryReferenceCreateRequest = Pick<PaymentEntryReference, "reference_doctype" | "reference_name"> & Partial<Pick<PaymentEntryReference, "due_date" | "bill_no" | "payment_term" | "payment_term_outstanding" | "account_type" | "payment_type" | "reconcile_effect_on" | "total_amount" | "outstanding_amount" | "allocated_amount">>;
+export type PaymentEntryReferenceCreateRequest = Pick<
+  PaymentEntryReference,
+  "reference_doctype" | "reference_name"
+> &
+  Partial<
+    Pick<
+      PaymentEntryReference,
+      | "due_date"
+      | "bill_no"
+      | "payment_term"
+      | "payment_term_outstanding"
+      | "account_type"
+      | "payment_type"
+      | "reconcile_effect_on"
+      | "total_amount"
+      | "outstanding_amount"
+      | "allocated_amount"
+    >
+  >;
 
 /**
  * Payment Entry Reference Update Request
  * All fields optional for update
  */
-export type PaymentEntryReferenceUpdateRequest = Partial<Omit<PaymentEntryReference, "name" | "creation" | "owner" | "docstatus">>;
+export type PaymentEntryReferenceUpdateRequest = Partial<
+  Omit<PaymentEntryReference, "name" | "creation" | "owner" | "docstatus">
+>;
 
 /**
  * Journal Entry Account DocType
@@ -9473,7 +9827,22 @@ export interface JournalEntryAccount {
   /** Credit in Company Currency */
   credit?: number;
   /** Reference Type */
-  reference_type?: "Sales Invoice" | "Purchase Invoice" | "Journal Entry" | "Sales Order" | "Purchase Order" | "Expense Claim" | "Asset" | "Loan" | "Payroll Entry" | "Employee Advance" | "Exchange Rate Revaluation" | "Invoice Discounting" | "Fees" | "Full and Final Statement" | "Payment Entry";
+  reference_type?:
+    | "Sales Invoice"
+    | "Purchase Invoice"
+    | "Journal Entry"
+    | "Sales Order"
+    | "Purchase Order"
+    | "Expense Claim"
+    | "Asset"
+    | "Loan"
+    | "Payroll Entry"
+    | "Employee Advance"
+    | "Exchange Rate Revaluation"
+    | "Invoice Discounting"
+    | "Fees"
+    | "Full and Final Statement"
+    | "Payment Entry";
   /** Reference Name */
   reference_name?: string;
   /** Reference Due Date */
@@ -9510,10 +9879,30 @@ export interface JournalEntryAccount {
  * Journal Entry Account Create Request
  * Fields required to create a new Journal Entry Account
  */
-export type JournalEntryAccountCreateRequest = Pick<JournalEntryAccount, "account"> & Partial<Pick<JournalEntryAccount, "account_type" | "bank_account" | "party_type" | "party" | "cost_center" | "project" | "account_currency" | "exchange_rate" | "debit_in_account_currency" | "debit">>;
+export type JournalEntryAccountCreateRequest = Pick<
+  JournalEntryAccount,
+  "account"
+> &
+  Partial<
+    Pick<
+      JournalEntryAccount,
+      | "account_type"
+      | "bank_account"
+      | "party_type"
+      | "party"
+      | "cost_center"
+      | "project"
+      | "account_currency"
+      | "exchange_rate"
+      | "debit_in_account_currency"
+      | "debit"
+    >
+  >;
 
 /**
  * Journal Entry Account Update Request
  * All fields optional for update
  */
-export type JournalEntryAccountUpdateRequest = Partial<Omit<JournalEntryAccount, "name" | "creation" | "owner" | "docstatus">>;
+export type JournalEntryAccountUpdateRequest = Partial<
+  Omit<JournalEntryAccount, "name" | "creation" | "owner" | "docstatus">
+>;

@@ -436,7 +436,7 @@ export const DOCTYPE_CONFIG: Record<string, DocTypeConfig> = {
     isSettings: true,
   },
   "Price List": {
-    apiPath: "accounting/price-list",
+    apiPath: "accounting/settings/price-list",
     module: "Accounting",
     labelField: "price_list_name",
     searchFields: ["price_list_name", "name"],
