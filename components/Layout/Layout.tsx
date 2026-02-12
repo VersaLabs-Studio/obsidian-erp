@@ -4,6 +4,7 @@
 
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import Image from "next/image";
 import {
   LayoutDashboard,
   Users,
@@ -21,7 +22,6 @@ import {
   LogOut,
   HelpCircle,
   FileText,
-  Sparkles,
   Package,
   BarChart3,
   Wallet,
@@ -364,14 +364,19 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         )}
       >
         <div className="flex items-center gap-3 group cursor-pointer">
-          <div className="h-10 w-10 bg-gradient-to-br from-primary to-primary/80 text-primary-foreground rounded-xl flex items-center justify-center font-bold shadow-lg shadow-primary/20 transition-transform duration-300 group-hover:scale-105 group-hover:rotate-3">
-            <Sparkles className="h-5 w-5" />
+          <div className="relative h-10 w-10 rounded-xl overflow-hidden shadow-lg shadow-primary/20 transition-transform duration-300 group-hover:scale-105 group-hover:rotate-3">
+            <Image
+              src="/logo.png"
+              alt="Versalabs Logo"
+              fill
+              className="object-cover"
+            />
           </div>
           {(!isSidebarCollapsed || isMobile) && (
             <div className="flex flex-col animate-in fade-in slide-in-from-left-2 duration-300">
-              <span className="font-bold text-lg tracking-tight">Pana ERP</span>
+              <span className="font-bold text-lg tracking-tight">Versalabs</span>
               <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
-                Enterprise
+                OBSIDIAN
               </span>
             </div>
           )}
