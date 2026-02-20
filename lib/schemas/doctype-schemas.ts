@@ -2704,7 +2704,32 @@ export const StockEntryCreateSchema = StockEntrySchema.pick({
   stock_entry_type: true,
   company: true,
   items: true,
-}).extend({});
+}).extend({
+  // Allow purpose as alias (maps to stock_entry_type on ERPNext)
+  purpose: z
+    .enum([
+      "Material Issue",
+      "Material Receipt",
+      "Material Transfer",
+      "Material Transfer for Manufacture",
+      "Material Consumption for Manufacture",
+      "Manufacture",
+      "Repack",
+      "Send to Subcontractor",
+      "Disassemble",
+    ])
+    .optional(),
+  // Additional optional fields
+  posting_date: z.string().optional(),
+  posting_time: z.string().optional(),
+  from_warehouse: z.string().optional(),
+  to_warehouse: z.string().optional(),
+  work_order: z.string().optional(),
+  bom_no: z.string().optional(),
+  fg_completed_qty: z.number().optional(),
+  remarks: z.string().optional(),
+  docstatus: z.union([z.literal(0), z.literal(1), z.literal(2)]).optional(),
+});
 
 export const StockEntryUpdateSchema = StockEntrySchema.partial().omit({
   name: true,
@@ -2714,6 +2739,7 @@ export const StockEntryUpdateSchema = StockEntrySchema.partial().omit({
 });
 
 export type StockEntrySchemaType = z.infer<typeof StockEntrySchema>;
+export type StockEntryFormData = z.infer<typeof StockEntryCreateSchema>;
 
 /**
  * Delivery Note Zod Schema
@@ -3661,10 +3687,10 @@ export type WorkOrderSchemaType = z.infer<typeof WorkOrderSchema>;
 export const BOMItemSchema = z.object({
   item_code: z.string().min(1, "Item is required"),
   item_name: z.string().optional(),
-  qty: z.number().min(0, "Quantity cannot be negative").default(1),
+  qty: z.coerce.number().min(0, "Quantity cannot be negative").default(1),
   uom: z.string().optional(),
-  rate: z.number().min(0, "Rate cannot be negative").default(0),
-  amount: z.number().optional(),
+  rate: z.coerce.number().min(0, "Rate cannot be negative").default(0),
+  amount: z.coerce.number().optional(),
   source_warehouse: z.string().optional(),
 });
 
@@ -3674,9 +3700,9 @@ export const BOMItemSchema = z.object({
 export const BOMOperationSchema = z.object({
   operation: z.string().min(1, "Operation is required"),
   workstation: z.string().optional(),
-  time_in_mins: z.number().min(0).default(0),
-  operating_cost: z.number().optional(),
-  hour_rate: z.number().optional(),
+  time_in_mins: z.coerce.number().min(0).default(0),
+  operating_cost: z.coerce.number().optional(),
+  hour_rate: z.coerce.number().optional(),
 });
 
 /**
@@ -3685,10 +3711,10 @@ export const BOMOperationSchema = z.object({
 export const BOMScrapItemSchema = z.object({
   item_code: z.string().min(1, "Item is required"),
   item_name: z.string().optional(),
-  qty: z.number().min(0).default(0),
+  qty: z.coerce.number().min(0).default(0),
   uom: z.string().optional(),
-  rate: z.number().min(0).default(0),
-  amount: z.number().optional(),
+  rate: z.coerce.number().min(0).default(0),
+  amount: z.coerce.number().optional(),
 });
 
 /**
@@ -3697,13 +3723,13 @@ export const BOMScrapItemSchema = z.object({
 export const BOMCreateSchema = z.object({
   item: z.string().min(1, "Item is required"),
   company: z.string().min(1, "Company is required"),
-  quantity: z.number().min(1, "Quantity must be at least 1"),
+  quantity: z.coerce.number().min(1, "Quantity must be at least 1"),
   uom: z.string().optional(),
   currency: z.string().default("ETB"),
-  conversion_rate: z.number().default(1),
-  is_active: z.union([z.literal(0), z.literal(1)]).default(1),
-  is_default: z.union([z.literal(0), z.literal(1)]).default(0),
-  with_operations: z.union([z.literal(0), z.literal(1)]).default(0),
+  conversion_rate: z.coerce.number().default(1),
+  is_active: z.coerce.number().default(1),
+  is_default: z.coerce.number().default(0),
+  with_operations: z.coerce.number().default(0),
   rm_cost_as_per: z
     .enum(["Valuation Rate", "Last Purchase Rate", "Price List"])
     .default("Valuation Rate"),
