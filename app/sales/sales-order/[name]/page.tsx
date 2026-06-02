@@ -278,7 +278,7 @@ export default function SalesOrderDetailPage() {
       name: so.name,
       data: { docstatus: 1 },
     });
-    toast.success("Sales Order submitted successfully");
+    // Toast is driven by the mutation's onSuccess/onError (showToast: true by default)
   };
 
   const handleCancel = async () => {
@@ -286,7 +286,7 @@ export default function SalesOrderDetailPage() {
       name: so.name,
       data: { docstatus: 2 },
     });
-    toast.success("Sales Order cancelled");
+    // Toast is driven by the mutation's onSuccess/onError (showToast: true by default)
   };
 
   const handleDelete = async () => {
@@ -505,8 +505,9 @@ export default function SalesOrderDetailPage() {
         <FlowTracker
           result={flowResult}
           compact={false}
-          onCreateAction={(stageId, action) => {
-            toast.info(`Creating from stage: ${stageId}, action: ${action}`);
+          onCreateAction={() => {
+            // Downstream creation (WO, DN, Invoice) is Phase 2 scope
+            // Buttons in WhatsNext are disabled with Phase 2 tooltip
           }}
         />
       )}
@@ -520,7 +521,7 @@ export default function SalesOrderDetailPage() {
               <div className="flex items-center gap-4">
                 <div className="h-16 w-16 relative overflow-hidden rounded-2xl shadow-sm border border-border bg-card p-2">
                   <img
-                    src="/pana-logo.png"
+                    src="/logo.png"
                     alt="Obsidian ERP"
                     className="h-full w-full object-contain"
                   />
@@ -812,7 +813,7 @@ export default function SalesOrderDetailPage() {
           <div className="header">
             <div className="flex items-start gap-4">
               <img
-                src="/pana-logo.png"
+                src="/logo.png"
                 style={{ height: "60px", width: "60px", objectFit: "contain" }}
               />
               <div className="company-info">
