@@ -30,17 +30,17 @@ interface InlineStatusChangeProps {
 }
 
 const DEFAULT_STATUS_COLORS: Record<string, string> = {
-  Draft: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
-  "To Deliver and Bill": "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300",
-  "To Deliver": "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300",
-  "To Bill": "bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300",
-  Completed: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300",
+  Draft: "bg-secondary text-secondary-foreground",
+  "To Deliver and Bill": "bg-primary/10 text-primary",
+  "To Deliver": "bg-primary/10 text-primary",
+  "To Bill": "bg-primary/10 text-primary",
+  Completed: "bg-primary/10 text-primary",
   Cancelled: "bg-muted text-muted-foreground",
-  Open: "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300",
-  Submitted: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300",
-  Paid: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300",
-  Unpaid: "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300",
-  Overdue: "bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300",
+  Open: "bg-primary/10 text-primary",
+  Submitted: "bg-primary/10 text-primary",
+  Paid: "bg-primary/10 text-primary",
+  Unpaid: "bg-muted text-muted-foreground",
+  Overdue: "bg-destructive/10 text-destructive",
 };
 
 /**

@@ -34,6 +34,8 @@ export interface FlowStage {
   createAction?: string;
   /** Icon for the stage */
   icon?: string;
+  /** Whether this stage is optional (e.g., Work Order — can be skipped) */
+  isOptional?: boolean;
 }
 
 /**

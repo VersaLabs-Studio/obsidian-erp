@@ -48,6 +48,14 @@ export const LEAD_TO_CASH_FLOW: FlowDefinition = {
       createAction: "create_work_orders",
     },
     {
+      id: "work-order",
+      label: "Work Order",
+      doctype: "Work Order",
+      status: "pending",
+      icon: "Factory",
+      isOptional: true,
+    },
+    {
       id: "delivery",
       label: "Delivery",
       doctype: "Delivery Note",

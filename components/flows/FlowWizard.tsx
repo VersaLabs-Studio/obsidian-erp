@@ -31,6 +31,10 @@ interface FlowWizardProps {
   onCancel: () => void;
   /** Render function for step content */
   renderStep: (step: WizardStep, stepIndex: number) => React.ReactNode;
+  /** Custom label for the submit button on the last step */
+  submitLabel?: string;
+  /** Custom label for the submitting state */
+  submittingLabel?: string;
   /** Additional CSS classes */
   className?: string;
 }
@@ -128,6 +132,8 @@ export function FlowWizard({
   onSubmit,
   onCancel,
   renderStep,
+  submitLabel = "Submit",
+  submittingLabel = "Submitting...",
   className,
 }: FlowWizardProps) {
   const [currentStep, setCurrentStep] = useState(0);
@@ -227,10 +233,10 @@ export function FlowWizard({
           {isSubmitting ? (
             <>
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Submitting...
+              {submittingLabel}
             </>
           ) : isLastStep ? (
-            "Submit"
+            submitLabel
           ) : (
             <>
               Next

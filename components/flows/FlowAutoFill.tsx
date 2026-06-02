@@ -72,7 +72,7 @@ export function FlowAutoFill({
           )}
         </div>
         <div className="mt-0.5 flex items-center gap-3 text-xs">
-          <span className="text-emerald-600 dark:text-emerald-400">
+          <span className="text-primary">
             <Lock className="inline h-3 w-3 mr-0.5" />
             {filledCount} fields locked
           </span>
