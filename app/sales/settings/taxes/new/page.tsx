@@ -1,5 +1,5 @@
 // app/sales/settings/taxes/new/page.tsx
-// Pana ERP v3.0 - Create Tax Template Page
+// Obsidian ERP v4.0 - Create Tax Template Page
 // @ts-nocheck
 
 "use client";

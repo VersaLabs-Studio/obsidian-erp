@@ -1,5 +1,5 @@
 // components/smart/empty-state.tsx
-// Pana ERP v3.0 - Empty State Component
+// Obsidian ERP v4.0 - Empty State Component
 
 import React from "react";
 import { cn } from "@/lib/utils";

@@ -25,9 +25,10 @@ import {
   ArrowUpRight,
   ArrowRightCircle,
   AlertCircle,
+  FileText,
 } from "lucide-react";
 import { useFrappeCreate, useFrappeDoc, useFrappeList } from "@/hooks/generic";
-import { PageHeader } from "@/components/smart";
+import { PageHeader, LoadingState } from "@/components/smart";
 import { InfoCard } from "@/components/ui/info-card";
 import {
   FormSelect,
@@ -214,7 +215,7 @@ function CreatePaymentEntryForm() {
                 control={control}
                 name="party"
                 label="Party Name"
-                doctype={watchedPartyType}
+                doctype={watchedPartyType ?? ""}
                 labelField={
                   watchedPartyType === "Customer"
                     ? "customer_name"
@@ -346,7 +347,7 @@ function CreatePaymentEntryForm() {
                     >
                       <td className="p-4">
                         <FormSelect
-                          control={control}
+                          control={control as any}
                           name={`references.${index}.reference_doctype`}
                           options={[
                             { value: "Sales Invoice", label: "Sales Invoice" },

@@ -1,5 +1,5 @@
 // app/api/sales/terms/[name]/route.ts
-// Pana ERP v3.0 - Single Terms and Conditions API Routes
+// Obsidian ERP v4.0 - Single Terms and Conditions API Routes
 
 import {
   createGetHandler,

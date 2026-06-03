@@ -1,5 +1,5 @@
 // app/api/crm/address/route.ts
-// Pana ERP v3.0 - Address API (GET list, POST create)
+// Obsidian ERP v4.0 - Address API (GET list, POST create)
 
 import { createListHandler, createCreateHandler } from "@/lib/api-factory";
 import { AddressCreateSchema } from "@/lib/schemas/doctype-schemas";

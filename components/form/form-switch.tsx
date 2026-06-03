@@ -1,5 +1,5 @@
 // components/form/form-switch.tsx
-// Pana ERP v3.0 - Reusable Form Switch Component
+// Obsidian ERP v4.0 - Reusable Form Switch Component
 
 "use client";
 

@@ -1,5 +1,5 @@
 // app/api/manufacturing/operation/route.ts
-// Pana ERP v3.0 - Operation API (List & Create)
+// Obsidian ERP v4.0 - Operation API (List & Create)
 
 import { createListHandler, createCreateHandler } from "@/lib/api-factory";
 import { OperationCreateSchema } from "@/lib/schemas/doctype-schemas";

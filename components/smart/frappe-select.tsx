@@ -1,5 +1,5 @@
 // components/smart/frappe-select.tsx
-// Pana ERP v3.0 - Async Frappe-powered Select Component with Search
+// Obsidian ERP v4.0 - Async Frappe-powered Select Component with Search
 
 "use client";
 

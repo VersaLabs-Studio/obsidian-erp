@@ -1,5 +1,5 @@
 // lib/theme-context.tsx
-// Pana ERP v3.0 - Global Theme Context with Dark Mode Support
+// Obsidian ERP v4.0 - Global Theme Context with Dark Mode Support
 
 "use client";
 
@@ -28,7 +28,7 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
-const STORAGE_KEY = "pana-erp-theme";
+const STORAGE_KEY = "obsidian-erp-theme";
 
 interface ThemeProviderProps {
   children: React.ReactNode;

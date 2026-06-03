@@ -1,5 +1,5 @@
 // components/smart/searchable-select.tsx
-// Pana ERP v3.0 - Searchable Select with Scrollbar
+// Obsidian ERP v4.0 - Searchable Select with Scrollbar
 
 "use client";
 

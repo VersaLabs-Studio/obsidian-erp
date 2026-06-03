@@ -1,5 +1,5 @@
 // components/form/form-textarea.tsx
-// Pana ERP v3.0 - Reusable Form Textarea Component
+// Obsidian ERP v4.0 - Reusable Form Textarea Component
 
 "use client";
 

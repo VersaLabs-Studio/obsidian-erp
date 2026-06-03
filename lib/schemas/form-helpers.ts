@@ -1,5 +1,5 @@
 // lib/schemas/form-helpers.ts
-// Pana ERP v3.0 - Form Schema Factory & Helpers
+// Obsidian ERP v4.0 - Form Schema Factory & Helpers
 
 import { z } from "zod";
 

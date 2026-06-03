@@ -1,12 +1,12 @@
 // app/layout.tsx
-// Pana ERP v1.3 - Root Layout with next/font
+// Obsidian ERP v4.0 - Root Layout with next/font
 import type { Metadata } from "next";
 import { Manrope } from "next/font/google";
 import LayoutClient from "./LayoutClient";
 import "./globals.css";
 
 // Premium font loading with next/font (optimized, no layout shift)
-// Plus Jakarta Sans - Modern, Clean, Premium feel (used by Vercel, Linear)
+// Manrope - Modern, Clean, Premium feel
 const jakarta = Manrope({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700", "800"],
@@ -15,8 +15,8 @@ const jakarta = Manrope({
 });
 
 export const metadata: Metadata = {
-  title: "Pana Promotion",
-  description: "Enterprise Resource Planning - Premium Business Management",
+  title: "Obsidian ERP",
+  description: "Enterprise Resource Planning - Premium Business Management by VersaLabs",
 };
 
 export default function RootLayout({
@@ -32,7 +32,7 @@ export default function RootLayout({
             __html: `
               (function() {
                 try {
-                  const theme = localStorage.getItem('pana-erp-theme') || 'system';
+                  const theme = localStorage.getItem('obsidian-erp-theme') || 'system';
                   let resolved = theme;
                   
                   if (theme === 'system') {

@@ -1,5 +1,5 @@
 // app/crm/settings/page.tsx
-// Pana ERP v3.0 - CRM Settings Landing Page
+// Obsidian ERP v4.0 - CRM Settings Landing Page
 // @ts-nocheck
 
 "use client";

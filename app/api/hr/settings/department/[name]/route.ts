@@ -1,4 +1,4 @@
-// Pana ERP v3.0 - Department Single Doc API
+// Obsidian ERP v4.0 - Department Single Doc API
 import {
   createGetHandler,
   createUpdateHandler,

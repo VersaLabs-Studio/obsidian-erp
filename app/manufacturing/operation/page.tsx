@@ -1,5 +1,5 @@
 // app/manufacturing/operation/page.tsx
-// Pana ERP v3.0 - Operation List Page
+// Obsidian ERP v4.0 - Operation List Page
 // @ts-nocheck
 
 "use client";

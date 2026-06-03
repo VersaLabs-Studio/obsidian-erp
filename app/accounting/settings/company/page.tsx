@@ -1,5 +1,5 @@
 // app/accounting/settings/company/page.tsx
-// Pana ERP v3.0 - Companies List Page
+// Obsidian ERP v4.0 - Companies List Page
 "use client";
 
 import { useState } from "react";

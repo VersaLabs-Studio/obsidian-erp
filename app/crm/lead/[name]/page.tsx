@@ -1,5 +1,5 @@
 // app/crm/lead/[name]/page.tsx
-// Pana ERP v3.0 - Lead Detail Page (Schema-Driven Architecture)
+// Obsidian ERP v4.0 - Lead Detail Page (Schema-Driven Architecture)
 "use client";
 
 import { useState } from "react";

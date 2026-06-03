@@ -1,5 +1,5 @@
 // components/smart/status-badge.tsx
-// Pana ERP v3.0 - Auto-colored Status Badge Component
+// Obsidian ERP v4.0 - Auto-colored Status Badge Component
 
 import { cn } from "@/lib/utils";
 
@@ -129,7 +129,7 @@ export function StatusBadge({
   // Get config or fallback
   const config = statusConfig[normalizedStatus] || {
     label: label || String(status),
-    className: "bg-gray-100 text-gray-600 border-gray-200",
+    className: "bg-muted text-muted-foreground border-border",
   };
 
   // Size classes

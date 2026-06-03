@@ -1,5 +1,5 @@
 // app/api/sales/quotation/[name]/route.ts
-// Pana ERP v3.0 - Single Quotation API Routes
+// Obsidian ERP v4.0 - Single Quotation API Routes
 
 import {
   createGetHandler,

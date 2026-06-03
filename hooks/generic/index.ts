@@ -1,5 +1,5 @@
 // hooks/generic/index.ts
-// Pana ERP v3.0 - Generic Hooks Barrel Export
+// Obsidian ERP v4.0 - Generic Hooks Barrel Export
 
 export { useFrappeList, type FrappeListOptions } from "./useFrappeList";
 export { useFrappeDoc } from "./useFrappeDoc";

@@ -1,5 +1,5 @@
 // app/api/crm/gender/route.ts
-// Pana ERP v3.0 - Gender API (GET list for options)
+// Obsidian ERP v4.0 - Gender API (GET list for options)
 
 import { createListHandler } from "@/lib/api-factory";
 

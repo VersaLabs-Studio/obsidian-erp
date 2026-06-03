@@ -1,5 +1,5 @@
 // components/form/form-select.tsx
-// Pana ERP v3.0 - Reusable Form Select Component
+// Obsidian ERP v4.0 - Reusable Form Select Component
 
 "use client";
 
@@ -26,7 +26,9 @@ interface FormSelectProps<T extends FieldValues> {
   /** Field name (must match schema) */
   name: FieldPath<T>;
   /** Field label */
-  label: string;
+  label?: string;
+  /** Whether to hide the label visually */
+  hideLabel?: boolean;
   /** Whether field is required */
   required?: boolean;
   /** Placeholder text */
@@ -59,6 +61,7 @@ export function FormSelect<T extends FieldValues>({
   control,
   name,
   label,
+  hideLabel = false,
   required = false,
   placeholder = "Select...",
   options,
@@ -71,7 +74,7 @@ export function FormSelect<T extends FieldValues>({
       name={name}
       render={({ field }) => (
         <FormItem>
-          <DataField label={label} name={String(name)} required={required}>
+          <DataField label={label} name={String(name)} required={required} hideLabel={hideLabel}>
             <Select
               value={field.value}
               onValueChange={field.onChange}

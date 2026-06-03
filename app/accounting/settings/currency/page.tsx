@@ -1,5 +1,5 @@
 // app/accounting/settings/currency/page.tsx
-// Pana ERP v3.0 - Currencies List Page
+// Obsidian ERP v4.0 - Currencies List Page
 "use client";
 
 import { useState } from "react";

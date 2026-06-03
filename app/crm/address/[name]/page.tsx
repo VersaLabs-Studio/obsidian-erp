@@ -1,5 +1,5 @@
 // app/crm/address/[name]/page.tsx
-// Pana ERP v3.0 - Address Detail Page
+// Obsidian ERP v4.0 - Address Detail Page
 "use client";
 
 import { useState } from "react";

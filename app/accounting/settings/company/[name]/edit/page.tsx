@@ -1,5 +1,5 @@
 // app/accounting/settings/company/[name]/edit/page.tsx
-// Pana ERP v3.0 - Update Company Profile
+// Obsidian ERP v4.0 - Update Company Profile
 "use client";
 
 import { useEffect } from "react";
@@ -87,7 +87,7 @@ export default function EditCompanyPage() {
                     control={form.control}
                     name="company_name"
                     label="Legal Entity Name"
-                    placeholder="e.g. Pana Softwares PLC"
+                    placeholder="e.g. Obsidian Labs PLC"
                     required
                   />
                   <FormInput

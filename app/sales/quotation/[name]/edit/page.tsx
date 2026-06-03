@@ -1,5 +1,5 @@
 // app/sales/quotation/[name]/edit/page.tsx
-// Pana ERP v3.0 - Edit Quotation Page
+// Obsidian ERP v4.0 - Edit Quotation Page
 // @ts-nocheck - React Hook Form + Zod type inference limitations
 
 "use client";

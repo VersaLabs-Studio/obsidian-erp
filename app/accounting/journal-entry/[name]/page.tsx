@@ -307,10 +307,10 @@ export default function JournalEntryDetailPage() {
                       Total Balanced
                     </td>
                     <td className="px-6 py-6 text-right text-emerald-600">
-                      {formatCurrency(entry.total_debit)}
+                      {formatCurrency(entry.total_debit ?? 0)}
                     </td>
                     <td className="px-10 py-6 text-right text-rose-600">
-                      {formatCurrency(entry.total_credit)}
+                      {formatCurrency(entry.total_credit ?? 0)}
                     </td>
                   </tr>
                 </tfoot>

@@ -17,6 +17,7 @@ import {
   CreditCard,
   ShoppingCart,
   Boxes,
+  type LucideIcon,
   UserCheck,
   Zap,
   Globe,
@@ -87,7 +88,7 @@ const colorMap: Record<
 interface StatCardProps {
   title: string;
   value: string | number;
-  icon: any;
+  icon: LucideIcon;
   description: string;
   trend?: {
     value: string;
@@ -164,7 +165,7 @@ function StatCard({
 interface ModuleCardProps {
   title: string;
   description: string;
-  icon: any;
+  icon: LucideIcon;
   href: string;
   colorKey: string;
   stats: { label: string; value: string }[];
@@ -278,7 +279,7 @@ export default function GlobalDashboard() {
               Command Center
             </h1>
             <p className="text-base text-muted-foreground font-medium leading-relaxed max-w-lg">
-              Central management workspace for pana promotion resources. Monitor
+              Central management workspace for Obsidian ERP resources. Monitor
               performance and streamline operations.
             </p>
             <div className="flex flex-wrap gap-3 pt-2">

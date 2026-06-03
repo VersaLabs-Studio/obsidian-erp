@@ -1,5 +1,5 @@
 // app/accounting/settings/page.tsx
-// Pana ERP v3.0 - Accounting Settings Landing Page
+// Obsidian ERP v4.0 - Accounting Settings Landing Page
 "use client";
 
 import { useRouter } from "next/navigation";

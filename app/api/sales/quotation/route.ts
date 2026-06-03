@@ -1,5 +1,5 @@
 // app/api/sales/quotation/route.ts
-// Pana ERP v3.0 - Quotation API Routes (Phase 2: Sales Module)
+// Obsidian ERP v4.0 - Quotation API Routes (Phase 2: Sales Module)
 
 import { createListHandler, createCreateHandler } from "@/lib/api-factory";
 import { QuotationCreateSchema } from "@/lib/schemas/doctype-schemas";

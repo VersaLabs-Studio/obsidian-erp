@@ -1,5 +1,5 @@
 // app/api/sales/taxes-template/[name]/route.ts
-// Pana ERP v3.0 - Single Sales Taxes Template API Routes
+// Obsidian ERP v4.0 - Single Sales Taxes Template API Routes
 
 import {
   createGetHandler,

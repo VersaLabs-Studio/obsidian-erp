@@ -1,5 +1,5 @@
 // app/api/accounting/settings/company/[name]/route.ts
-// Pana ERP v3.0 - Single Company API Routes
+// Obsidian ERP v4.0 - Single Company API Routes
 
 import {
   createGetHandler,

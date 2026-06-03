@@ -1,5 +1,5 @@
 // lib/api-factory.ts
-// Pana ERP v3.0 - API Route Handler Factory
+// Obsidian ERP v4.0 - API Route Handler Factory
 
 import { NextRequest, NextResponse } from "next/server";
 import { frappeClient } from "./frappe-client";

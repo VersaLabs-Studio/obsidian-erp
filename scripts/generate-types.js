@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Pana ERP v3.0 - Type Generation Script
+ * Obsidian ERP v4.0 - Type Generation Script
  *
  * Generates TypeScript interfaces and Zod schemas from Frappe DocType metadata.
  *
@@ -654,7 +654,7 @@ function generateZodSchema(doctype, fields) {
  * Main execution
  */
 async function main() {
-  console.log("\n🚀 Pana ERP v3.0 - Type Generator\n");
+  console.log("\n🚀 Obsidian ERP v4.0 - Type Generator\n");
 
   // Parse arguments
   const args = process.argv.slice(2);

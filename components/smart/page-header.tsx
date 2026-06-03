@@ -1,5 +1,5 @@
 // components/smart/page-header.tsx
-// Pana ERP v3.0 - Reusable Floating Page Header with Responsive Fix
+// Obsidian ERP v4.0 - Reusable Floating Page Header with Responsive Fix
 
 "use client";
 

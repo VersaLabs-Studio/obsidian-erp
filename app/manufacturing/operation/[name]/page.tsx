@@ -1,5 +1,5 @@
 // app/manufacturing/operation/[name]/page.tsx
-// Pana ERP v3.0 - Operation Detail Page with Sub-Operations Display
+// Obsidian ERP v4.0 - Operation Detail Page with Sub-Operations Display
 // @ts-nocheck
 
 "use client";

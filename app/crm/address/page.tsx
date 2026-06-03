@@ -1,5 +1,5 @@
 // app/crm/address/page.tsx
-// Pana ERP v3.0 - Addresses List Page
+// Obsidian ERP v4.0 - Addresses List Page
 "use client";
 
 import { useState, useMemo } from "react";

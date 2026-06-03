@@ -1,5 +1,5 @@
 // hooks/generic/useFrappeList.ts
-// Pana ERP v3.0 - Generic List Query Hook
+// Obsidian ERP v4.0 - Generic List Query Hook
 
 import { useQuery, UseQueryOptions } from "@tanstack/react-query";
 import { getApiPath } from "@/lib/doctype-config";

@@ -401,7 +401,7 @@ export default function PurchaseInvoiceDetailPage() {
                       Grand Total
                     </span>
                     <span className="text-2xl font-black text-rose-600">
-                      {formatCurrency(invoice.grand_total)}
+                      {formatCurrency(invoice.grand_total ?? 0)}
                     </span>
                   </div>
                   <div className="p-6 bg-rose-500/10 rounded-[1.5rem] border border-rose-500/20 shadow-xl mt-6">

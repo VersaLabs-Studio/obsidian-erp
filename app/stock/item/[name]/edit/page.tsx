@@ -1,5 +1,5 @@
 // app/stock/item/[name]/edit/page.tsx
-// Pana ERP v3.0 - Edit Item Page (Schema-Driven Architecture)
+// Obsidian ERP v4.0 - Edit Item Page (Schema-Driven Architecture)
 // @ts-nocheck - React Hook Form + Zod type inference limitations (false positives)
 
 "use client";

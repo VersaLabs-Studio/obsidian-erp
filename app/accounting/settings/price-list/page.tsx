@@ -1,5 +1,5 @@
 // app/accounting/settings/price-list/page.tsx
-// Pana ERP v3.0 - Price Lists List Page
+// Obsidian ERP v4.0 - Price Lists List Page
 "use client";
 
 import { useState } from "react";

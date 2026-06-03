@@ -1,5 +1,5 @@
 // app/api/accounting/price-list/route.ts
-// Pana ERP v3.0 - Price List API
+// Obsidian ERP v4.0 - Price List API
 
 import { createListHandler, createCreateHandler } from "@/lib/api-factory";
 

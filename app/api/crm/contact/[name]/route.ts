@@ -1,5 +1,5 @@
 // app/api/crm/contact/[name]/route.ts
-// Pana ERP v3.0 - Contact Single Doc API (GET, PUT, DELETE)
+// Obsidian ERP v4.0 - Contact Single Doc API (GET, PUT, DELETE)
 
 import {
   createGetHandler,

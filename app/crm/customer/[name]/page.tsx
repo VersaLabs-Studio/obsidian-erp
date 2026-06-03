@@ -1,5 +1,5 @@
 // app/crm/customer/[name]/page.tsx
-// Pana ERP v3.0 - Customer Master Hub
+// Obsidian ERP v4.0 - Customer Master Hub
 // Complete Customer 360° View with all linked transactions
 // @ts-nocheck
 

@@ -1,4 +1,4 @@
-// Pana ERP v3.0 - Employee API (GET list, POST create)
+// Obsidian ERP v4.0 - Employee API (GET list, POST create)
 import { createListHandler, createCreateHandler } from "@/lib/api-factory";
 import { EmployeeCreateSchema } from "@/lib/schemas/doctype-schemas";
 

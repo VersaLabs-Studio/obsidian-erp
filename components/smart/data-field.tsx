@@ -1,5 +1,5 @@
 // components/smart/data-field.tsx
-// Pana ERP v3.0 - Standardized Form Field Component
+// Obsidian ERP v4.0 - Standardized Form Field Component
 
 import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
@@ -8,7 +8,9 @@ import React from "react";
 
 interface DataFieldProps {
   /** Field label */
-  label: string;
+  label?: string;
+  /** Whether to hide the label visually */
+  hideLabel?: boolean;
   /** Field name (for htmlFor) */
   name?: string;
   /** Whether the field is required */
@@ -42,6 +44,7 @@ interface DataFieldProps {
  */
 export function DataField({
   label,
+  hideLabel = false,
   name,
   required,
   error,
@@ -49,16 +52,18 @@ export function DataField({
   className,
   children,
 }: DataFieldProps) {
-  const fieldId = name || label.toLowerCase().replace(/\s+/g, "-");
+  const fieldId = name || (label || "").toLowerCase().replace(/\s+/g, "-");
   return (
     <div className={cn("space-y-2", className)}>
-      <Label
-        htmlFor={fieldId}
-        className={cn("text-sm font-medium", error && "text-destructive")}
-      >
-        {label}
-        {required && <span className="text-destructive ml-1">*</span>}
-      </Label>
+      {label && !hideLabel && (
+        <Label
+          htmlFor={fieldId}
+          className={cn("text-sm font-medium", error && "text-destructive")}
+        >
+          {label}
+          {required && <span className="text-destructive ml-1">*</span>}
+        </Label>
+      )}
 
       {children}
 
@@ -117,7 +122,7 @@ export function TextDataField({
       className={className}
     >
       <Input
-        id={name || label.toLowerCase().replace(/\s+/g, "-")}
+        id={name || (label || "").toLowerCase().replace(/\s+/g, "-")}
         name={name}
         type={type}
         placeholder={placeholder}

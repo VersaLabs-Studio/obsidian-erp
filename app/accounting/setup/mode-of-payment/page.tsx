@@ -236,7 +236,7 @@ export default function ModeOfPaymentListPage() {
         onOpenChange={(open) => !open && setDeleteTarget(null)}
         title="Delete Mode of Payment"
         description="Are you sure you want to delete this payment method? This cannot be undone."
-        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget)}
+        onConfirm={() => { if (deleteTarget) deleteMutation.mutate(deleteTarget); }}
         loading={deleteMutation.isPending}
       />
     </div>

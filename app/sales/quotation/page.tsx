@@ -1,5 +1,5 @@
 // app/sales/quotation/page.tsx
-// Pana ERP v3.0 - Quotations List Page (Premium Card Design)
+// Obsidian ERP v4.0 - Quotations List Page (Premium Card Design)
 // @ts-nocheck
 
 "use client";
@@ -72,8 +72,8 @@ const STATUS_CONFIG: Record<
     label: "Expired",
   },
   Cancelled: {
-    color: "text-gray-600 dark:text-gray-400",
-    bgColor: "bg-gray-100 dark:bg-gray-800",
+    color: "text-muted-foreground",
+    bgColor: "bg-muted",
     icon: XCircle,
     label: "Cancelled",
   },
@@ -152,7 +152,7 @@ function QuotationCard({
           displayStatus === "Open" && "bg-blue-500",
           displayStatus === "Ordered" && "bg-emerald-500",
           displayStatus === "Expired" && "bg-amber-500",
-          displayStatus === "Cancelled" && "bg-gray-400"
+          displayStatus === "Cancelled" && "bg-muted-foreground/50"
         )}
       />
 

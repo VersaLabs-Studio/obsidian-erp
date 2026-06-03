@@ -1,5 +1,5 @@
 // components/form/index.ts
-// Pana ERP v3.0 - Form Components Barrel Export
+// Obsidian ERP v4.0 - Form Components Barrel Export
 
 export { FormInput } from "./form-input";
 export { FormTextarea } from "./form-textarea";

@@ -1,5 +1,5 @@
 // lib/doctype-config.ts
-// Pana ERP v3.0 - Centralized DocType Configuration
+// Obsidian ERP v4.0 - Centralized DocType Configuration
 // Single source of truth for all DocType metadata
 
 /**
@@ -15,6 +15,57 @@ export type ModuleCategory =
   | "Assets"
   | "HR"
   | "Settings";
+
+/**
+ * V4 Flow/AI/UX metadata for a DocType
+ * Extends DocTypeConfig with flow engine, AI, and UX metadata
+ * Per Architecture V4 Part 1 §6.4
+ */
+export interface DocTypeConfigV4 extends DocTypeConfig {
+  /** Flow engine metadata */
+  flow?: {
+    /** Whether this doctype participates in a flow chain */
+    hasFlow: boolean;
+    /** Upstream doctype (e.g., Quotation → Sales Order) */
+    upstreamDoctype?: string;
+    /** Downstream doctypes (e.g., Sales Order → [Work Order, Delivery Note]) */
+    downstreamDoctypes?: string[];
+    /** Status machine key (references STATUS_MACHINES) */
+    statusMachineKey?: string;
+    /** Flow stage label (e.g., "Sales Order", "Invoice") */
+    flowLabel?: string;
+    /** Whether this is a terminal stage in the flow */
+    isTerminal?: boolean;
+  };
+  /** AI integration metadata */
+  ai?: {
+    /** Whether AI can create documents of this type */
+    canCreate: boolean;
+    /** Whether AI can update documents of this type */
+    canUpdate: boolean;
+    /** Whether AI can read documents of this type */
+    canRead: boolean;
+    /** Custom AI tool description */
+    toolDescription?: string;
+    /** Fields AI should never touch */
+    protectedFields?: string[];
+  };
+  /** UX metadata */
+  ux?: {
+    /** Number of wizard steps for creation */
+    wizardSteps?: number;
+    /** Whether to show the flow tracker on detail page */
+    showFlowTracker?: boolean;
+    /** Whether to show "What's Next" suggestions */
+    showWhatsNext?: boolean;
+    /** Whether to show activity timeline */
+    showActivityTimeline?: boolean;
+    /** KPI fields for dashboard cards */
+    kpiFields?: string[];
+    /** Default view: 'list' | 'kanban' | 'calendar' */
+    defaultView?: "list" | "kanban" | "calendar";
+  };
+}
 
 /**
  * Configuration for a single DocType
@@ -554,6 +605,357 @@ export const DOCTYPE_CONFIG: Record<string, DocTypeConfig> = {
     isSettings: true,
   },
 };
+
+/**
+ * V4 DocType Configuration with Flow/AI/UX metadata
+ * Extends DOCTYPE_CONFIG with v4-specific metadata for the Lead→Payment chain
+ *
+ * This registry drives:
+ * - Flow Tracker (which stages exist, what's upstream/downstream)
+ * - AI Tool generation (what AI can do with each doctype)
+ * - Wizard steps (how many steps for creation)
+ * - Dashboard KPIs (what metrics to show)
+ */
+export const DOCTYPE_CONFIG_V4: Record<string, DocTypeConfigV4> = {
+  // ============================================================================
+  // LEAD → OPPORTUNITY → QUOTATION → SALES ORDER → DELIVERY → INVOICE → PAYMENT
+  // ============================================================================
+  Lead: {
+    ...DOCTYPE_CONFIG.Lead,
+    flow: {
+      hasFlow: true,
+      downstreamDoctypes: ["Opportunity"],
+      statusMachineKey: "Lead",
+      flowLabel: "Lead",
+    },
+    ai: {
+      canCreate: true,
+      canUpdate: true,
+      canRead: true,
+      toolDescription: "Create or update sales leads from potential customers",
+    },
+    ux: {
+      wizardSteps: 2,
+      showFlowTracker: true,
+      showWhatsNext: true,
+      showActivityTimeline: true,
+      defaultView: "list",
+    },
+  },
+  Opportunity: {
+    ...DOCTYPE_CONFIG.Opportunity,
+    flow: {
+      hasFlow: true,
+      upstreamDoctype: "Lead",
+      downstreamDoctypes: ["Quotation"],
+      statusMachineKey: "Opportunity",
+      flowLabel: "Opportunity",
+    },
+    ai: {
+      canCreate: true,
+      canUpdate: true,
+      canRead: true,
+      toolDescription: "Create sales opportunities from qualified leads",
+    },
+    ux: {
+      wizardSteps: 2,
+      showFlowTracker: true,
+      showWhatsNext: true,
+      showActivityTimeline: true,
+      defaultView: "kanban",
+    },
+  },
+  Quotation: {
+    ...DOCTYPE_CONFIG.Quotation,
+    flow: {
+      hasFlow: true,
+      upstreamDoctype: "Opportunity",
+      downstreamDoctypes: ["Sales Order"],
+      statusMachineKey: "Quotation",
+      flowLabel: "Quotation",
+    },
+    ai: {
+      canCreate: true,
+      canUpdate: true,
+      canRead: true,
+      toolDescription: "Create quotations for customers with items and pricing",
+    },
+    ux: {
+      wizardSteps: 3,
+      showFlowTracker: true,
+      showWhatsNext: true,
+      showActivityTimeline: true,
+      defaultView: "list",
+    },
+  },
+  "Sales Order": {
+    ...DOCTYPE_CONFIG["Sales Order"],
+    flow: {
+      hasFlow: true,
+      upstreamDoctype: "Quotation",
+      downstreamDoctypes: ["Work Order", "Delivery Note"],
+      statusMachineKey: "Sales Order",
+      flowLabel: "Sales Order",
+    },
+    ai: {
+      canCreate: true,
+      canUpdate: true,
+      canRead: true,
+      toolDescription: "Create sales orders from quotations or directly",
+    },
+    ux: {
+      wizardSteps: 3,
+      showFlowTracker: true,
+      showWhatsNext: true,
+      showActivityTimeline: true,
+      kpiFields: ["grand_total", "per_delivered", "per_billed"],
+      defaultView: "list",
+    },
+  },
+  "Work Order": {
+    ...DOCTYPE_CONFIG["Work Order"],
+    flow: {
+      hasFlow: true,
+      upstreamDoctype: "Sales Order",
+      downstreamDoctypes: ["Stock Entry"],
+      statusMachineKey: "Work Order",
+      flowLabel: "Work Order",
+    },
+    ai: {
+      canCreate: true,
+      canUpdate: false,
+      canRead: true,
+      toolDescription: "Create manufacturing work orders from sales orders",
+    },
+    ux: {
+      wizardSteps: 2,
+      showFlowTracker: true,
+      showWhatsNext: true,
+      showActivityTimeline: true,
+      defaultView: "list",
+    },
+  },
+  "Delivery Note": {
+    ...DOCTYPE_CONFIG["Delivery Note"],
+    flow: {
+      hasFlow: true,
+      upstreamDoctype: "Sales Order",
+      downstreamDoctypes: ["Sales Invoice"],
+      statusMachineKey: "Delivery Note",
+      flowLabel: "Delivery",
+    },
+    ai: {
+      canCreate: true,
+      canUpdate: false,
+      canRead: true,
+      toolDescription: "Create delivery notes to ship goods to customers",
+    },
+    ux: {
+      wizardSteps: 3,
+      showFlowTracker: true,
+      showWhatsNext: true,
+      showActivityTimeline: true,
+      defaultView: "list",
+    },
+  },
+  "Sales Invoice": {
+    ...DOCTYPE_CONFIG["Sales Invoice"],
+    flow: {
+      hasFlow: true,
+      upstreamDoctype: "Delivery Note",
+      downstreamDoctypes: ["Payment Entry"],
+      statusMachineKey: "Sales Invoice",
+      flowLabel: "Invoice",
+    },
+    ai: {
+      canCreate: true,
+      canUpdate: false,
+      canRead: true,
+      toolDescription: "Create sales invoices for delivered goods",
+    },
+    ux: {
+      wizardSteps: 3,
+      showFlowTracker: true,
+      showWhatsNext: true,
+      showActivityTimeline: true,
+      kpiFields: ["grand_total", "outstanding_amount"],
+      defaultView: "list",
+    },
+  },
+  "Payment Entry": {
+    ...DOCTYPE_CONFIG["Payment Entry"],
+    flow: {
+      hasFlow: true,
+      upstreamDoctype: "Sales Invoice",
+      statusMachineKey: "Payment Entry",
+      flowLabel: "Payment",
+      isTerminal: true,
+    },
+    ai: {
+      canCreate: true,
+      canUpdate: false,
+      canRead: true,
+      toolDescription: "Record payments received against invoices",
+    },
+    ux: {
+      wizardSteps: 3,
+      showFlowTracker: true,
+      showWhatsNext: false,
+      showActivityTimeline: true,
+      kpiFields: ["paid_amount", "received_amount"],
+      defaultView: "list",
+    },
+  },
+
+  // ============================================================================
+  // BUYING CHAIN
+  // ============================================================================
+  "Purchase Order": {
+    ...DOCTYPE_CONFIG["Purchase Order"],
+    flow: {
+      hasFlow: true,
+      downstreamDoctypes: ["Purchase Receipt", "Purchase Invoice"],
+      statusMachineKey: "Purchase Order",
+      flowLabel: "Purchase Order",
+    },
+    ai: {
+      canCreate: true,
+      canUpdate: true,
+      canRead: true,
+      toolDescription: "Create purchase orders for suppliers",
+    },
+    ux: {
+      wizardSteps: 3,
+      showFlowTracker: true,
+      showWhatsNext: true,
+      showActivityTimeline: true,
+      defaultView: "list",
+    },
+  },
+  "Purchase Invoice": {
+    ...DOCTYPE_CONFIG["Purchase Invoice"],
+    flow: {
+      hasFlow: true,
+      upstreamDoctype: "Purchase Order",
+      downstreamDoctypes: ["Payment Entry"],
+      statusMachineKey: "Purchase Invoice",
+      flowLabel: "Purchase Invoice",
+    },
+    ai: {
+      canCreate: true,
+      canUpdate: false,
+      canRead: true,
+      toolDescription: "Create purchase invoices from suppliers",
+    },
+    ux: {
+      wizardSteps: 3,
+      showFlowTracker: true,
+      showWhatsNext: true,
+      showActivityTimeline: true,
+      defaultView: "list",
+    },
+  },
+
+  // ============================================================================
+  // MANUFACTURING CHAIN
+  // ============================================================================
+  BOM: {
+    ...DOCTYPE_CONFIG.BOM,
+    flow: {
+      hasFlow: false,
+    },
+    ai: {
+      canCreate: true,
+      canUpdate: true,
+      canRead: true,
+      toolDescription: "Create and manage Bills of Materials",
+    },
+    ux: {
+      wizardSteps: 3,
+      showFlowTracker: false,
+      defaultView: "list",
+    },
+  },
+
+  // ============================================================================
+  // STOCK
+  // ============================================================================
+  "Stock Entry": {
+    ...DOCTYPE_CONFIG["Stock Entry"],
+    flow: {
+      hasFlow: true,
+      upstreamDoctype: "Work Order",
+      statusMachineKey: "Stock Entry",
+      flowLabel: "Stock Entry",
+    },
+    ai: {
+      canCreate: true,
+      canUpdate: false,
+      canRead: true,
+      toolDescription: "Create stock entries for material movement",
+    },
+    ux: {
+      wizardSteps: 2,
+      showFlowTracker: true,
+      showWhatsNext: true,
+      showActivityTimeline: true,
+      defaultView: "list",
+    },
+  },
+  "Material Request": {
+    ...DOCTYPE_CONFIG["Material Request"],
+    flow: {
+      hasFlow: true,
+      downstreamDoctypes: ["Purchase Order"],
+      statusMachineKey: "Material Request",
+      flowLabel: "Material Request",
+    },
+    ai: {
+      canCreate: true,
+      canUpdate: true,
+      canRead: true,
+      toolDescription: "Create material requests for procurement",
+    },
+    ux: {
+      wizardSteps: 2,
+      showFlowTracker: true,
+      showWhatsNext: true,
+      showActivityTimeline: true,
+      defaultView: "list",
+    },
+  },
+};
+
+/**
+ * Get V4 config for a DocType
+ * Falls back to base config if no V4 config exists
+ */
+export function getDocTypeConfigV4(doctype: string): DocTypeConfigV4 | undefined {
+  return DOCTYPE_CONFIG_V4[doctype];
+}
+
+/**
+ * Get all DocTypes that participate in a flow chain
+ */
+export function getFlowDocTypes(): string[] {
+  return Object.entries(DOCTYPE_CONFIG_V4)
+    .filter(([_, config]) => config.flow?.hasFlow)
+    .map(([doctype]) => doctype);
+}
+
+/**
+ * Get downstream doctypes for a given doctype
+ */
+export function getDownstreamDocTypes(doctype: string): string[] {
+  return DOCTYPE_CONFIG_V4[doctype]?.flow?.downstreamDoctypes || [];
+}
+
+/**
+ * Get upstream doctype for a given doctype
+ */
+export function getUpstreamDocType(doctype: string): string | undefined {
+  return DOCTYPE_CONFIG_V4[doctype]?.flow?.upstreamDoctype;
+}
 
 // ============================================================================
 // UTILITY FUNCTIONS

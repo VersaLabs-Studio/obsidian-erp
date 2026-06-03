@@ -1,5 +1,5 @@
 // app/api/sales/settings/project/route.ts
-// Pana ERP v3.0 - Project API Handlers
+// Obsidian ERP v4.0 - Project API Handlers
 
 import { createListHandler, createCreateHandler } from "@/lib/api-factory";
 

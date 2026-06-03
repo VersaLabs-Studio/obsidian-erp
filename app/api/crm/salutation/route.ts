@@ -1,5 +1,5 @@
 // app/api/crm/salutation/route.ts
-// Pana ERP v3.0 - Salutation API (GET list for options)
+// Obsidian ERP v4.0 - Salutation API (GET list for options)
 
 import { createListHandler } from "@/lib/api-factory";
 

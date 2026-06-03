@@ -1,5 +1,5 @@
 // app/sales/settings/taxes/page.tsx
-// Pana ERP v3.0 - Sales Tax Templates List Page
+// Obsidian ERP v4.0 - Sales Tax Templates List Page
 // @ts-nocheck
 
 "use client";

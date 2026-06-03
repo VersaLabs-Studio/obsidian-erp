@@ -1,5 +1,5 @@
 // hooks/generic/useFrappeDoc.ts
-// Pana ERP v3.0 - Generic Single Document Query Hook
+// Obsidian ERP v4.0 - Generic Single Document Query Hook
 
 import { useQuery, UseQueryOptions } from "@tanstack/react-query";
 import { getApiPath } from "@/lib/doctype-config";

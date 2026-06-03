@@ -1,4 +1,4 @@
-// Pana ERP v3.0 - Sales Person Single Doc API
+// Obsidian ERP v4.0 - Sales Person Single Doc API
 import { createGetHandler, createUpdateHandler, createDeleteHandler } from "@/lib/api-factory";
 import { SalesPersonUpdateSchema } from "@/lib/schemas/doctype-schemas";
 

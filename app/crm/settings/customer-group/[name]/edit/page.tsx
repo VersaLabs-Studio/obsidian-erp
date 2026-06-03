@@ -1,5 +1,5 @@
 // app/crm/settings/customer-group/[name]/edit/page.tsx
-// Pana ERP v3.0 - Edit Customer Group Page
+// Obsidian ERP v4.0 - Edit Customer Group Page
 // @ts-nocheck
 
 "use client";

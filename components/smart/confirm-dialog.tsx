@@ -1,5 +1,5 @@
 // components/smart/confirm-dialog.tsx
-// Pana ERP v3.0 - Confirmation Dialog Component
+// Obsidian ERP v4.0 - Confirmation Dialog Component
 
 "use client";
 

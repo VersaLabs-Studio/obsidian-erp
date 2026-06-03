@@ -1,5 +1,5 @@
 // app/api/accounting/currency/route.ts
-// Pana ERP v3.0 - Currency API
+// Obsidian ERP v4.0 - Currency API
 
 import { createListHandler, createCreateHandler } from "@/lib/api-factory";
 

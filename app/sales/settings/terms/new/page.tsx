@@ -1,5 +1,5 @@
 // app/sales/settings/terms/new/page.tsx
-// Pana ERP v3.0 - New Terms and Conditions Page
+// Obsidian ERP v4.0 - New Terms and Conditions Page
 // @ts-nocheck
 
 "use client";

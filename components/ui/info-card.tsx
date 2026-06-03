@@ -1,5 +1,5 @@
 // components/ui/info-card.tsx
-// Pana ERP v1.3 - Reusable Info Card Component
+// Obsidian ERP v4.0 - Reusable Info Card Component
 
 import { cn } from "@/lib/utils";
 import React from "react";

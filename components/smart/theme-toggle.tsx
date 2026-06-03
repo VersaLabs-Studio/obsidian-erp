@@ -1,5 +1,5 @@
 // components/smart/theme-toggle.tsx
-// Pana ERP v3.0 - Theme Toggle Component
+// Obsidian ERP v4.0 - Theme Toggle Component
 
 "use client";
 

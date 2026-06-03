@@ -1,5 +1,5 @@
 // components/smart/index.ts
-// Pana ERP v3.0 - Smart Components Barrel Export
+// Obsidian ERP v4.0 - Smart Components Barrel Export
 
 export { PageHeader } from "./page-header";
 export { StatusBadge } from "./status-badge";

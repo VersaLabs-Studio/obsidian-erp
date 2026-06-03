@@ -1,5 +1,5 @@
 // app/api/stock/item/route.ts
-// Pana ERP v3.0 - Item API Routes (Factory Pattern)
+// Obsidian ERP v4.0 - Item API Routes (Factory Pattern)
 
 import { createListHandler, createCreateHandler } from "@/lib/api-factory";
 import { ItemCreateSchema } from "@/lib/schemas/doctype-schemas";

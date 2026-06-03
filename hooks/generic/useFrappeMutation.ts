@@ -1,5 +1,5 @@
 // hooks/generic/useFrappeMutation.ts
-// Pana ERP v3.0 - Generic Mutation Hook for CRUD Operations
+// Obsidian ERP v4.0 - Generic Mutation Hook for CRUD Operations
 
 import {
   useMutation,

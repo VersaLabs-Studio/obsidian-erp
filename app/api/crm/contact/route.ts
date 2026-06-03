@@ -1,5 +1,5 @@
 // app/api/crm/contact/route.ts
-// Pana ERP v3.0 - Contact API (GET list, POST create)
+// Obsidian ERP v4.0 - Contact API (GET list, POST create)
 
 import { createListHandler, createCreateHandler } from "@/lib/api-factory";
 

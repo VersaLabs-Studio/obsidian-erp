@@ -1,5 +1,5 @@
 // app/stock/item/page.tsx
-// Pana ERP v3.0 - Items List Page (Schema-Driven Architecture)
+// Obsidian ERP v4.0 - Items List Page (Schema-Driven Architecture)
 
 "use client";
 

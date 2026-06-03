@@ -1,5 +1,5 @@
 // app/sales/dashboard/page.tsx
-// Pana ERP v3.0 - Sales Dashboard
+// Obsidian ERP v4.0 - Sales Dashboard
 "use client";
 
 import { motion } from "framer-motion";

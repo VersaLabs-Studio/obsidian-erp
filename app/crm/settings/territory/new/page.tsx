@@ -1,5 +1,5 @@
 // app/crm/settings/territory/new/page.tsx
-// Pana ERP v3.0 - Create Territory Page
+// Obsidian ERP v4.0 - Create Territory Page
 // @ts-nocheck
 
 "use client";

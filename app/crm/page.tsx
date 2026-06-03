@@ -1,5 +1,5 @@
 // app/crm/page.tsx
-// Pana ERP v3.0 - CRM Dashboard
+// Obsidian ERP v4.0 - CRM Dashboard
 "use client";
 
 import { useRouter } from "next/navigation";

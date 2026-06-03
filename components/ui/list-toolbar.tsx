@@ -1,5 +1,5 @@
 // components/ui/list-toolbar.tsx
-// Pana ERP v1.3 - Reusable List Toolbar with Search, Filter, and Export
+// Obsidian ERP v4.0 - Reusable List Toolbar with Search, Filter, and Export
 
 "use client";
 

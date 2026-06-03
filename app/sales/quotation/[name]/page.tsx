@@ -1,5 +1,5 @@
 // app/sales/quotation/[name]/page.tsx
-// Pana ERP v3.0 - Quotation Detail View (Professional Invoice Layout)
+// Obsidian ERP v4.0 - Quotation Detail View (Professional Invoice Layout)
 // @ts-nocheck
 
 "use client";
@@ -71,7 +71,7 @@ const getStatusBadgeClasses = (status: string) => {
     case "Expired":
       return "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300";
     case "Cancelled":
-      return "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400";
+      return "bg-muted text-muted-foreground";
     default:
       return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
   }
@@ -418,7 +418,7 @@ export default function QuotationDetailPage() {
                 <div className="h-16 w-16 relative overflow-hidden rounded-2xl shadow-sm border border-border bg-white p-2">
                   <img
                     src="/pana-logo.png"
-                    alt="Pana Promotion"
+                    alt="Obsidian ERP"
                     className="h-full w-full object-contain"
                   />
                 </div>
@@ -434,7 +434,7 @@ export default function QuotationDetailPage() {
               {company && (
                 <div className="mt-2 space-y-1 text-sm text-muted-foreground">
                   <p className="font-semibold text-foreground text-base">
-                    {company.company_name || "Pana Promotion"}
+                    {company.company_name || "Obsidian ERP"}
                   </p>
                   {company.address && <p>{company.address}</p>}
                   {company.phone_no && <p>Tel: {company.phone_no}</p>}
@@ -713,7 +713,7 @@ export default function QuotationDetailPage() {
                 style={{ height: "60px", width: "60px", objectFit: "contain" }}
               />
               <div className="company-info">
-                <h1>{company?.company_name || "Pana Promotion"}</h1>
+                <h1>{company?.company_name || "Obsidian ERP"}</h1>
                 {company?.address && <p>{company.address}</p>}
                 {company?.phone_no && <p>Tel: {company.phone_no}</p>}
                 {company?.email && <p>Email: {company.email}</p>}

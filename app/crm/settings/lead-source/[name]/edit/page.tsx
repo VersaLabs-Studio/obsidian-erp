@@ -1,5 +1,5 @@
 // app/crm/settings/lead-source/[name]/edit/page.tsx
-// Pana ERP v3.0 - Edit Lead Source Page
+// Obsidian ERP v4.0 - Edit Lead Source Page
 // @ts-nocheck
 
 "use client";

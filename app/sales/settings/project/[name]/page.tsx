@@ -1,5 +1,5 @@
 // app/sales/settings/project/[name]/page.tsx
-// Pana ERP v3.0 - Project Detail View
+// Obsidian ERP v4.0 - Project Detail View
 // @ts-nocheck
 
 "use client";

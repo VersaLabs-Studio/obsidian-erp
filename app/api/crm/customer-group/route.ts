@@ -1,5 +1,5 @@
 // app/api/crm/customer-group/route.ts
-// Pana ERP v3.0 - Customer Group API (GET list for options)
+// Obsidian ERP v4.0 - Customer Group API (GET list for options)
 
 import { createListHandler, createCreateHandler } from "@/lib/api-factory";
 import { CustomerGroupCreateSchema } from "@/lib/schemas/doctype-schemas";

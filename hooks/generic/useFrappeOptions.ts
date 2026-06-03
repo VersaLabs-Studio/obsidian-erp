@@ -1,5 +1,5 @@
 // hooks/generic/useFrappeOptions.ts
-// Pana ERP v3.0 - Generic Options Query Hook for Dropdowns
+// Obsidian ERP v4.0 - Generic Options Query Hook for Dropdowns
 
 import { useQuery, UseQueryOptions } from "@tanstack/react-query";
 import { getApiPath, getLabelField } from "@/lib/doctype-config";

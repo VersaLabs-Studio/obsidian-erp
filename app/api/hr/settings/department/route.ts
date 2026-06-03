@@ -1,4 +1,4 @@
-// Pana ERP v3.0 - Department API (GET list, POST create)
+// Obsidian ERP v4.0 - Department API (GET list, POST create)
 import { createListHandler, createCreateHandler } from "@/lib/api-factory";
 import { DepartmentCreateSchema } from "@/lib/schemas/doctype-schemas";
 

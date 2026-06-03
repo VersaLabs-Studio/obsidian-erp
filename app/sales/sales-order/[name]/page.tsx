@@ -1,704 +1,328 @@
-// @ts-nocheck
 "use client";
 
-import { useState, useMemo, useCallback, useEffect } from "react";
+// app/sales/sales-order/[name]/page.tsx
+// Obsidian ERP v4.0 — Sales Order Detail (V4 Golden Template)
+// Action-oriented detail per Architecture V4 Part 2 §3.2 + §6 (Flow Tracker).
+// Real flow-chain resolution (no stub): upstream Quotation via prevdoc_docname,
+// downstream Work Orders via the sales_order header link. OKLCH tokens only.
+
+import { useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 import {
-  FileText,
-  Printer,
-  Share2,
-  Edit,
-  Trash2,
+  Edit3,
   Send,
   Ban,
-  CheckCircle2,
-  AlertCircle,
+  Printer,
+  Loader2,
   Package,
-  Calendar,
-  MoreVertical,
-  Check,
-  Building2,
-  Users,
-  Briefcase,
-  Layers,
-  Info,
-  DollarSign,
-  TrendingUp,
-  MapPin,
-  Clock,
-  User,
-  ClipboardList,
-  Truck,
 } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  useFrappeDoc,
-  useFrappeUpdate,
-  useFrappeDelete,
-} from "@/hooks/generic";
-import { PageHeader, LoadingState, ConfirmDialog } from "@/components/smart";
-import { InfoCard, DataPoint } from "@/components/ui/info-card";
-import { cn } from "@/lib/utils";
-import { toast } from "sonner";
-import type { SalesOrder } from "@/types/doctype-types";
 
-const getStatusBadgeClasses = (status: string) => {
-  switch (status) {
-    case "Draft":
-      return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
-    case "To Deliver and Bill":
-      return "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300";
-    case "To Deliver":
-      return "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300";
-    case "To Bill":
-      return "bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300";
-    case "Completed":
-      return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300";
-    case "Cancelled":
-      return "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400";
-    default:
-      return "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
-  }
-};
+import { PageHeader, LoadingState, ConfirmDialog } from "@/components/smart";
+import { StatusBadge } from "@/components/smart/status-badge";
+import { InfoCard, DataPoint } from "@/components/ui/info-card";
+import { Button } from "@/components/ui/button";
+import { FlowTracker } from "@/components/flows/FlowTracker";
+import { WhatsNext } from "@/components/smart/WhatsNext";
+import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
+import { resolveFlowChain } from "@/lib/flows/flow-chain-resolver";
+import { useFrappeDoc, useFrappeList, useFrappeUpdate } from "@/hooks/generic";
+import type { SalesOrder } from "@/types/doctype-types";
+import type { FlowStageStatus } from "@/types/flow-types";
+
+const ETB = new Intl.NumberFormat("en-ET", { style: "currency", currency: "ETB" });
+
+interface SOItem {
+  item_code: string;
+  item_name?: string;
+  description?: string;
+  qty: number;
+  rate: number;
+  amount: number;
+  uom?: string;
+}
 
 export default function SalesOrderDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const name = decodeURIComponent(params.name as string);
+  const name = decodeURIComponent(String(params.name));
 
-  const [isArtworkVerified, setIsArtworkVerified] = useState(false);
-  const [showSubmitDialog, setShowSubmitDialog] = useState(false);
-  const [showCancelDialog, setShowCancelDialog] = useState(false);
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [confirmSubmit, setConfirmSubmit] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
 
-  const {
-    data: order,
-    isLoading,
-    refetch,
-  } = useFrappeDoc<SalesOrder>("Sales Order", name);
+  const { data: order, isLoading, error } = useFrappeDoc<SalesOrder>(
+    "Sales Order",
+    name,
+  );
 
-  const updateMutation = useFrappeUpdate("Sales Order", {
-    onSuccess: () => {
-      refetch();
-      setShowSubmitDialog(false);
-      setShowCancelDialog(false);
-    },
+  // -- Downstream resolution: Work Orders linked to this SO (header link) ----
+  const { data: workOrders, isLoading: loadingWO } = useFrappeList<{ name: string }>(
+    "Work Order",
+    { filters: [["sales_order", "=", name]], fields: ["name"], limit: 5 },
+    { enabled: !isLoading && !!order },
+  );
+
+  // -- Build the flow chain from real linked documents -----------------------
+  const chain = useMemo(() => {
+    const items = ((order?.items ?? []) as Array<{ prevdoc_docname?: string }>);
+    const quotationName = items.find((i) => i?.prevdoc_docname)?.prevdoc_docname;
+    const woName = workOrders?.[0]?.name;
+
+    const stageStatuses: Record<
+      string,
+      { status: FlowStageStatus; documentName?: string; documentUrl?: string }
+    > = {};
+
+    if (quotationName) {
+      stageStatuses["Quotation"] = {
+        status: "completed",
+        documentName: quotationName,
+        documentUrl: `/sales/quotation/${encodeURIComponent(quotationName)}`,
+      };
+    }
+    if (woName) {
+      stageStatuses["Work Order"] = {
+        status: "completed",
+        documentName: woName,
+        documentUrl: `/manufacturing/work-order/${encodeURIComponent(woName)}`,
+      };
+    }
+
+    return resolveFlowChain("Sales Order", name, stageStatuses);
+  }, [order, workOrders, name]);
+
+  // -- Status actions (real mutations, driven by the status machine) ---------
+  const updateMutation = useFrappeUpdate<SalesOrder>("Sales Order", {
+    showToast: false,
   });
 
-  const deleteMutation = useFrappeDelete("Sales Order", {
-    onSuccess: () => router.push("/sales/sales-order"),
-  });
+  const isDraft = order?.docstatus === 0;
+  const isSubmitted = order?.docstatus === 1;
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-ET", {
-      style: "currency",
-      currency: order?.currency || "ETB",
-    }).format(amount || 0);
+  const handleSubmit = () => {
+    setConfirmSubmit(false);
+    // Target status per the Sales Order status machine (Workflow P3 §2.1).
+    updateMutation.mutate(
+      { name, data: { docstatus: 1, status: "To Deliver and Bill" } },
+      {
+        onSuccess: () => toast.success(`Sales Order ${name} submitted`),
+        onError: (e) =>
+          toast.error("Submit failed", { description: e.message }),
+      },
+    );
   };
 
-  const formatDate = (dateStr: string) => {
-    if (!dateStr) return "—";
-    return new Date(dateStr).toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "long",
-      year: "numeric",
-    });
+  const handleCancel = () => {
+    setConfirmCancel(false);
+    updateMutation.mutate(
+      { name, data: { docstatus: 2, status: "Cancelled" } },
+      {
+        onSuccess: () => toast.success(`Sales Order ${name} cancelled`),
+        onError: (e) =>
+          toast.error("Cancel failed", { description: e.message }),
+      },
+    );
   };
 
-  const isOverdue =
-    order?.delivery_date &&
-    new Date(order.delivery_date) < new Date() &&
-    order.status !== "Completed" &&
-    order.status !== "Cancelled";
-
-  const handlePrint = () => {
-    window.print();
-  };
-
-  if (isLoading) return <LoadingState type="detail" />;
-  if (!order)
+  if (isLoading) return <LoadingState />;
+  if (error || !order) {
     return (
-      <div className="p-8 text-center text-destructive font-bold">
-        Sales Order not found
+      <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6">
+        <p className="text-sm text-destructive">
+          {error?.message ?? "Sales Order not found."}
+        </p>
+        <Button variant="ghost" className="mt-3" onClick={() => router.push("/sales/sales-order")}>
+          Back to Sales Orders
+        </Button>
       </div>
     );
+  }
 
-  const isDraft = order.docstatus === 0;
-  const isCancelled = order.docstatus === 2;
+  const items = (order.items ?? []) as unknown as SOItem[];
+  const grandTotal = order.grand_total ?? order.total ?? 0;
+
+  // What's-Next actions — real where wired, disabled (with reason) otherwise.
+  const whatsNext = [
+    isDraft && {
+      label: "Submit Order",
+      description: "Lock the order and enable fulfillment",
+      onClick: () => setConfirmSubmit(true),
+      isPrimary: true,
+      isLoading: updateMutation.isPending,
+    },
+    isSubmitted && {
+      label: "Create Work Order(s)",
+      description: "Phase 2 — production automation",
+      onClick: () => {},
+      disabled: true,
+      disabledReason: "Coming in Phase 2",
+    },
+    isSubmitted && {
+      label: "Create Delivery Note",
+      description: "Phase 2 — fulfillment",
+      onClick: () => {},
+      disabled: true,
+      disabledReason: "Coming in Phase 2",
+    },
+  ].filter(Boolean) as React.ComponentProps<typeof WhatsNext>["actions"];
 
   return (
-    <div className="space-y-8 pb-24 print:p-0 print:m-0 print:bg-white document-container">
-      {/* Print-only Header */}
-      <div className="hidden print:flex justify-between items-start mb-10 pb-6 border-b-2 border-slate-200">
-        <div className="flex items-start gap-4">
-          <img
-            src="/pana-logo.png"
-            style={{ height: "60px", width: "60px", objectFit: "contain" }}
-          />
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">
-              Pana Promotion
-            </h1>
-            <p className="text-xs text-slate-500 max-w-xs">{order.company}</p>
-          </div>
-        </div>
-        <div className="text-right">
-          <h2 className="text-3xl font-black text-primary tracking-tighter">
-            SALES ORDER
-          </h2>
-          <p className="text-sm font-mono font-bold mt-1 text-slate-700">
-            {order.name}
-          </p>
-          <p className="text-xs text-slate-500 mt-1">
-            Date: {formatDate(order.transaction_date)}
-          </p>
-        </div>
-      </div>
-
-      {/* Header - Hidden on Print */}
-      <div className="print:hidden">
-        <PageHeader
-          title={order.name}
-          subtitle={
-            <div className="flex items-center gap-2">
-              <Badge
-                className={cn(
-                  "text-xs font-semibold border-0",
-                  getStatusBadgeClasses(order.status),
-                )}
-              >
-                {order.status}
-              </Badge>
-              {isOverdue && (
-                <span className="text-destructive text-sm flex items-center gap-1 font-bold animate-pulse">
-                  <AlertCircle className="h-4 w-4" /> OVERDUE FOR DELIVERY
-                </span>
-              )}
-            </div>
-          }
-          backHref="/sales/sales-order"
-          actions={
-            <div className="flex gap-2">
-              {isDraft && (
-                <>
-                  <Button
-                    variant="outline"
-                    className="rounded-full shadow-sm hover:shadow-md transition-all bg-card"
-                    onClick={() =>
-                      router.push(
-                        `/sales/sales-order/${encodeURIComponent(name)}/edit`,
-                      )
-                    }
-                  >
-                    <Edit className="h-4 w-4 mr-2" /> Edit
-                  </Button>
-                  <Button
-                    className={cn(
-                      "rounded-full shadow-lg transition-all",
-                      !isArtworkVerified
-                        ? "opacity-30 grayscale cursor-not-allowed"
-                        : "shadow-primary/20 hover:shadow-primary/30",
-                    )}
-                    onClick={() =>
-                      isArtworkVerified && setShowSubmitDialog(true)
-                    }
-                    disabled={!isArtworkVerified}
-                  >
-                    <Send className="h-4 w-4 mr-2" /> Submit
-                  </Button>
-                </>
-              )}
-              {order.docstatus === 1 && !isCancelled && (
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() =>
-                      router.push(
-                        `/stock/delivery-note/new?sales_order=${encodeURIComponent(name)}&customer=${encodeURIComponent(order.customer)}`,
-                      )
-                    }
-                    className="rounded-full shadow-sm hover:shadow-md transition-all bg-card"
-                  >
-                    <Truck className="h-4 w-4 mr-2" />
-                    Create Delivery Note
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() =>
-                      router.push(
-                        `/manufacturing/work-order/new?sales_order=${encodeURIComponent(name)}`,
-                      )
-                    }
-                    className="rounded-full shadow-sm hover:shadow-md transition-all bg-card"
-                  >
-                    <ClipboardList className="h-4 w-4 mr-2" />
-                    Create Work Order
-                  </Button>
-                </div>
-              )}
-
+    <div className="space-y-6 pb-12">
+      <PageHeader
+        title={order.name}
+        subtitle={order.customer_name || order.customer}
+        backHref="/sales/sales-order"
+        actions={
+          <div className="flex items-center gap-2">
+            {isDraft && (
+              <>
+                <Button variant="outline" size="sm" asChild>
+                  <Link href={`/sales/sales-order/${encodeURIComponent(name)}/edit`}>
+                    <Edit3 className="mr-1.5 h-4 w-4" /> Edit
+                  </Link>
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => setConfirmSubmit(true)}
+                  disabled={updateMutation.isPending}
+                >
+                  {updateMutation.isPending ? (
+                    <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="mr-1.5 h-4 w-4" />
+                  )}
+                  Submit
+                </Button>
+              </>
+            )}
+            {isSubmitted && (
               <Button
                 variant="outline"
-                size="icon"
-                className="rounded-full h-10 w-10"
-                onClick={handlePrint}
+                size="sm"
+                className="text-destructive hover:text-destructive"
+                onClick={() => setConfirmCancel(true)}
               >
-                <Printer className="h-4 w-4" />
+                <Ban className="mr-1.5 h-4 w-4" /> Cancel
               </Button>
+            )}
+            <Button variant="ghost" size="icon" disabled title="Print (Phase 2)">
+              <Printer className="h-4 w-4" />
+            </Button>
+          </div>
+        }
+      />
 
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="rounded-full h-10 w-10"
-                  >
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="end"
-                  className="rounded-xl shadow-xl min-w-[200px] p-2"
-                >
-                  <DropdownMenuItem
-                    className="rounded-lg cursor-pointer py-2"
-                    onClick={handlePrint}
-                  >
-                    <Printer className="h-4 w-4 mr-2" /> Print Order
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className="rounded-lg cursor-pointer py-2"
-                    onClick={() => {
-                      navigator.clipboard.writeText(window.location.href);
-                      setCopied(true);
-                      toast.success("Link copied to clipboard");
-                      setTimeout(() => setCopied(false), 2000);
-                    }}
-                  >
-                    {copied ? (
-                      <Check className="h-4 w-4 mr-2" />
-                    ) : (
-                      <Share2 className="h-4 w-4 mr-2" />
-                    )}
-                    Share Order
-                  </DropdownMenuItem>
-                  {order.docstatus === 1 && !isCancelled && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        className="rounded-lg cursor-pointer text-destructive focus:text-destructive py-2 font-medium"
-                        onClick={() => setShowCancelDialog(true)}
-                      >
-                        <Ban className="h-4 w-4 mr-2" /> Cancel Order
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                  {isDraft && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        className="rounded-lg cursor-pointer text-destructive focus:text-destructive py-2 font-medium"
-                        onClick={() => setShowDeleteDialog(true)}
-                      >
-                        <Trash2 className="h-4 w-4 mr-2" /> Delete Draft
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
+      {/* Flow Tracker — clickable upstream, resolved downstream */}
+      <InfoCard title="Lead-to-Cash Flow" className="overflow-hidden">
+        <FlowTracker result={chain} isLoading={loadingWO} />
+      </InfoCard>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        {/* Main column */}
+        <div className="space-y-6 lg:col-span-2">
+          <InfoCard title="Order Summary">
+            <div className="mb-4 flex items-center justify-between">
+              <StatusBadge status={order.status} />
+              <span className="text-2xl font-bold tabular-nums text-primary">
+                {ETB.format(grandTotal)}
+              </span>
             </div>
-          }
-        />
-      </div>
-
-      {/* Main Grid Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 print:block">
-        {/* Left Column: Extensive Info */}
-        <div className="lg:col-span-8 space-y-8">
-          {/* Artwork verification gate */}
-          {isDraft && (
-            <div
-              className={cn(
-                "p-8 rounded-[2.5rem] border-2 transition-all duration-500 overflow-hidden relative group print:hidden",
-                isArtworkVerified
-                  ? "bg-emerald-50/50 border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-800"
-                  : "bg-amber-50/50 border-amber-200 dark:bg-amber-950/20 dark:border-amber-800 ring-4 ring-amber-500/5 animate-in fade-in zoom-in",
-              )}
-            >
-              <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-                <div className="flex gap-5 items-center">
-                  <div
-                    className={cn(
-                      "h-16 w-16 rounded-[1.5rem] flex items-center justify-center transition-all duration-500 shadow-lg",
-                      isArtworkVerified
-                        ? "bg-emerald-500 text-white scale-110"
-                        : "bg-amber-500 text-white scale-100",
-                    )}
-                  >
-                    {isArtworkVerified ? (
-                      <Layers className="h-8 w-8" />
-                    ) : (
-                      <Info className="h-8 w-8" />
-                    )}
-                  </div>
-                  <div className="space-y-1">
-                    <h3 className="font-black text-xl text-foreground tracking-tight">
-                      Artwork Verification
-                    </h3>
-                    <p className="text-sm text-muted-foreground max-w-md">
-                      Sales Order implementation requires critical review of
-                      GSM, size and finishing before submission.
-                    </p>
-                  </div>
-                </div>
-                <Button
-                  onClick={() => setIsArtworkVerified(!isArtworkVerified)}
-                  variant={isArtworkVerified ? "outline" : "default"}
-                  className={cn(
-                    "rounded-[1.2rem] h-12 px-8 font-bold transition-all shadow-lg hover:scale-105 active:scale-95",
-                    isArtworkVerified
-                      ? "border-emerald-200 text-emerald-700 hover:bg-emerald-100"
-                      : "shadow-amber-500/20",
-                  )}
-                >
-                  {isArtworkVerified
-                    ? "Reset Verification"
-                    : "Acknowledge Specs"}
-                </Button>
-              </div>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+              <DataPoint label="Customer" value={order.customer_name || order.customer} />
+              <DataPoint label="Order Date" value={order.transaction_date} />
+              <DataPoint label="Delivery Date" value={order.delivery_date} />
+              <DataPoint label="Company" value={order.company} />
+              <DataPoint label="Currency" value={order.currency} />
+              <DataPoint label="PO No" value={order.po_no || "—"} />
             </div>
-          )}
+          </InfoCard>
 
-          {/* Table Container */}
-          <InfoCard
-            title="Production Specification Table"
-            icon={<Package className="h-5 w-5 text-indigo-500" />}
-          >
-            <div className="rounded-[2rem] border border-border/50 overflow-hidden bg-white dark:bg-card shadow-sm print:border-0 print:shadow-none">
-              <table className="w-full text-left">
-                <thead className="bg-slate-50 dark:bg-slate-900 border-b-2 border-border/50">
-                  <tr>
-                    <th className="px-6 py-4 text-[10px] font-black uppercase text-muted-foreground tracking-[0.2em]">
-                      Item Details
-                    </th>
-                    <th className="px-6 py-4 text-[10px] font-black uppercase text-muted-foreground tracking-[0.2em] w-1/3">
-                      Technical Specification
-                    </th>
-                    <th className="px-6 py-4 text-[10px] font-black uppercase text-muted-foreground tracking-[0.2em] text-right">
-                      Quantity
-                    </th>
-                    <th className="px-6 py-4 text-[10px] font-black uppercase text-muted-foreground tracking-[0.2em] text-right">
-                      Extended Value
-                    </th>
+          <InfoCard title="Items" icon={<Package className="h-5 w-5 text-primary" />}>
+            <div className="overflow-hidden rounded-xl border border-border/60">
+              <table className="w-full text-sm">
+                <thead className="border-b border-border/60 bg-secondary/20">
+                  <tr className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                    <th className="px-3 py-2.5 text-left font-semibold">Item</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Qty</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Rate</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Amount</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/50">
-                  {order.items?.map((item, idx) => (
-                    <tr
-                      key={idx}
-                      className="group hover:bg-slate-50/50 dark:hover:bg-slate-900/50 transition-colors"
-                    >
-                      <td className="px-6 py-6">
-                        <div className="space-y-1">
-                          <p className="font-bold text-foreground text-base tracking-tight">
-                            {item.item_code}
-                          </p>
-                          <p className="text-xs text-muted-foreground/80 font-medium">
-                            {item.item_name}
-                          </p>
+                  {items.map((it, i) => (
+                    <tr key={`${it.item_code}-${i}`}>
+                      <td className="px-3 py-2.5">
+                        <div className="font-medium text-foreground">
+                          {it.item_name || it.item_code}
                         </div>
+                        {it.description && (
+                          <div className="text-xs text-muted-foreground line-clamp-1">
+                            {it.description}
+                          </div>
+                        )}
                       </td>
-                      <td className="px-6 py-6">
-                        <div className="text-[13px] text-muted-foreground leading-relaxed opacity-80 group-hover:opacity-100 transition-opacity whitespace-pre-wrap font-medium">
-                          {item.description ||
-                            "Refer to master catalog for general specifications."}
-                        </div>
+                      <td className="px-3 py-2.5 text-right tabular-nums">
+                        {it.qty} {it.uom}
                       </td>
-                      <td className="px-6 py-6 text-right">
-                        <span className="font-black text-white font-mono text-sm bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-xl">
-                          {item.qty.toLocaleString()} {item.uom || "Nos"}
-                        </span>
+                      <td className="px-3 py-2.5 text-right tabular-nums">
+                        {ETB.format(it.rate)}
                       </td>
-                      <td className="px-6 py-6 text-right">
-                        <p className="font-bold text-foreground">
-                          {formatCurrency(item.amount)}
-                        </p>
-                        <p className="text-[10px] text-muted-foreground/60 font-mono italic">
-                          @ {formatCurrency(item.rate)}
-                        </p>
+                      <td className="px-3 py-2.5 text-right font-medium tabular-nums">
+                        {ETB.format(it.amount ?? it.qty * it.rate)}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-
-              {/* Totals Section */}
-              <div className="p-8 bg-slate-50/50 dark:bg-muted/10 border-t border-border/10">
-                <div className="flex flex-col items-end space-y-4">
-                  <div className="grid grid-cols-2 gap-x-12 gap-y-2 w-full max-w-sm">
-                    <span className="text-[10px] font-black uppercase text-muted-foreground text-right self-center tracking-widest">
-                      Net Subtotal
-                    </span>
-                    <span className="text-sm font-bold text-foreground text-right">
-                      {formatCurrency(order.total)}
-                    </span>
-
-                    <span className="text-[10px] font-black uppercase text-muted-foreground text-right self-center tracking-widest">
-                      Taxes & Charges
-                    </span>
-                    <span className="text-sm font-bold text-foreground text-right">
-                      {formatCurrency(order.total_taxes_and_charges)}
-                    </span>
-
-                    <div className="col-span-2 h-px bg-border/20 my-2" />
-
-                    <span className="text-xs font-black uppercase text-primary text-right self-center tracking-tighter">
-                      Agreement Grand Total
-                    </span>
-                    <span className="text-2xl font-black text-primary text-right tracking-tighter">
-                      {formatCurrency(order.grand_total)}
-                    </span>
-                  </div>
-                </div>
-              </div>
             </div>
           </InfoCard>
-
-          {/* Notes/Terms */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <InfoCard
-              title="Customer Reference"
-              icon={<FileText className="h-5 w-5 text-blue-500" />}
-            >
-              <div className="space-y-4 p-2">
-                <DataPoint
-                  label="Purchase Order NO"
-                  value={order.po_no || "N/A"}
-                  icon={<Info className="h-3.5 w-3.5 text-muted-foreground" />}
-                />
-                <DataPoint
-                  label="PO Issue Date"
-                  value={formatDate(order.po_date)}
-                  icon={
-                    <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                  }
-                />
-                {order.customer_address && (
-                  <div className="pt-2">
-                    <p className="text-[10px] font-black uppercase text-muted-foreground mb-2">
-                      Billing & Shipping
-                    </p>
-                    <div className="p-4 rounded-2xl bg-slate-100 dark:bg-slate-900 text-xs text-muted-foreground leading-relaxed border-l-4 border-blue-500">
-                      {order.customer_address}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </InfoCard>
-
-            <InfoCard
-              title="Terms & Conditions"
-              icon={<CheckCircle2 className="h-5 w-5 text-emerald-500" />}
-            >
-              <div className="p-4 rounded-2xl border-2 border-dashed text-[13px] text-muted-foreground leading-relaxed bg-slate-50/30 dark:bg-muted/5 font-medium">
-                {order.terms ||
-                  "Standard business terms apply to this transaction."}
-              </div>
-            </InfoCard>
-          </div>
         </div>
 
-        {/* Right Column: Sidebar */}
-        <div className="lg:col-span-4 space-y-8 print:hidden">
-          {/* Quick Metrics */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-primary/5 rounded-[2rem] p-6 border-b-4 border-primary/20 hover:scale-105 transition-transform">
-              <p className="text-[10px] font-black text-primary uppercase mb-1">
-                Items
-              </p>
-              <p className="text-2xl font-black text-primary">
-                {order.items?.length || 0}
-              </p>
-            </div>
-            <div className="bg-indigo-500/10 rounded-[2rem] p-6 border-b-4 border-indigo-500/20 hover:scale-105 transition-transform">
-              <p className="text-[10px] font-black text-indigo-500 uppercase mb-1">
-                Status
-              </p>
-              <p className="text-sm font-black text-indigo-500 truncate">
-                {order.status}
-              </p>
-            </div>
-          </div>
-
-          <InfoCard
-            title="Timeline & Governance"
-            icon={<Clock className="h-5 w-5 text-amber-500" />}
-          >
-            <div className="space-y-5">
-              <DataPoint
-                label="Booking Date"
-                value={formatDate(order.transaction_date)}
-              />
-              <div
-                className={cn(
-                  "p-4 rounded-3xl flex items-center justify-between border-2 transition-all",
-                  isOverdue
-                    ? "bg-destructive/5 border-destructive animate-pulse"
-                    : "bg-primary/5 border-primary/10",
-                )}
-              >
-                <div>
-                  <p className="text-[10px] font-black uppercase opacity-60">
-                    Delivery Commitment
-                  </p>
-                  <p
-                    className={cn(
-                      "text-lg font-black tracking-tighter",
-                      isOverdue ? "text-destructive" : "text-primary",
-                    )}
-                  >
-                    {formatDate(order.delivery_date)}
-                  </p>
-                </div>
-                {isOverdue && (
-                  <AlertCircle className="h-8 w-8 text-destructive opacity-40" />
-                )}
-              </div>
-              <DataPoint label="Organization" value={order.company} />
-              <DataPoint label="DocType Series" value={order.naming_series} />
-            </div>
-          </InfoCard>
-
-          <InfoCard
-            title="Client Partnership"
-            icon={<Users className="h-5 w-5 text-blue-500" />}
-          >
-            <div className="space-y-5">
-              <div className="p-5 rounded-3xl bg-secondary/30 dark:bg-secondary/10 border border-border">
-                <p className="text-[10px] font-black text-muted-foreground uppercase mb-1">
-                  Account
-                </p>
-                <Link
-                  href={`/crm/customer/${encodeURIComponent(order.customer)}`}
-                  className="font-black text-lg text-foreground tracking-tight underline decoration-primary/40 underline-offset-4 hover:text-primary transition-colors cursor-pointer block"
-                >
-                  {order.customer_name || order.customer}
-                </Link>
-                {order.contact_person && (
-                  <Link
-                    href={`/crm/contact/${encodeURIComponent(order.contact_person)}`}
-                    className="text-xs text-muted-foreground hover:text-primary mt-2 flex items-center gap-2 transition-colors cursor-pointer w-fit"
-                  >
-                    <User className="h-3 w-3" /> {order.contact_person}
-                  </Link>
-                )}
-              </div>
-              <DataPoint
-                label="Currency Base"
-                value={order.currency || "ETB"}
-              />
-              <DataPoint
-                label="Price Strategy"
-                value={order.selling_price_list || "Standard"}
-              />
-            </div>
-          </InfoCard>
-
-          {order.sales_partner && (
-            <InfoCard
-              title="Internal Relations"
-              icon={<Briefcase className="h-5 w-5 text-gray-500" />}
-            >
-              <div className="space-y-4">
-                <div className="space-y-1">
-                  <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">
-                    Strategy Partner
-                  </p>
-                  <Link
-                    href={`/sales/settings/sales-partner/${encodeURIComponent(order.sales_partner)}`}
-                    className="text-sm font-semibold text-foreground hover:text-primary transition-colors cursor-pointer underline decoration-primary/30 underline-offset-2 block"
-                  >
-                    {order.sales_partner}
-                  </Link>
-                </div>
-                <div className="bg-secondary/30 dark:bg-secondary/10 p-4 rounded-2xl flex justify-between items-center group/commission">
-                  <span className="text-xs font-black uppercase text-muted-foreground">
-                    Settlement %
-                  </span>
-                  <span className="text-xl font-black text-indigo-500 group-hover/commission:scale-110 transition-transform">
-                    {order.commission_rate || 0}%
-                  </span>
-                </div>
-                {order.project && (
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-black uppercase text-muted-foreground tracking-widest">
-                      Associated Project
-                    </p>
-                    <Link
-                      href={`/sales/settings/project/${encodeURIComponent(order.project)}/edit`}
-                      className="text-sm font-semibold text-foreground hover:text-primary transition-colors cursor-pointer underline decoration-primary/30 underline-offset-2 block"
-                    >
-                      {order.project}
-                    </Link>
-                  </div>
-                )}
-              </div>
-            </InfoCard>
-          )}
+        {/* Sidebar */}
+        <div className="space-y-6">
+          <WhatsNext actions={whatsNext} />
+          <ActivityTimeline
+            items={[
+              {
+                id: "created",
+                type: "created",
+                description: "Sales Order created",
+                user: order.owner,
+                timestamp: order.creation ?? new Date().toISOString(),
+              },
+              ...(isSubmitted
+                ? [
+                    {
+                      id: "submitted",
+                      type: "submitted" as const,
+                      description: "Order submitted",
+                      user: order.modified_by,
+                      timestamp: order.modified ?? new Date().toISOString(),
+                    },
+                  ]
+                : []),
+            ]}
+          />
         </div>
       </div>
 
-      {/* Confirmation Dialogs */}
       <ConfirmDialog
-        open={showSubmitDialog}
-        onOpenChange={setShowSubmitDialog}
-        title="Confirm Order Submission"
-        description="This will lock the order and notify production. Ensure all technical specifications are double-checked."
-        onConfirm={async () => {
-          await updateMutation.mutateAsync({
-            name: order.name,
-            data: { docstatus: 1 },
-          });
-          toast.success("Sales Order submitted successfully");
-        }}
-        loading={updateMutation.isPending}
+        open={confirmSubmit}
+        onOpenChange={setConfirmSubmit}
+        title="Submit this Sales Order?"
+        description="Submitting locks the order and enables downstream fulfillment. This cannot be undone without cancelling."
+        confirmText="Submit"
+        onConfirm={handleSubmit}
       />
-
       <ConfirmDialog
-        open={showCancelDialog}
-        onOpenChange={setShowCancelDialog}
-        title="Revoke Order Commitment"
-        description="This will cancel the order and stop production. This action is tracked in the audit trail."
-        onConfirm={async () => {
-          await updateMutation.mutateAsync({
-            name: order.name,
-            data: { docstatus: 2 },
-          });
-          toast.success("Order revoked and cancelled");
-        }}
-        loading={updateMutation.isPending}
-      />
-
-      <ConfirmDialog
-        open={showDeleteDialog}
-        onOpenChange={setShowDeleteDialog}
-        title="Discard Draft"
-        description="Permanently delete this draft Sales Order. It cannot be recovered."
-        onConfirm={async () => {
-          await deleteMutation.mutateAsync(order.name);
-          toast.success("Order draft deleted");
-        }}
-        loading={deleteMutation.isPending}
+        open={confirmCancel}
+        onOpenChange={setConfirmCancel}
+        title="Cancel this Sales Order?"
+        description="Cancelling reverses the order. Linked documents must be cancelled first."
+        confirmText="Cancel Order"
+        variant="destructive"
+        onConfirm={handleCancel}
       />
     </div>
   );

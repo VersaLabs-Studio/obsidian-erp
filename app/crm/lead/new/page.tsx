@@ -1,5 +1,5 @@
 // app/crm/lead/new/page.tsx
-// Pana ERP v3.0 - Create Lead Page
+// Obsidian ERP v4.0 - Create Lead Page
 // @ts-nocheck
 
 "use client";

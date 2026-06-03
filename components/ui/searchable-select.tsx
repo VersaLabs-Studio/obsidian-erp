@@ -1,5 +1,5 @@
 // components/ui/searchable-select.tsx
-// Pana ERP - Searchable Select Component (Mouse-Friendly)
+// Obsidian ERP - Searchable Select Component (Mouse-Friendly)
 "use client";
 
 import * as React from "react";

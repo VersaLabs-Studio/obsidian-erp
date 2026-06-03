@@ -1,5 +1,5 @@
 // app/api/stock/item/[name]/route.ts
-// Pana ERP v3.0 - Single Item API Routes (Factory Pattern)
+// Obsidian ERP v4.0 - Single Item API Routes (Factory Pattern)
 
 import {
   createGetHandler,

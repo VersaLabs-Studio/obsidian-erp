@@ -183,7 +183,7 @@ function InvoiceCard({
             </p>
             <p className="text-sm font-medium text-foreground flex items-center gap-1">
               <Clock className="h-3 w-3 text-muted-foreground" />
-              {formatDate(invoice.due_date)}
+              {formatDate(invoice.due_date ?? "")}
             </p>
           </div>
         </div>
@@ -198,7 +198,7 @@ function InvoiceCard({
                 Outstanding
               </p>
               <p className="text-lg font-black text-foreground tracking-tight">
-                {formatCurrency(invoice.outstanding_amount)}
+                {formatCurrency(invoice.outstanding_amount ?? 0)}
               </p>
             </div>
           </div>

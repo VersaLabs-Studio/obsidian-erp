@@ -1,5 +1,5 @@
 // lib/query-keys.ts
-// Pana ERP v3.0 - Centralized Query Key Factory
+// Obsidian ERP v4.0 - Centralized Query Key Factory
 
 import type { FrappeListOptions } from "@/hooks/generic/useFrappeList";
 
@@ -384,6 +384,21 @@ export const queryKeys = {
     list: (options?: FrappeListOptions) =>
       ["Asset Category", "list", options] as const,
     doc: (name: string) => ["Asset Category", "doc", name] as const,
+  },
+
+  // ============================================================================
+  // FLOW ENGINE
+  // ============================================================================
+  flow: {
+    /** Query key for a specific flow chain */
+    chain: (doctype: string, name: string) =>
+      ["Flow", "chain", doctype, name] as const,
+    /** Query key for flow status of a document */
+    status: (doctype: string, name: string) =>
+      ["Flow", "status", doctype, name] as const,
+    /** Query key for auto-fill data from upstream document */
+    autoFill: (sourceDoctype: string, targetDoctype: string, sourceName: string) =>
+      ["Flow", "autoFill", sourceDoctype, targetDoctype, sourceName] as const,
   },
 } as const;
 

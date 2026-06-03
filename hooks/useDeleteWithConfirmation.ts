@@ -1,5 +1,5 @@
 // hooks/useDeleteWithConfirmation.ts
-// Pana ERP v3.0 - Reusable Delete with Confirmation Hook
+// Obsidian ERP v4.0 - Reusable Delete with Confirmation Hook
 
 import { useState, useCallback } from "react";
 import { useFrappeDelete } from "@/hooks/generic";

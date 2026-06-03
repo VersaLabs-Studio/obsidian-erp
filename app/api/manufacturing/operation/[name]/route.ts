@@ -1,5 +1,5 @@
 // app/api/manufacturing/operation/[name]/route.ts
-// Pana ERP v3.0 - Operation Single Document API
+// Obsidian ERP v4.0 - Operation Single Document API
 
 import {
   createGetHandler,

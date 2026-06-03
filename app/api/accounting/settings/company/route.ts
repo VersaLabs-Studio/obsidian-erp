@@ -1,5 +1,5 @@
 // app/api/accounting/settings/company/route.ts
-// Pana ERP v3.0 - Company API
+// Obsidian ERP v4.0 - Company API
 
 import { createListHandler, createCreateHandler } from "@/lib/api-factory";
 import { CompanyCreateSchema } from "@/lib/schemas/doctype-schemas";

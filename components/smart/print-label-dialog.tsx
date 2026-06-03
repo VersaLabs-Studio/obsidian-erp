@@ -1,5 +1,5 @@
 // components/smart/print-label-dialog.tsx
-// Pana ERP v3.0 - Print Label Dialog Component
+// Obsidian ERP v4.0 - Print Label Dialog Component
 
 "use client";
 

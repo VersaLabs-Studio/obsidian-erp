@@ -193,7 +193,7 @@ export default function PaymentTermsListPage() {
         onOpenChange={(open) => !open && setDeleteTarget(null)}
         title="Delete Template"
         description="Permanently remove this payment terms template?"
-        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget)}
+        onConfirm={() => { if (deleteTarget) deleteMutation.mutate(deleteTarget); }}
         loading={deleteMutation.isPending}
       />
     </div>

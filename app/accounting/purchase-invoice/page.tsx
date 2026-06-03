@@ -198,7 +198,7 @@ function PurchaseInvoiceCard({
                 Outstanding
               </p>
               <p className="text-lg font-black text-foreground tracking-tight">
-                {formatCurrency(invoice.outstanding_amount)}
+                {formatCurrency(invoice.outstanding_amount ?? 0)}
               </p>
             </div>
           </div>

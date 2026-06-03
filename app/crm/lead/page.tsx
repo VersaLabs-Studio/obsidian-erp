@@ -1,5 +1,5 @@
 // app/crm/lead/page.tsx
-// Pana ERP v3.0 - Leads List Page
+// Obsidian ERP v4.0 - Leads List Page
 // @ts-nocheck
 
 "use client";

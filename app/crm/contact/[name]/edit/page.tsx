@@ -1,5 +1,5 @@
 // app/crm/contact/[name]/edit/page.tsx
-// Pana ERP v3.0 - Edit Contact Page
+// Obsidian ERP v4.0 - Edit Contact Page
 // @ts-nocheck
 
 "use client";

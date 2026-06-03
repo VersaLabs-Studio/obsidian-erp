@@ -1,5 +1,5 @@
 // components/ui/page-header.tsx
-// Pana ERP v1.3 - Reusable Floating Page Header Component
+// Obsidian ERP v4.0 - Reusable Floating Page Header Component
 
 "use client";
 

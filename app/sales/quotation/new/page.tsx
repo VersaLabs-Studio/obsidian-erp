@@ -1,5 +1,5 @@
 // app/sales/quotation/new/page.tsx
-// Pana ERP v3.0 - Create Quotation Page (Job Shop Core)
+// Obsidian ERP v4.0 - Create Quotation Page (Job Shop Core)
 // @ts-nocheck - React Hook Form + Zod type inference limitations
 
 "use client";

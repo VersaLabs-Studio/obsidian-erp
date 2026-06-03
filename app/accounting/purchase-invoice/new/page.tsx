@@ -43,7 +43,7 @@ export default function CreatePurchaseInvoicePage() {
       cost_center: "",
       items: [{ item_code: "", description: "", qty: 1, rate: 0 }],
       taxes_and_charges: "",
-      terms: "",
+      payment_terms_template: "",
     },
   });
 

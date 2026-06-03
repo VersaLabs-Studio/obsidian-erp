@@ -148,7 +148,7 @@ export default function CreatePaymentTermsPage() {
                     >
                       <td className="p-4">
                         <FormInput
-                          control={control}
+                          control={control as any}
                           name={`terms.${index}.payment_term`}
                           placeholder="Description..."
                           hideLabel
@@ -177,7 +177,7 @@ export default function CreatePaymentTermsPage() {
                       </td>
                       <td className="p-4">
                         <FormSelect
-                          control={control}
+                          control={control as any}
                           name={`terms.${index}.due_date_based_on`}
                           options={[
                             {

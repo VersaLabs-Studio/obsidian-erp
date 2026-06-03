@@ -1,5 +1,5 @@
 // app/crm/settings/customer-group/new/page.tsx
-// Pana ERP v3.0 - Create Customer Group Page
+// Obsidian ERP v4.0 - Create Customer Group Page
 // @ts-nocheck
 
 "use client";

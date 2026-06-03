@@ -1,5 +1,5 @@
 // app/sales/settings/page.tsx
-// Pana ERP v3.0 - Sales Settings Landing Page
+// Obsidian ERP v4.0 - Sales Settings Landing Page
 "use client";
 
 import { useRouter } from "next/navigation";

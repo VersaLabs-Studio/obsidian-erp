@@ -1,5 +1,5 @@
 // app/api/sales/taxes-template/route.ts
-// Pana ERP v3.0 - Sales Taxes and Charges Template API Routes
+// Obsidian ERP v4.0 - Sales Taxes and Charges Template API Routes
 
 import { createListHandler, createCreateHandler } from "@/lib/api-factory";
 // Note: We'll use a basic schema since this DocType has complex child tables

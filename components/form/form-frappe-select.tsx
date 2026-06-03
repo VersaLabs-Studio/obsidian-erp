@@ -1,5 +1,5 @@
 // components/form/form-frappe-select.tsx
-// Pana ERP v3.0 - Reusable Form Frappe Select Component
+// Obsidian ERP v4.0 - Reusable Form Frappe Select Component
 
 "use client";
 

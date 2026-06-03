@@ -1,5 +1,5 @@
 // components/ui/form-field.tsx
-// Pana ERP v1.3 - Reusable Form Field Components
+// Obsidian ERP v4.0 - Reusable Form Field Components
 
 "use client";
 

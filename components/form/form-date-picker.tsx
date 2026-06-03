@@ -1,5 +1,5 @@
 // components/form/form-date-picker.tsx
-// Pana ERP v3.0 - Reusable Form Date Picker Component
+// Obsidian ERP v4.0 - Reusable Form Date Picker Component
 
 "use client";
 

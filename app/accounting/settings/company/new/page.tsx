@@ -1,5 +1,5 @@
 // app/accounting/settings/company/new/page.tsx
-// Pana ERP v3.0 - Register New Company
+// Obsidian ERP v4.0 - Register New Company
 "use client";
 
 import { useRouter } from "next/navigation";
@@ -58,7 +58,7 @@ export default function NewCompanyPage() {
                     control={form.control}
                     name="company_name"
                     label="Legal Entity Name"
-                    placeholder="e.g. Pana Softwares PLC"
+                    placeholder="e.g. Obsidian Softwares PLC"
                     required
                   />
                   <FormInput

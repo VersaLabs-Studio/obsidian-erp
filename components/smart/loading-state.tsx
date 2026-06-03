@@ -1,5 +1,5 @@
 // components/smart/loading-state.tsx
-// Pana ERP v3.0 - Loading State Component
+// Obsidian ERP v4.0 - Loading State Component
 
 import { cn } from "@/lib/utils";
 

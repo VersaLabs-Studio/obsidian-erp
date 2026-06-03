@@ -1,5 +1,5 @@
 // app/crm/settings/industry-type/page.tsx
-// Pana ERP v3.0 - Industry Types Settings Page
+// Obsidian ERP v4.0 - Industry Types Settings Page
 // @ts-nocheck
 
 "use client";

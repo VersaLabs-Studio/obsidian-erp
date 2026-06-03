@@ -160,7 +160,7 @@ function JournalEntryCard({
               Debit
             </p>
             <p className="text-sm font-black text-emerald-600">
-              {formatCurrency(entry.total_debit)}
+              {formatCurrency(entry.total_debit ?? 0)}
             </p>
           </div>
           <div className="space-y-0.5">
@@ -168,7 +168,7 @@ function JournalEntryCard({
               Credit
             </p>
             <p className="text-sm font-black text-rose-600">
-              {formatCurrency(entry.total_credit)}
+              {formatCurrency(entry.total_credit ?? 0)}
             </p>
           </div>
         </div>

@@ -1,4 +1,4 @@
-// Pana ERP v3.0 - Designation API (GET list, POST create)
+// Obsidian ERP v4.0 - Designation API (GET list, POST create)
 import { createListHandler, createCreateHandler } from "@/lib/api-factory";
 import { DesignationCreateSchema } from "@/lib/schemas/doctype-schemas";
 

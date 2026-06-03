@@ -1,4 +1,6 @@
-// @ts-nocheck
+// app/sales/sales-order/page.tsx
+// Obsidian ERP v4.0 - Sales Orders List Page (Premium Card Design)
+
 "use client";
 
 import { useState, useMemo } from "react";
@@ -12,16 +14,16 @@ import {
   Trash2,
   Eye,
   CalendarDays,
-  Clock,
   User,
+  Truck,
   Building2,
   DollarSign,
-  AlertCircle,
-  CheckCircle2,
-  Ban,
   Package,
+  Receipt,
+  CheckCircle2,
+  XCircle,
+  FileText,
   ArrowRight,
-  TrendingUp,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -37,6 +39,8 @@ import {
   LoadingState,
   ConfirmDialog,
 } from "@/components/smart";
+import { KPICard } from "@/components/dashboard/KPICard";
+import { CommandPalette } from "@/components/command/CommandPalette";
 import type { SalesOrder } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
 
@@ -47,25 +51,25 @@ const STATUS_CONFIG: Record<
   Draft: {
     color: "text-slate-700 dark:text-slate-300",
     bgColor: "bg-slate-100 dark:bg-slate-800",
-    icon: Pencil,
+    icon: FileText,
     label: "Draft",
   },
   "To Deliver and Bill": {
     color: "text-blue-700 dark:text-blue-300",
     bgColor: "bg-blue-100 dark:bg-blue-900/50",
-    icon: Package,
-    label: "Pending Delivery & Bill",
+    icon: Truck,
+    label: "To Deliver & Bill",
   },
   "To Deliver": {
     color: "text-amber-700 dark:text-amber-300",
     bgColor: "bg-amber-100 dark:bg-amber-900/50",
-    icon: Clock,
+    icon: Package,
     label: "To Deliver",
   },
   "To Bill": {
     color: "text-purple-700 dark:text-purple-300",
     bgColor: "bg-purple-100 dark:bg-purple-900/50",
-    icon: DollarSign,
+    icon: Receipt,
     label: "To Bill",
   },
   Completed: {
@@ -75,12 +79,23 @@ const STATUS_CONFIG: Record<
     label: "Completed",
   },
   Cancelled: {
-    color: "text-gray-600 dark:text-gray-400",
-    bgColor: "bg-gray-100 dark:bg-gray-800",
-    icon: Ban,
+    color: "text-muted-foreground",
+    bgColor: "bg-muted",
+    icon: XCircle,
     label: "Cancelled",
   },
+  Closed: {
+    color: "text-muted-foreground",
+    bgColor: "bg-muted",
+    icon: XCircle,
+    label: "Closed",
+  },
 };
+
+function getDisplayStatus(order: SalesOrder): string {
+  if (order.docstatus === 2) return "Cancelled";
+  return order.status || "Draft";
+}
 
 function SalesOrderCard({
   order,
@@ -95,13 +110,14 @@ function SalesOrderCard({
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const statusConfig = STATUS_CONFIG[order.status] || STATUS_CONFIG.Draft;
+  const displayStatus = getDisplayStatus(order);
+  const statusConfig = STATUS_CONFIG[displayStatus] || STATUS_CONFIG.Draft;
   const StatusIcon = statusConfig.icon;
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ET", {
       style: "currency",
-      currency: order.currency || "ETB",
+      currency: "ETB",
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(amount || 0);
@@ -116,13 +132,7 @@ function SalesOrderCard({
     });
   };
 
-  const isOverdue =
-    order.delivery_date &&
-    new Date(order.delivery_date) < new Date() &&
-    order.status !== "Completed" &&
-    order.status !== "Cancelled";
-
-  const isEditable = order.docstatus === 0;
+  const isEditable = order.status === "Draft" && order.docstatus === 0;
   const isDeletable = order.docstatus === 0;
 
   return (
@@ -131,34 +141,27 @@ function SalesOrderCard({
         "group relative bg-card rounded-2xl border border-border/50",
         "hover:border-primary/20 hover:shadow-xl hover:shadow-primary/5",
         "transition-all duration-300 cursor-pointer overflow-hidden",
-        "animate-slide-up",
+        "animate-slide-up"
       )}
       style={{ animationDelay: `${index * 40}ms` }}
       onClick={onView}
     >
-      {isOverdue && (
-        <div className="absolute top-0 right-0 p-2 z-10">
-          <Badge
-            variant="destructive"
-            className="animate-pulse flex gap-1 items-center py-0 px-2 rounded-full border-0 text-[10px]"
-          >
-            <AlertCircle className="h-2.5 w-2.5" /> OVERDUE
-          </Badge>
-        </div>
-      )}
-
-      {/* Decorative Status Bar */}
+      {/* Status Indicator Bar */}
       <div
         className={cn(
-          "absolute left-0 top-0 bottom-0 w-1",
-          order.status === "Draft" && "bg-slate-400",
-          order.status === "To Deliver and Bill" && "bg-blue-500",
-          order.status === "To Deliver" && "bg-amber-500",
-          order.status === "Completed" && "bg-emerald-500",
+          "absolute top-0 left-0 right-0 h-1",
+          displayStatus === "Draft" && "bg-slate-400",
+          displayStatus === "To Deliver and Bill" && "bg-blue-500",
+          displayStatus === "To Deliver" && "bg-amber-500",
+          displayStatus === "To Bill" && "bg-purple-500",
+          displayStatus === "Completed" && "bg-emerald-500",
+          displayStatus === "Cancelled" && "bg-muted-foreground/50",
+          displayStatus === "Closed" && "bg-muted-foreground/50"
         )}
       />
 
       <div className="p-5">
+        {/* Header Row */}
         <div className="flex items-start justify-between mb-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -169,15 +172,16 @@ function SalesOrderCard({
             </div>
             <p className="text-sm text-muted-foreground flex items-center gap-1.5">
               <User className="h-3 w-3" />
-              {order.customer_name || order.customer}
+              {order.customer_name || order.customer || "No customer"}
             </p>
           </div>
 
+          {/* Status Badge */}
           <div
             className={cn(
               "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold",
               statusConfig.bgColor,
-              statusConfig.color,
+              statusConfig.color
             )}
           >
             <StatusIcon className="h-3.5 w-3.5" />
@@ -185,56 +189,55 @@ function SalesOrderCard({
           </div>
         </div>
 
+        {/* Info Grid */}
         <div className="grid grid-cols-3 gap-4 mb-4">
-          <div className="space-y-1 text-center sm:text-left">
+          <div className="space-y-1">
             <p className="text-[10px] font-bold uppercase text-muted-foreground/70 tracking-wider">
-              Order Date
+              Date
             </p>
-            <p className="text-xs font-medium text-foreground flex items-center justify-center sm:justify-start gap-1">
+            <p className="text-sm font-medium text-foreground flex items-center gap-1">
               <CalendarDays className="h-3 w-3 text-muted-foreground" />
               {formatDate(order.transaction_date)}
             </p>
           </div>
-          <div className="space-y-1 text-center sm:text-left">
+          <div className="space-y-1">
             <p className="text-[10px] font-bold uppercase text-muted-foreground/70 tracking-wider">
-              Delivery
+              Delivery Date
             </p>
-            <p
-              className={cn(
-                "text-xs font-medium flex items-center justify-center sm:justify-start gap-1",
-                isOverdue ? "text-destructive font-bold" : "text-foreground",
-              )}
-            >
-              <Clock className="h-3 w-3 text-muted-foreground" />
-              {formatDate(order.delivery_date)}
+            <p className="text-sm font-medium text-foreground flex items-center gap-1">
+              <Truck className="h-3 w-3 text-muted-foreground" />
+              {formatDate(order.delivery_date ?? "")}
             </p>
           </div>
-          <div className="space-y-1 text-center sm:text-left">
+          <div className="space-y-1">
             <p className="text-[10px] font-bold uppercase text-muted-foreground/70 tracking-wider">
-              Entity
+              Company
             </p>
-            <p className="text-xs font-medium text-foreground flex items-center justify-center sm:justify-start gap-1 truncate">
+            <p className="text-sm font-medium text-foreground flex items-center gap-1 truncate">
               <Building2 className="h-3 w-3 text-muted-foreground flex-shrink-0" />
               <span className="truncate">{order.company || "—"}</span>
             </p>
           </div>
         </div>
 
+        {/* Footer with Amount and Actions */}
         <div className="flex items-center justify-between pt-4 border-t border-border/50">
+          {/* Grand Total */}
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
-              <TrendingUp className="h-5 w-5 text-primary" />
+              <DollarSign className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <p className="text-[10px] font-bold uppercase text-muted-foreground/70 tracking-wider font-mono">
-                Net Value
+              <p className="text-[10px] font-bold uppercase text-muted-foreground/70 tracking-wider">
+                Grand Total
               </p>
-              <p className="text-lg font-bold text-foreground tracking-tighter">
-                {formatCurrency(order.grand_total)}
+              <p className="text-lg font-bold text-foreground tracking-tight">
+                {formatCurrency(order.grand_total ?? 0)}
               </p>
             </div>
           </div>
 
+          {/* Actions */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
               <Button
@@ -268,7 +271,7 @@ function SalesOrderCard({
                   }}
                 >
                   <Pencil className="h-4 w-4 mr-2" />
-                  Edit Order
+                  Edit
                 </DropdownMenuItem>
               )}
               {isDeletable && (
@@ -282,7 +285,7 @@ function SalesOrderCard({
                     }}
                   >
                     <Trash2 className="h-4 w-4 mr-2" />
-                    Delete Draft
+                    Delete
                   </DropdownMenuItem>
                 </>
               )}
@@ -294,7 +297,7 @@ function SalesOrderCard({
   );
 }
 
-export default function SalesOrdersListPage() {
+export default function SalesOrderListPage() {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -315,9 +318,10 @@ export default function SalesOrdersListPage() {
       "status",
       "docstatus",
       "company",
-      "currency",
+      "per_delivered",
+      "per_billed",
     ],
-    orderBy: { field: "`tabSales Order`.creation", order: "desc" },
+    orderBy: { field: "creation", order: "desc" },
     search,
     limit: 100,
   });
@@ -331,7 +335,10 @@ export default function SalesOrdersListPage() {
     let result = orders;
 
     if (statusFilter !== "all") {
-      result = result.filter((o) => o.status === statusFilter);
+      result = result.filter((o) => {
+        const displayStatus = getDisplayStatus(o);
+        return displayStatus === statusFilter;
+      });
     }
 
     return result;
@@ -339,13 +346,23 @@ export default function SalesOrdersListPage() {
 
   const statusCounts = useMemo(() => {
     if (!orders) return {};
-    return orders.reduce(
-      (acc, o) => {
-        acc[o.status] = (acc[o.status] || 0) + 1;
-        return acc;
-      },
-      {} as Record<string, number>,
-    );
+    return orders.reduce((acc, o) => {
+      const status = getDisplayStatus(o);
+      acc[status] = (acc[status] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+  }, [orders]);
+
+  const kpis = useMemo(() => {
+    if (!orders) return { total: 0, draft: 0, active: 0, completed: 0 };
+    return {
+      total: orders.length,
+      draft: orders.filter((o) => o.status === "Draft").length,
+      active: orders.filter((o) =>
+        ["To Deliver and Bill", "To Deliver", "To Bill"].includes(o.status)
+      ).length,
+      completed: orders.filter((o) => o.status === "Completed").length,
+    };
   }, [orders]);
 
   const handleDeleteConfirm = async () => {
@@ -353,7 +370,7 @@ export default function SalesOrdersListPage() {
     await deleteMutation.mutateAsync(deleteTarget.name);
   };
 
-  if (isLoading) return <LoadingState type="grid" count={6} />;
+  if (isLoading) return <LoadingState type="cards" count={6} />;
   if (error)
     return (
       <div className="p-8 text-center text-destructive">
@@ -363,9 +380,13 @@ export default function SalesOrdersListPage() {
 
   return (
     <div className="space-y-6">
+      <CommandPalette />
+
       <PageHeader
         title="Sales Orders"
-        subtitle={`${filteredOrders.length} active order${filteredOrders.length !== 1 ? "s" : ""}`}
+        subtitle={`${filteredOrders.length} order${
+          filteredOrders.length !== 1 ? "s" : ""
+        }`}
         showSearch
         searchValue={search}
         onSearchChange={setSearch}
@@ -381,14 +402,56 @@ export default function SalesOrdersListPage() {
         }
       />
 
-      <div className="flex gap-2 flex-wrap items-center">
+      {/* KPI Bar */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <KPICard
+          title="Total Orders"
+          value={kpis.total}
+          icon={Package}
+          isLoading={isLoading}
+        />
+        <KPICard
+          title="Draft"
+          value={kpis.draft}
+          icon={FileText}
+          variant="warning"
+          isLoading={isLoading}
+        />
+        <KPICard
+          title="Active"
+          value={kpis.active}
+          icon={Truck}
+          variant="default"
+          isLoading={isLoading}
+        />
+        <KPICard
+          title="Completed"
+          value={kpis.completed}
+          icon={CheckCircle2}
+          variant="success"
+          isLoading={isLoading}
+        />
+      </div>
+
+      {/* Status Filter Pills */}
+      <div className="flex gap-2 flex-wrap">
         {[
-          { key: "all", label: "All Orders", count: orders?.length || 0 },
+          { key: "all", label: "All", count: orders?.length || 0 },
           { key: "Draft", label: "Draft", count: statusCounts.Draft || 0 },
           {
             key: "To Deliver and Bill",
-            label: "Pending",
+            label: "To Deliver & Bill",
             count: statusCounts["To Deliver and Bill"] || 0,
+          },
+          {
+            key: "To Deliver",
+            label: "To Deliver",
+            count: statusCounts["To Deliver"] || 0,
+          },
+          {
+            key: "To Bill",
+            label: "To Bill",
+            count: statusCounts["To Bill"] || 0,
           },
           {
             key: "Completed",
@@ -404,7 +467,7 @@ export default function SalesOrdersListPage() {
               "rounded-full gap-2 transition-all",
               statusFilter === status.key
                 ? "shadow-lg shadow-primary/20"
-                : "hover:bg-secondary",
+                : "hover:bg-secondary/80"
             )}
             onClick={() => setStatusFilter(status.key)}
           >
@@ -415,7 +478,7 @@ export default function SalesOrdersListPage() {
                 "h-5 min-w-[20px] px-1.5 text-[10px] font-bold",
                 statusFilter === status.key
                   ? "bg-primary-foreground/20 text-primary-foreground"
-                  : "bg-secondary",
+                  : "bg-secondary"
               )}
             >
               {status.count}
@@ -424,10 +487,11 @@ export default function SalesOrdersListPage() {
         ))}
       </div>
 
+      {/* Sales Orders Grid */}
       {!orders || orders.length === 0 ? (
         <EmptyState
-          title="No sales orders yet"
-          description="Transform your quotations into production orders"
+          title="No sales orders found"
+          description="Create your first sales order to start tracking fulfillment"
           action={
             <Button
               onClick={() => router.push("/sales/sales-order/new")}
@@ -439,9 +503,10 @@ export default function SalesOrdersListPage() {
           }
         />
       ) : filteredOrders.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground bg-card rounded-3xl border border-dashed">
-          <Package className="h-12 w-12 mx-auto mb-4 opacity-20" />
-          <p className="font-medium">No orders match these criteria</p>
+        <div className="text-center py-12 text-muted-foreground">
+          <FileText className="h-12 w-12 mx-auto mb-4 opacity-30" />
+          <p className="font-medium">No sales orders match this filter</p>
+          <p className="text-sm mt-1">Try selecting a different status</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -452,12 +517,12 @@ export default function SalesOrdersListPage() {
               index={index}
               onView={() =>
                 router.push(
-                  `/sales/sales-order/${encodeURIComponent(order.name)}`,
+                  `/sales/sales-order/${encodeURIComponent(order.name)}`
                 )
               }
               onEdit={() =>
                 router.push(
-                  `/sales/sales-order/${encodeURIComponent(order.name)}/edit`,
+                  `/sales/sales-order/${encodeURIComponent(order.name)}/edit`
                 )
               }
               onDelete={() => setDeleteTarget(order)}
@@ -466,12 +531,13 @@ export default function SalesOrdersListPage() {
         </div>
       )}
 
+      {/* Delete Confirmation */}
       <ConfirmDialog
         open={!!deleteTarget}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title="Delete Order Draft"
-        description={`Are you sure you want to delete order "${deleteTarget?.name}"?`}
-        confirmText="Delete permanently"
+        title="Delete Sales Order"
+        description={`Are you sure you want to delete sales order "${deleteTarget?.name}"? This action cannot be undone.`}
+        confirmText="Delete"
         variant="destructive"
         onConfirm={handleDeleteConfirm}
         loading={deleteMutation.isPending}

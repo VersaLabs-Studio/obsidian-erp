@@ -1,5 +1,5 @@
 // app/crm/settings/territory/page.tsx
-// Pana ERP v3.0 - Territories Settings Page
+// Obsidian ERP v4.0 - Territories Settings Page
 // @ts-nocheck
 
 "use client";

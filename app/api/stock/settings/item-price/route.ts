@@ -1,5 +1,5 @@
 // app/api/stock/settings/item-price/route.ts
-// Pana ERP v3.0 - Item Price API Routes (Factory Pattern)
+// Obsidian ERP v4.0 - Item Price API Routes (Factory Pattern)
 
 import { createListHandler, createCreateHandler } from "@/lib/api-factory";
 
