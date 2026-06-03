@@ -1,565 +1,701 @@
-// @ts-nocheck
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+// app/stock/delivery-note/new/page.tsx
+// Obsidian ERP v4.0 — Delivery Note Create (V4 SmartForm Wizard)
+// Follows the Sales Order golden template exactly.
+// Flow engine: FlowWizard (Zod step gating) + AUTO_FILL_REGISTRY (Sales Order→Delivery Note).
+// Premium UI: OKLCH semantic tokens only, glassmorphism, Framer Motion via FlowWizard.
+
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useForm, useFieldArray } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { Button } from "@/components/ui/button";
+import { useForm, useFieldArray, useWatch } from "react-hook-form";
+import { toast } from "sonner";
 import {
-  Save,
-  Loader2,
-  Truck,
+  UserRound,
+  Package,
+  ClipboardCheck,
   Plus,
   Trash2,
-  Package,
-  MapPin,
-  Building2,
-  Calendar,
-  AlertTriangle,
-  CheckCircle2,
-  FileText,
+  Lock,
+  Truck,
 } from "lucide-react";
-import { Form } from "@/components/ui/form";
-import { useFrappeCreate, useFrappeDoc, useFrappeList } from "@/hooks/generic";
-import { PageHeader, LoadingState } from "@/components/smart";
-import { FormInput, FormFrappeSelect, FormSwitch } from "@/components/form";
-import {
-  DeliveryNoteCreateSchema,
-  type DeliveryNoteFormData,
-} from "@/lib/schemas/doctype-schemas";
-import { toast } from "sonner";
-import type { SalesOrder, Customer, Address } from "@/types/doctype-types";
 
-function CreateDeliveryNoteForm() {
+import { PageHeader } from "@/components/smart";
+import { InfoCard } from "@/components/ui/info-card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  FormInput,
+  FormFrappeSelect,
+  FormDatePicker,
+} from "@/components/form";
+import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
+import { FlowWizard } from "@/components/flows/FlowWizard";
+import { useFrappeCreate, useFrappeDoc } from "@/hooks/generic";
+import {
+  getAutoFillMapping,
+  applyAutoFill,
+  applyItemAutoFill,
+} from "@/lib/flows/flow-auto-fill";
+import { validateWizardStep } from "@/lib/flows/flow-validation";
+import type { StepValidationResult } from "@/lib/flows/flow-validation";
+import type { WizardStep } from "@/types/flow-types";
+import type { SalesOrder } from "@/types/doctype-types";
+import { cn } from "@/lib/utils";
+
+// ---------------------------------------------------------------------------
+// Form model — concrete item shape so the field array is fully typed
+// (avoids the z.array(z.unknown()) inference pain; the factory route's Zod
+// schema remains the authoritative server-side gate).
+// ---------------------------------------------------------------------------
+interface DNItem {
+  item_code: string;
+  item_name?: string;
+  description?: string;
+  qty: number;
+  rate: number;
+  amount?: number;
+  uom?: string;
+  warehouse?: string;
+  against_sales_order?: string;
+  so_detail?: string;
+}
+
+interface DNForm {
+  naming_series: string;
+  customer: string;
+  customer_name?: string;
+  company: string;
+  posting_date: string;
+  posting_time?: string;
+  set_warehouse?: string;
+  shipping_address_name?: string;
+  dispatch_address_name?: string;
+  customer_address?: string;
+  po_no?: string;
+  project?: string;
+  transporter?: string;
+  driver?: string;
+  vehicle_no?: string;
+  lr_no?: string;
+  lr_date?: string;
+  print_without_amount: number;
+  currency: string;
+  conversion_rate: number;
+  selling_price_list?: string;
+  items: DNItem[];
+}
+
+const EMPTY_ITEM: DNItem = {
+  item_code: "",
+  item_name: "",
+  description: "",
+  qty: 1,
+  rate: 0,
+  amount: 0,
+  uom: "Nos",
+  warehouse: "",
+};
+
+const WIZARD_STEPS: WizardStep[] = [
+  {
+    id: "step1",
+    label: "Customer & Shipping",
+    description: "Confirm the customer and set delivery details",
+    schema: null,
+    fields: ["customer", "company", "posting_date", "shipping_address_name", "po_no"],
+    icon: "UserRound",
+  },
+  {
+    id: "step2",
+    label: "Delivery Items",
+    description: "Review and adjust the items for this delivery",
+    schema: null,
+    fields: ["items"],
+    icon: "Package",
+  },
+  {
+    id: "step3",
+    label: "Logistics & Review",
+    description: "Set transporter details and review before creating",
+    schema: null,
+    fields: ["transporter", "driver", "vehicle_no", "lr_no"],
+    icon: "ClipboardCheck",
+  },
+];
+
+const ETB = new Intl.NumberFormat("en-ET", {
+  style: "currency",
+  currency: "ETB",
+});
+
+export default function NewDeliveryNotePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const salesOrderId = searchParams.get("sales_order");
 
-  // Pre-population from Sales Order
-  const preSalesOrder = searchParams.get("sales_order");
-  const preCustomer = searchParams.get("customer");
+  const [step, setStep] = useState(0);
+  const [autoFilledFields, setAutoFilledFields] = useState<Set<string>>(
+    new Set(),
+  );
 
-  const [stockWarnings, setStockWarnings] = useState<string[]>([]);
-
-  const form = useForm<DeliveryNoteFormData>({
-    resolver: zodResolver(DeliveryNoteCreateSchema),
+  const form = useForm<DNForm>({
     defaultValues: {
       naming_series: "MAT-DN-.YYYY.-",
-      customer: preCustomer || "",
+      customer: "",
+      company: "",
       posting_date: new Date().toISOString().split("T")[0],
       posting_time: new Date().toTimeString().slice(0, 5),
-      company: "",
-      items: [],
-      set_warehouse: "",
-      shipping_address_name: "",
-      dispatch_address_name: "",
-      transporter: "",
-      driver: "",
-      vehicle_no: "",
-      lr_no: "",
-      print_without_amount: 1, // Gate Pass mode by default
+      print_without_amount: 0,
       currency: "ETB",
       conversion_rate: 1,
+      items: [{ ...EMPTY_ITEM }],
     },
   });
 
-  const customer = form.watch("customer");
-  const setWarehouse = form.watch("set_warehouse");
+  const { control, getValues, reset, setValue } = form;
+  const { fields, append, remove } = useFieldArray({ control, name: "items" });
 
-  const { fields, append, remove, replace } = useFieldArray({
-    control: form.control,
-    name: "items",
-  });
+  const watchedItems = useWatch({ control, name: "items" });
+  const watchedCustomer = useWatch({ control, name: "customer" });
 
-  // Fetch Sales Order details to pre-fill items
-  const { data: soDetails } = useFrappeDoc<SalesOrder>(
-    "Sales Order",
-    preSalesOrder || "",
-    { enabled: !!preSalesOrder },
-  );
+  // -- Auto-fill from upstream Sales Order via the registry ------------------
+  const { data: salesOrder, isLoading: loadingSO } =
+    useFrappeDoc<SalesOrder>("Sales Order", salesOrderId ?? "", {
+      enabled: !!salesOrderId,
+    });
 
-  // Fetch addresses for selected customer
-  const { data: addresses } = useFrappeList<Address>(
-    "Address",
-    {
-      fields: [
-        "name",
-        "address_title",
-        "address_type",
-        "address_line1",
-        "city",
-        "is_primary_address",
-        "is_shipping_address",
-      ],
-      filters: customer ? [["Dynamic Link", "link_name", "=", customer]] : [],
-      limit: 20,
-    },
-    { enabled: !!customer },
-  );
-
-  // Pre-fill from Sales Order
   useEffect(() => {
-    if (soDetails) {
-      form.setValue("customer", soDetails.customer);
-      form.setValue("company", soDetails.company);
-      form.setValue("po_no", soDetails.po_no);
-      form.setValue(
-        "shipping_address_name",
-        soDetails.shipping_address_name || "",
-      );
-      form.setValue("customer_address", soDetails.customer_address || "");
-      form.setValue("project", soDetails.project || "");
-      form.setValue("selling_price_list", soDetails.selling_price_list);
-      form.setValue("currency", soDetails.currency);
-      form.setValue("conversion_rate", soDetails.conversion_rate);
+    if (!salesOrder) return;
+    const mapping = getAutoFillMapping("Sales Order", "Delivery Note");
+    if (!mapping) return;
 
-      // Map SO items to DN items (only pending qty)
-      if (soDetails.items?.length > 0) {
-        const dnItems = soDetails.items
-          .filter((item: any) => item.qty - (item.delivered_qty || 0) > 0)
-          .map((item: any) => ({
-            item_code: item.item_code,
-            item_name: item.item_name,
-            description: item.description,
-            qty: item.qty - (item.delivered_qty || 0), // Pending quantity
-            uom: item.uom,
-            rate: item.rate,
-            amount: (item.qty - (item.delivered_qty || 0)) * item.rate,
-            warehouse: item.warehouse || soDetails.set_warehouse,
-            against_sales_order: preSalesOrder,
-            so_detail: item.name,
-          }));
-        replace(dnItems);
+    const header = applyAutoFill(
+      salesOrder as unknown as Record<string, unknown>,
+      mapping,
+    );
 
-        if (dnItems.length === 0) {
-          toast.info("All items from this Sales Order have been delivered");
-        }
+    // Map SO items to DN items, computing pending qty (qty - delivered_qty)
+    const soItems = (salesOrder as { items?: Record<string, unknown>[] }).items ?? [];
+    const pendingItems = soItems
+      .map((item) => {
+        const totalQty = Number(item.qty) || 0;
+        const delivered = Number(item.delivered_qty) || 0;
+        const pending = totalQty - delivered;
+        return pending > 0 ? { ...item, qty: pending } : null;
+      })
+      .filter(Boolean) as Record<string, unknown>[];
+
+    const items = applyItemAutoFill(
+      pendingItems,
+      mapping,
+    ).map((item, idx) => ({
+      ...item,
+      against_sales_order: salesOrderId ?? "",
+      so_detail: (pendingItems[idx] as { name?: string })?.name ?? "",
+    })) as unknown as DNItem[];
+
+    reset({
+      ...getValues(),
+      ...(header as Partial<DNForm>),
+      items: items.length ? items : [{ ...EMPTY_ITEM }],
+    });
+
+    const filled = new Set<string>([
+      ...mapping.headerMappings
+        .filter((m) => m.isReadOnly)
+        .map((m) => m.targetField),
+      "items",
+    ]);
+    setAutoFilledFields(filled);
+
+    if (items.length === 0) {
+      toast.info("All items from this Sales Order have been delivered");
+    } else {
+      toast.success(`Loaded from Sales Order ${salesOrderId}`, {
+        description: "Review items and set logistics to continue.",
+      });
+    }
+  }, [salesOrder, salesOrderId, reset, getValues]);
+
+  const isAuto = useCallback(
+    (field: string) => autoFilledFields.has(field),
+    [autoFilledFields],
+  );
+
+  // -- Live subtotal ----------------------------------------------------------
+  const subtotal = useMemo(
+    () =>
+      (watchedItems ?? []).reduce(
+        (sum, it) => sum + (Number(it?.qty) || 0) * (Number(it?.rate) || 0),
+        0,
+      ),
+    [watchedItems],
+  );
+
+  // -- Per-step validation (gates the wizard's Next button) ------------------
+  const validationResults = useMemo<Record<string, StepValidationResult>>(() => {
+    const values = { ...getValues(), items: watchedItems };
+    return {
+      step1: validateWizardStep("Delivery Note", "step1", values),
+      step2: validateWizardStep("Delivery Note", "step2", values),
+      step3: { valid: true, errors: {} },
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchedItems, watchedCustomer, step, getValues]);
+
+  // -- Persistence ------------------------------------------------------------
+  const createMutation = useFrappeCreate<
+    { data: { name: string } },
+    Record<string, unknown>
+  >("Delivery Note", {
+    successMessage: "Delivery Note created",
+    onSuccess: (res) => {
+      const name = res?.data?.name;
+      if (name) {
+        router.push(`/stock/delivery-note/${encodeURIComponent(name)}`);
       }
-    }
-  }, [soDetails, form, replace, preSalesOrder]);
-
-  // Auto-select shipping address
-  useEffect(() => {
-    if (
-      addresses &&
-      addresses.length > 0 &&
-      !form.getValues("shipping_address_name")
-    ) {
-      const shippingAddr =
-        addresses.find((a) => a.is_shipping_address === 1) || addresses[0];
-      form.setValue("shipping_address_name", shippingAddr.name);
-    }
-  }, [addresses, form]);
-
-  const createMutation = useFrappeCreate("Delivery Note", {
-    onSuccess: (response) => {
-      toast.success("Delivery Note created");
-      router.push(
-        `/stock/delivery-note/${encodeURIComponent(response.data?.name || response.name)}`,
-      );
     },
-    onError: (err) => toast.error(err.message),
   });
 
-  const onSubmit = async (data: DeliveryNoteFormData) => {
-    const payload = {
-      ...data,
-      docstatus: 0,
-      status: "Draft",
-      items: data.items.map((item, idx) => ({
-        ...item,
+  const handleSubmit = useCallback(() => {
+    const values = getValues();
+    const items = (values.items ?? []).filter(
+      (it) => it.item_code && Number(it.qty) > 0,
+    );
+    if (items.length === 0) {
+      toast.error("Add at least one valid item before creating the delivery note.");
+      setStep(1);
+      return;
+    }
+    createMutation.mutate({
+      ...values,
+      items: items.map((it, idx) => ({
+        ...it,
+        amount: (Number(it.qty) || 0) * (Number(it.rate) || 0),
         idx: idx + 1,
-        warehouse: item.warehouse || data.set_warehouse,
+        warehouse: it.warehouse || values.set_warehouse,
         doctype: "Delivery Note Item",
       })),
-    };
-
-    createMutation.mutate(payload);
-  };
-
-  const totalQty = fields.reduce(
-    (sum, _, idx) => sum + (form.watch(`items.${idx}.qty`) || 0),
-    0,
-  );
-  const totalAmount = fields.reduce((sum, _, idx) => {
-    const qty = form.watch(`items.${idx}.qty`) || 0;
-    const rate = form.watch(`items.${idx}.rate`) || 0;
-    return sum + qty * rate;
-  }, 0);
+      docstatus: 0,
+      status: "Draft",
+    });
+  }, [createMutation, getValues]);
 
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
-            {/* Customer & Reference */}
-            <div className="bg-card rounded-[2rem] border border-border/50 p-8 shadow-sm space-y-6">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                  <Building2 className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-lg tracking-tight">
-                    Customer & Reference
-                  </h3>
-                  <p className="text-xs text-muted-foreground">
-                    Who is receiving this delivery?
-                  </p>
-                </div>
-              </div>
+    <div className="space-y-6 pb-12">
+      <PageHeader
+        title="New Delivery Note"
+        subtitle={
+          salesOrderId
+            ? `From Sales Order ${salesOrderId}`
+            : "Create a delivery note in three steps"
+        }
+        backHref="/stock/delivery-note"
+      />
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <FormFrappeSelect
-                  control={form.control}
-                  name="customer"
-                  label="Customer"
-                  doctype="Customer"
-                  required
-                  placeholder="Select customer..."
-                />
-                <FormFrappeSelect
-                  control={form.control}
-                  name="company"
-                  label="Company"
-                  doctype="Company"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <FormInput
-                  control={form.control}
-                  name="posting_date"
-                  label="Delivery Date"
-                  type="date"
-                  required
-                />
-                <FormInput
-                  control={form.control}
-                  name="posting_time"
-                  label="Time"
-                  type="time"
-                />
-                <FormInput
-                  control={form.control}
-                  name="po_no"
-                  label="Customer PO#"
-                  placeholder="PO reference"
-                />
-              </div>
-
-              {preSalesOrder && (
-                <div className="p-4 bg-indigo-500/5 rounded-xl border border-indigo-500/10">
-                  <p className="text-[10px] font-bold uppercase text-indigo-600 tracking-widest mb-1">
-                    Linked Sales Order
-                  </p>
-                  <p className="font-bold text-indigo-700">{preSalesOrder}</p>
-                </div>
-              )}
-            </div>
-
-            {/* Addresses */}
-            <div className="bg-card rounded-[2rem] border border-border/50 p-8 shadow-sm space-y-6">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
-                  <MapPin className="h-5 w-5 text-blue-500" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-lg tracking-tight">
-                    Addressing
-                  </h3>
-                  <p className="text-xs text-muted-foreground">
-                    Shipping and dispatch locations
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <FormFrappeSelect
-                  control={form.control}
-                  name="shipping_address_name"
-                  label="Shipping Address (To)"
-                  doctype="Address"
-                  placeholder="Where goods are going..."
-                  filters={
-                    customer
-                      ? [["Dynamic Link", "link_name", "=", customer]]
-                      : []
-                  }
-                />
-                <FormFrappeSelect
-                  control={form.control}
-                  name="dispatch_address_name"
-                  label="Dispatch From (Our Address)"
-                  doctype="Address"
-                  placeholder="Our warehouse address..."
-                />
-              </div>
-            </div>
-
-            {/* Logistics */}
-            <div className="bg-card rounded-[2rem] border border-border/50 p-8 shadow-sm space-y-6">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
-                  <Truck className="h-5 w-5 text-amber-500" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-lg tracking-tight">
-                    Logistics & Security
-                  </h3>
-                  <p className="text-xs text-muted-foreground">
-                    Who is taking the goods?
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <FormFrappeSelect
-                  control={form.control}
-                  name="transporter"
-                  label="Transporter / Logistics Co"
-                  doctype="Supplier"
-                  placeholder="e.g., In-House, DHL..."
-                  filters={[["is_transporter", "=", 1]]}
-                />
-                <FormFrappeSelect
-                  control={form.control}
-                  name="driver"
-                  label="Driver"
-                  doctype="Driver"
-                  placeholder="Who is driving?"
-                />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <FormInput
-                  control={form.control}
-                  name="vehicle_no"
-                  label="Vehicle Number"
-                  placeholder="License plate"
-                />
-                <FormInput
-                  control={form.control}
-                  name="lr_no"
-                  label="Gate Pass / LR No"
-                  placeholder="Receipt number"
-                />
-                <FormInput
-                  control={form.control}
-                  name="lr_date"
-                  label="LR Date"
-                  type="date"
-                />
-              </div>
-            </div>
-
-            {/* Items */}
-            <div className="bg-card rounded-[2rem] border border-border/50 p-8 shadow-sm space-y-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
-                    <Package className="h-5 w-5 text-emerald-500" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-lg tracking-tight">
-                      Items to Deliver
-                    </h3>
-                    <p className="text-xs text-muted-foreground">
-                      {preSalesOrder
-                        ? "Pre-filled from Sales Order"
-                        : "Add items for delivery"}
-                    </p>
-                  </div>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="rounded-full"
-                  onClick={() =>
-                    append({
-                      item_code: "",
-                      qty: 1,
-                      uom: "Nos",
-                      rate: 0,
-                      warehouse: setWarehouse,
-                    })
-                  }
-                >
-                  <Plus className="h-3 w-3 mr-1" /> Add Item
-                </Button>
-              </div>
-
-              {/* Default Warehouse */}
-              <FormFrappeSelect
-                control={form.control}
-                name="set_warehouse"
-                label="Source Warehouse (Default)"
-                doctype="Warehouse"
-                placeholder="e.g., Finished Goods Store"
-                filters={[["is_group", "=", 0]]}
-              />
-
-              {fields.length === 0 ? (
-                <div className="text-center py-12 border-2 border-dashed border-border/50 rounded-2xl">
-                  <Package className="h-12 w-12 mx-auto mb-3 opacity-20" />
-                  <p className="text-muted-foreground text-sm font-medium">
-                    No items added
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-12 gap-2 px-4 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                    <div className="col-span-4">Item</div>
-                    <div className="col-span-2">Qty</div>
-                    <div className="col-span-2">Rate</div>
-                    <div className="col-span-3">Warehouse</div>
-                    <div className="col-span-1"></div>
-                  </div>
-
-                  {fields.map((field, index) => (
-                    <div
-                      key={field.id}
-                      className="grid grid-cols-12 gap-2 items-start p-4 bg-secondary/20 rounded-xl"
-                    >
-                      <div className="col-span-4">
+      <Form {...form}>
+        <InfoCard className="max-w-3xl">
+          <FlowWizard
+            steps={WIZARD_STEPS}
+            formData={getValues() as unknown as Record<string, unknown>}
+            validationResults={validationResults}
+            isSubmitting={createMutation.isPending}
+            onFormDataChange={() => {}}
+            onStepChange={setStep}
+            onSubmit={handleSubmit}
+            onCancel={() => router.back()}
+            submitLabel="Create Delivery Note"
+            submittingLabel="Creating..."
+            renderStep={(s) => {
+              // ---- STEP 1 — Customer & Shipping ----------------------------
+              if (s.id === "step1") {
+                return (
+                  <div className="space-y-6">
+                    <StepHeading
+                      icon={<UserRound className="h-5 w-5 text-primary" />}
+                      title="Customer & Shipping"
+                      description="Confirm who this delivery is for and where it's going."
+                    />
+                    <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                      <FieldWrap
+                        auto={isAuto("customer")}
+                        loading={loadingSO}
+                      >
                         <FormFrappeSelect
-                          control={form.control}
-                          name={`items.${index}.item_code`}
-                          doctype="Item"
-                          placeholder="Item..."
+                          control={control}
+                          name="customer"
+                          label="Customer"
+                          required
+                          doctype="Customer"
+                          labelField="customer_name"
+                          placeholder="Search customer..."
+                          disabled={isAuto("customer")}
                         />
-                      </div>
-                      <div className="col-span-2">
-                        <FormInput
-                          control={form.control}
-                          name={`items.${index}.qty`}
-                          type="number"
-                        />
-                      </div>
-                      <div className="col-span-2">
-                        <FormInput
-                          control={form.control}
-                          name={`items.${index}.rate`}
-                          type="number"
-                        />
-                      </div>
-                      <div className="col-span-3">
+                      </FieldWrap>
+                      <FieldWrap auto={isAuto("company")}>
                         <FormFrappeSelect
-                          control={form.control}
-                          name={`items.${index}.warehouse`}
-                          doctype="Warehouse"
-                          placeholder="WH"
-                          filters={[["is_group", "=", 0]]}
+                          control={control}
+                          name="company"
+                          label="Company"
+                          required
+                          doctype="Company"
+                          labelField="company_name"
+                          placeholder="Select company..."
+                          disabled={isAuto("company")}
                         />
-                      </div>
-                      <div className="col-span-1 flex justify-end">
+                      </FieldWrap>
+                      <FormDatePicker
+                        control={control}
+                        name="posting_date"
+                        label="Posting Date"
+                        required
+                      />
+                      <FormInput
+                        control={control}
+                        name="posting_time"
+                        label="Posting Time"
+                        placeholder="HH:MM"
+                      />
+                      <FieldWrap auto={isAuto("shipping_address_name")}>
+                        <FormFrappeSelect
+                          control={control}
+                          name="shipping_address_name"
+                          label="Shipping Address"
+                          doctype="Address"
+                          labelField="address_title"
+                          disabled={
+                            isAuto("shipping_address_name") || !watchedCustomer
+                          }
+                          filters={
+                            watchedCustomer
+                              ? ([
+                                  ["Dynamic Link", "link_name", "=", watchedCustomer],
+                                ] as unknown as [string, string, unknown][])
+                              : []
+                          }
+                          placeholder={
+                            watchedCustomer
+                              ? "Select address..."
+                              : "Select a customer first"
+                          }
+                        />
+                      </FieldWrap>
+                      <FormInput
+                        control={control}
+                        name="po_no"
+                        label="Customer PO No"
+                        placeholder="Optional reference"
+                      />
+                    </div>
+                  </div>
+                );
+              }
+
+              // ---- STEP 2 — Items -----------------------------------------
+              if (s.id === "step2") {
+                return (
+                  <div className="space-y-5">
+                    <div className="flex items-center justify-between">
+                      <StepHeading
+                        icon={<Package className="h-5 w-5 text-primary" />}
+                        title="Delivery Items"
+                        description="Adjust quantities and warehouses as needed."
+                      />
+                      {isAuto("items") && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                          <Lock className="h-3 w-3" />
+                          Auto-filled
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="overflow-hidden rounded-xl border border-border/60 bg-card/40 backdrop-blur-sm">
+                      <table className="w-full text-sm">
+                        <thead className="border-b border-border/60 bg-secondary/20">
+                          <tr className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                            <th className="px-3 py-2.5 text-left font-semibold">Item</th>
+                            <th className="px-3 py-2.5 text-right font-semibold">Qty</th>
+                            <th className="px-3 py-2.5 text-right font-semibold">Rate</th>
+                            <th className="px-3 py-2.5 text-right font-semibold">Amount</th>
+                            <th className="px-3 py-2.5 text-left font-semibold">Warehouse</th>
+                            <th className="w-10" />
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/50">
+                          {fields.map((field, index) => {
+                            const qty = Number(watchedItems?.[index]?.qty) || 0;
+                            const rate = Number(watchedItems?.[index]?.rate) || 0;
+                            return (
+                              <tr key={field.id} className="group">
+                                <td className="px-3 py-2 align-top">
+                                  <FormFrappeSelect
+                                    control={control}
+                                    name={`items.${index}.item_code`}
+                                    doctype="Item"
+                                    hideLabel
+                                    placeholder="Item..."
+                                    extraFields={[
+                                      "standard_rate",
+                                      "stock_uom",
+                                      "item_name",
+                                      "description",
+                                    ]}
+                                    onValueChange={(_val, doc) => {
+                                      if (doc) {
+                                        setValue(
+                                          `items.${index}.rate`,
+                                          Number(doc.standard_rate) || 0,
+                                        );
+                                        setValue(
+                                          `items.${index}.uom`,
+                                          doc.stock_uom || "Nos",
+                                        );
+                                        setValue(
+                                          `items.${index}.item_name`,
+                                          doc.item_name || "",
+                                        );
+                                      }
+                                    }}
+                                  />
+                                </td>
+                                <td className="px-3 py-2 align-top">
+                                  <NumberCell
+                                    control={control}
+                                    name={`items.${index}.qty`}
+                                  />
+                                </td>
+                                <td className="px-3 py-2 align-top">
+                                  <NumberCell
+                                    control={control}
+                                    name={`items.${index}.rate`}
+                                  />
+                                </td>
+                                <td className="px-3 py-3 text-right align-middle font-semibold tabular-nums text-foreground">
+                                  {ETB.format(qty * rate)}
+                                </td>
+                                <td className="px-3 py-2 align-top">
+                                  <FormFrappeSelect
+                                    control={control}
+                                    name={`items.${index}.warehouse`}
+                                    doctype="Warehouse"
+                                    hideLabel
+                                    placeholder="WH..."
+                                    filters={[["is_group", "=", 0]]}
+                                  />
+                                </td>
+                                <td className="px-2 py-2 text-center align-middle">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+                                    onClick={() => remove(index)}
+                                    disabled={fields.length === 1}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                      <div className="flex items-center justify-between border-t border-border/60 bg-secondary/10 px-3 py-3">
                         <Button
                           type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => remove(index)}
-                          className="h-8 w-8 rounded-full text-destructive hover:bg-destructive/10"
+                          variant="outline"
+                          size="sm"
+                          className="rounded-full border-dashed"
+                          onClick={() => append({ ...EMPTY_ITEM })}
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Plus className="mr-1.5 h-4 w-4" /> Add Item
                         </Button>
+                        <div className="text-right">
+                          <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                            Subtotal
+                          </p>
+                          <p className="text-xl font-bold tabular-nums text-foreground">
+                            {ETB.format(subtotal)}
+                          </p>
+                        </div>
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Settings */}
-            <div className="bg-card rounded-[2rem] border border-border/50 p-8 shadow-sm">
-              <FormSwitch
-                control={form.control}
-                name="print_without_amount"
-                label="Gate Pass Mode"
-                description="Hide prices when printing (for drivers and security)"
-              />
-            </div>
-          </div>
-
-          {/* Sidebar */}
-          <div className="lg:col-span-1">
-            <div className="bg-card rounded-[2rem] border border-border/50 p-8 shadow-xl shadow-primary/5 sticky top-6 space-y-6">
-              <h3 className="font-bold text-lg flex items-center gap-2">
-                <Truck className="h-5 w-5 text-primary" />
-                Delivery Summary
-              </h3>
-
-              <div className="space-y-4">
-                <div className="p-4 rounded-2xl bg-secondary/30 border border-border/50">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2">
-                    Customer
-                  </p>
-                  <p className="font-bold truncate">
-                    {customer || "Not selected"}
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="text-center p-4 bg-emerald-500/5 rounded-xl border border-emerald-500/10">
-                    <p className="text-2xl font-black text-emerald-600">
-                      {fields.length}
-                    </p>
-                    <p className="text-[10px] font-bold uppercase text-emerald-600/70">
-                      Items
-                    </p>
                   </div>
-                  <div className="text-center p-4 bg-blue-500/5 rounded-xl border border-blue-500/10">
-                    <p className="text-2xl font-black text-blue-600">
-                      {totalQty}
-                    </p>
-                    <p className="text-[10px] font-bold uppercase text-blue-600/70">
-                      Total Qty
-                    </p>
+                );
+              }
+
+              // ---- STEP 3 — Logistics & Review -----------------------------
+              const v = getValues();
+              return (
+                <div className="space-y-5">
+                  <StepHeading
+                    icon={<Truck className="h-5 w-5 text-primary" />}
+                    title="Logistics & Review"
+                    description="Set transporter details and confirm the delivery."
+                  />
+
+                  {/* Logistics fields */}
+                  <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                    <FormFrappeSelect
+                      control={control}
+                      name="transporter"
+                      label="Transporter"
+                      doctype="Supplier"
+                      placeholder="e.g., In-House, DHL..."
+                      filters={[["is_transporter", "=", 1]]}
+                    />
+                    <FormFrappeSelect
+                      control={control}
+                      name="driver"
+                      label="Driver"
+                      doctype="Driver"
+                      placeholder="Select driver..."
+                    />
+                    <FormInput
+                      control={control}
+                      name="vehicle_no"
+                      label="Vehicle Number"
+                      placeholder="License plate"
+                    />
+                    <FormInput
+                      control={control}
+                      name="lr_no"
+                      label="Gate Pass / LR No"
+                      placeholder="Receipt number"
+                    />
+                    <FormDatePicker
+                      control={control}
+                      name="lr_date"
+                      label="LR Date"
+                    />
+                    <FormFrappeSelect
+                      control={control}
+                      name="set_warehouse"
+                      label="Default Warehouse"
+                      doctype="Warehouse"
+                      placeholder="Source warehouse..."
+                      filters={[["is_group", "=", 0]]}
+                    />
+                  </div>
+
+                  {/* Review summary */}
+                  <div className="rounded-xl border border-border/60 bg-card/40 p-5 backdrop-blur-sm">
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <Summary label="Customer" value={v.customer_name || v.customer} />
+                      <Summary label="Company" value={v.company} />
+                      <Summary label="Posting Date" value={v.posting_date} />
+                      <Summary label="Shipping Address" value={v.shipping_address_name} />
+                    </div>
+                    <div className="mt-4 border-t border-border/60 pt-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">
+                          {(watchedItems ?? []).filter((i) => i?.item_code).length}{" "}
+                          item(s)
+                        </span>
+                        <div className="text-right">
+                          <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                            Grand Total
+                          </span>
+                          <p className="text-2xl font-bold tabular-nums text-primary">
+                            {ETB.format(subtotal)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
-
-                {totalAmount > 0 && (
-                  <div className="p-6 bg-primary/5 rounded-2xl border border-primary/10">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-primary/60 mb-1">
-                      Est. Value
-                    </p>
-                    <p className="text-2xl font-black text-primary">
-                      ETB {totalAmount.toLocaleString()}
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              <Button
-                type="submit"
-                disabled={createMutation.isPending || fields.length === 0}
-                className="w-full rounded-xl h-12 font-bold shadow-lg shadow-primary/20 uppercase tracking-widest text-[11px]"
-              >
-                {createMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <CheckCircle2 className="h-4 w-4 mr-2" />
-                )}
-                Create Delivery Note
-              </Button>
-            </div>
-          </div>
-        </div>
-      </form>
-    </Form>
+              );
+            }}
+          />
+        </InfoCard>
+      </Form>
+    </div>
   );
 }
 
-export default function CreateDeliveryNotePage() {
+// ---------------------------------------------------------------------------
+// Local presentational helpers
+// ---------------------------------------------------------------------------
+function StepHeading({
+  icon,
+  title,
+  description,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+}) {
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="New Delivery Note"
-        subtitle="Prepare items for dispatch"
-        backHref="/stock/delivery-note"
-      />
-      <Suspense fallback={<LoadingState />}>
-        <CreateDeliveryNoteForm />
-      </Suspense>
+    <div className="flex items-start gap-3">
+      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+        {icon}
+      </div>
+      <div>
+        <h3 className="text-base font-semibold text-foreground">{title}</h3>
+        <p className="text-sm text-muted-foreground">{description}</p>
+      </div>
     </div>
+  );
+}
+
+function FieldWrap({
+  auto,
+  loading,
+  children,
+}: {
+  auto?: boolean;
+  loading?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={cn("relative", loading && "animate-pulse")}>
+      {children}
+      {auto && (
+        <span className="pointer-events-none absolute right-2 top-0 inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+          <Lock className="h-3 w-3" />
+        </span>
+      )}
+    </div>
+  );
+}
+
+function Summary({ label, value }: { label: string; value?: string }) {
+  return (
+    <div>
+      <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        {label}
+      </p>
+      <p className="font-medium text-foreground">{value || "—"}</p>
+    </div>
+  );
+}
+
+// Typed numeric cell for the items table (no @ts-nocheck needed).
+function NumberCell({
+  control,
+  name,
+}: {
+  control: ReturnType<typeof useForm<DNForm>>["control"];
+  name: `items.${number}.qty` | `items.${number}.rate`;
+}) {
+  return (
+    <FormField
+      control={control}
+      name={name}
+      render={({ field }) => (
+        <FormItem>
+          <FormControl>
+            <Input
+              {...field}
+              type="number"
+              inputMode="decimal"
+              className="h-10 rounded-lg border-0 bg-secondary/30 text-right tabular-nums"
+              onChange={(e) => field.onChange(Number(e.target.value))}
+            />
+          </FormControl>
+        </FormItem>
+      )}
+    />
   );
 }

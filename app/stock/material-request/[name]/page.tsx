@@ -1,480 +1,371 @@
-// @ts-nocheck
 "use client";
 
-import { use } from "react";
-import { useRouter } from "next/navigation";
-import { useFrappeDoc, useFrappeUpdate, useFrappePost } from "@/hooks/generic";
-import {
-  PageHeader,
-  LoadingState,
-  EmptyState,
-  ConfirmDialog,
-} from "@/components/smart";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import {
-  Calendar,
-  Building2,
-  Package,
-  ShoppingCart,
-  ArrowRightLeft,
-  LogOut,
-  Factory,
-  UserCheck,
-  Clock,
-  CheckCircle2,
-  XCircle,
-  FileText,
-  History,
-  Pencil,
-  Trash2,
-  Printer,
-  ChevronRight,
-  Info,
-  Layers,
-} from "lucide-react";
-import { format, parseISO } from "date-fns";
-import { cn } from "@/lib/utils";
+import { useMemo, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
+import {
+  Send,
+  Trash2,
+  Package,
+} from "lucide-react";
 
-const TYPE_CONFIG = {
-  Purchase: {
-    color: "text-emerald-600",
-    bg: "bg-emerald-500/10",
-    icon: ShoppingCart,
-  },
-  "Material Transfer": {
-    color: "text-blue-600",
-    bg: "bg-blue-500/10",
-    icon: ArrowRightLeft,
-  },
-  "Material Issue": {
-    color: "text-amber-600",
-    bg: "bg-amber-500/10",
-    icon: LogOut,
-  },
-  Manufacture: {
-    color: "text-indigo-600",
-    bg: "bg-indigo-500/10",
-    icon: Factory,
-  },
-  "Customer Provided": {
-    color: "text-purple-600",
-    bg: "bg-purple-500/10",
-    icon: UserCheck,
-  },
-};
+import { PageHeader, LoadingState, ConfirmDialog } from "@/components/smart";
+import { StatusBadge } from "@/components/smart/status-badge";
+import { InfoCard, DataPoint } from "@/components/ui/info-card";
+import { Button } from "@/components/ui/button";
+import { FlowTracker } from "@/components/flows/FlowTracker";
+import { WhatsNext } from "@/components/smart/WhatsNext";
+import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
+import { resolveFlowChain } from "@/lib/flows/flow-chain-resolver";
+import { useFrappeDoc, useFrappeList, useFrappeUpdate, useFrappeDelete } from "@/hooks/generic";
+import type { MaterialRequest } from "@/types/doctype-types";
+import type { FlowStageStatus } from "@/types/flow-types";
 
-const STATUS_CONFIG = {
-  Draft: { color: "text-slate-600", bg: "bg-slate-100", icon: Clock },
-  Pending: { color: "text-amber-600", bg: "bg-amber-100", icon: Clock },
-  "Partially Ordered": {
-    color: "text-blue-600",
-    bg: "bg-blue-100",
-    icon: History,
-  },
-  Ordered: {
-    color: "text-emerald-600",
-    bg: "bg-emerald-100",
-    icon: CheckCircle2,
-  },
-  Transferred: {
-    color: "text-indigo-600",
-    bg: "bg-indigo-100",
-    icon: ArrowRightLeft,
-  },
-  Cancelled: { color: "text-gray-400", bg: "bg-gray-100", icon: XCircle },
-};
+interface MRItem {
+  item_code: string;
+  item_name?: string;
+  description?: string;
+  qty: number;
+  uom?: string;
+  warehouse?: string;
+  from_warehouse?: string;
+  schedule_date?: string;
+  ordered_qty?: number;
+}
 
-export default function MaterialRequestDetailPage({
-  params,
-}: {
-  params: Promise<{ name: string }>;
-}) {
-  const { name } = use(params);
+export default function MaterialRequestDetailPage() {
+  const params = useParams();
   const router = useRouter();
+  const name = decodeURIComponent(String(params.name));
+
+  const [confirmSubmit, setConfirmSubmit] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const {
     data: mr,
     isLoading,
-    refetch,
-  } = useFrappeDoc("Material Request", name);
+    error,
+  } = useFrappeDoc<MaterialRequest>("Material Request", name);
 
-  const updateMutation = useFrappeUpdate("Material Request");
+  const isDraft = mr?.docstatus === 0;
+  const isSubmitted = mr?.docstatus === 1;
 
-  const handleStatusUpdate = async (newDocStatus: number) => {
-    try {
-      await updateMutation.mutateAsync({
-        name,
-        data: { docstatus: newDocStatus },
-      });
-      toast.success(
-        newDocStatus === 1 ? "Request submitted" : "Request cancelled",
-      );
-      refetch();
-    } catch (err) {
-      toast.error(err.message);
+  const { data: purchaseOrders, isLoading: loadingPO } = useFrappeList<{ name: string }>(
+    "Purchase Order",
+    { filters: [["material_request", "=", name]], fields: ["name"], limit: 5 },
+    { enabled: !isLoading && !!mr }
+  );
+
+  const chain = useMemo(() => {
+    const stageStatuses: Record<
+      string,
+      { status: FlowStageStatus; documentName?: string; documentUrl?: string }
+    > = {};
+
+    stageStatuses["Material Request"] = {
+      status: isSubmitted ? "completed" : "current",
+      documentName: name,
+      documentUrl: `/stock/material-request/${encodeURIComponent(name)}`,
+    };
+
+    const poName = purchaseOrders?.[0]?.name;
+    if (poName) {
+      stageStatuses["Purchase Order"] = {
+        status: "completed",
+        documentName: poName,
+        documentUrl: `/buying/purchase-order/${encodeURIComponent(poName)}`,
+      };
     }
+
+    return resolveFlowChain("Material Request", name, stageStatuses);
+  }, [mr, purchaseOrders, name, isSubmitted]);
+
+  const updateMutation = useFrappeUpdate<MaterialRequest>("Material Request", {
+    showToast: false,
+  });
+
+  const deleteMutation = useFrappeDelete("Material Request", {
+    onSuccess: () => {
+      toast.success(`Material Request ${name} deleted`);
+      router.push("/stock/material-request");
+    },
+  });
+
+  const handleSubmit = () => {
+    setConfirmSubmit(false);
+    updateMutation.mutate(
+      { name, data: { docstatus: 1 } },
+      {
+        onSuccess: () => toast.success(`Material Request ${name} submitted`),
+        onError: (e) =>
+          toast.error("Submit failed", { description: e.message }),
+      }
+    );
   };
 
-  if (isLoading) return <LoadingState type="detail" />;
-  if (!mr) return <EmptyState title="Request not found" />;
+  const handleDelete = async () => {
+    setConfirmDelete(false);
+    await deleteMutation.mutateAsync(name);
+  };
 
-  const typeConfig =
-    TYPE_CONFIG[mr.material_request_type] || TYPE_CONFIG.Purchase;
-  const statusConfig = STATUS_CONFIG[mr.status] || STATUS_CONFIG.Draft;
-  const TypeIcon = typeConfig.icon;
-  const StatusIcon = statusConfig.icon;
-  const isDraft = mr.docstatus === 0;
-  const isSubmitted = mr.docstatus === 1;
+  const whatsNext = [
+    isDraft && {
+      label: "Submit Material Request",
+      description: "Submit for procurement processing",
+      onClick: () => setConfirmSubmit(true),
+      isPrimary: true,
+      isLoading: updateMutation.isPending,
+    },
+    isSubmitted && {
+      label: "Create Purchase Order",
+      description: "Coming in Phase 2",
+      onClick: () => {},
+      disabled: true,
+      disabledReason: "Coming in Phase 2",
+    },
+  ].filter(Boolean) as React.ComponentProps<typeof WhatsNext>["actions"];
+
+  if (isLoading) return <LoadingState />;
+  if (error || !mr) {
+    return (
+      <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6">
+        <p className="text-sm text-destructive">
+          {error?.message ?? "Material Request not found."}
+        </p>
+        <Button
+          variant="ghost"
+          className="mt-3"
+          onClick={() => router.push("/stock/material-request")}
+        >
+          Back to Material Requests
+        </Button>
+      </div>
+    );
+  }
+
+  const items = (mr.items ?? []) as unknown as MRItem[];
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div className="space-y-6 pb-12">
       <PageHeader
+        backUrl="/stock/material-request"
+        label="Material Request"
         title={mr.name}
-        subtitle={`${mr.material_request_type} Request`}
-        backHref="/stock/material-request"
-        tags={
-          <div className="flex gap-2">
-            <Badge
-              className={cn(
-                "rounded-full px-4 py-1.5 text-[10px] font-black tracking-widest uppercase border-0 shadow-sm",
-                typeConfig.bg,
-                typeConfig.color,
-              )}
-            >
-              <TypeIcon className="h-3 w-3 mr-2" />
-              {mr.material_request_type}
-            </Badge>
-            <Badge
-              className={cn(
-                "rounded-full px-4 py-1.5 text-[10px] font-black tracking-widest uppercase border-0 shadow-sm",
-                statusConfig.bg,
-                statusConfig.color,
-              )}
-            >
-              <StatusIcon className="h-3 w-3 mr-2" />
-              {mr.status}
-            </Badge>
+        status={{
+          label: mr.status || "Draft",
+          variant:
+            mr.status === "Cancelled"
+              ? "destructive"
+              : mr.status === "Ordered" || mr.status === "Received"
+                ? "success"
+                : isDraft
+                  ? "default"
+                  : "warning",
+        }}
+        actions={
+          <div className="flex items-center gap-2">
+            {isDraft && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => setConfirmDelete(true)}
+                >
+                  <Trash2 className="mr-1.5 h-4 w-4" /> Delete
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => setConfirmSubmit(true)}
+                  disabled={updateMutation.isPending}
+                >
+                  <Send className="mr-1.5 h-4 w-4" /> Submit
+                </Button>
+              </>
+            )}
           </div>
         }
-      >
-        <div className="flex gap-3">
-          <Button variant="outline" className="rounded-2xl h-11 px-6 font-bold">
-            <Printer className="h-4 w-4 mr-2" /> Print
-          </Button>
-          {isDraft && (
-            <>
-              <Button
-                variant="outline"
-                className="rounded-2xl h-11 px-6 font-bold"
-                onClick={() =>
-                  router.push(
-                    `/stock/material-request/${encodeURIComponent(name)}/edit`,
-                  )
-                }
-              >
-                <Pencil className="h-4 w-4 mr-2" /> Edit
-              </Button>
-              <Button
-                className="rounded-2xl h-11 px-8 font-black uppercase tracking-widest text-[11px] shadow-lg shadow-primary/20"
-                onClick={() => handleStatusUpdate(1)}
-              >
-                Submit Request
-              </Button>
-            </>
-          )}
-          {isSubmitted && mr.material_request_type === "Purchase" && (
-            <Button
-              className="rounded-2xl h-11 px-8 font-black uppercase tracking-widest text-[11px] shadow-lg shadow-emerald-500/20 bg-emerald-600 hover:bg-emerald-700"
-              onClick={() =>
-                router.push(
-                  `/buying/purchase-order/new?material_request=${encodeURIComponent(name)}`,
-                )
-              }
-            >
-              <ShoppingCart className="h-4 w-4 mr-2" /> Create PO
-            </Button>
-          )}
-          {isSubmitted && mr.material_request_type === "Material Transfer" && (
-            <Button
-              className="rounded-2xl h-11 px-8 font-black uppercase tracking-widest text-[11px] shadow-lg shadow-blue-500/20 bg-blue-600 hover:bg-blue-700"
-              onClick={() =>
-                router.push(
-                  `/stock/stock-entry/new?material_request=${encodeURIComponent(name)}&purpose=Material Transfer`,
-                )
-              }
-            >
-              <ArrowRightLeft className="h-4 w-4 mr-2" /> Create Transfer
-            </Button>
-          )}
-        </div>
-      </PageHeader>
+      />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-8">
-          {/* Main Info */}
-          <div className="bg-card rounded-[2.5rem] border border-border/50 p-8 shadow-sm">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-              <div>
-                <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-2">
-                  Requested Date
-                </p>
-                <div className="flex items-center gap-2 font-bold text-sm">
-                  <Calendar className="h-4 w-4 text-primary" />
-                  {format(parseISO(mr.transaction_date), "MMM d, yyyy")}
-                </div>
-              </div>
-              <div>
-                <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-2">
-                  Target Date
-                </p>
-                <div className="flex items-center gap-2 font-bold text-sm">
-                  <Clock className="h-4 w-4 text-amber-500" />
-                  {format(parseISO(mr.schedule_date), "MMM d, yyyy")}
-                </div>
-              </div>
-              <div>
-                <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-2">
-                  Company
-                </p>
-                <div className="flex items-center gap-2 font-bold text-sm">
-                  <Building2 className="h-4 w-4 text-blue-500" />
-                  {mr.company}
-                </div>
-              </div>
-              {mr.work_order && (
-                <div>
-                  <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-2">
-                    Work Order
-                  </p>
-                  <div className="flex items-center gap-2 font-bold text-sm text-indigo-600">
-                    <Factory className="h-4 w-4" />
-                    {mr.work_order}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+      <InfoCard title="Procurement Flow" className="overflow-hidden">
+        <FlowTracker result={chain} isLoading={loadingPO} />
+      </InfoCard>
 
-          {/* Items Table */}
-          <div className="bg-card rounded-[2.5rem] border border-border/50 overflow-hidden shadow-sm">
-            <div className="p-8 border-b border-border/50 bg-secondary/10 flex justify-between items-center">
-              <h3 className="font-bold text-lg tracking-tight flex items-center gap-2">
-                <Package className="h-5 w-5 text-emerald-500" /> Requested Items
-              </h3>
-              <Badge
-                variant="outline"
-                className="rounded-lg h-7 px-3 font-black text-[10px] uppercase"
-              >
-                {mr.items?.length || 0} Line Items
-              </Badge>
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
+        {/* Center column */}
+        <div className="space-y-6 lg:col-span-8">
+          <InfoCard title="Request Details">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+              <DataPoint
+                label="Request Type"
+                value={mr.material_request_type}
+              />
+              <DataPoint label="Company" value={mr.company} />
+              <DataPoint
+                label="Transaction Date"
+                value={mr.transaction_date}
+              />
+              <DataPoint
+                label="Schedule Date"
+                value={mr.schedule_date || "—"}
+              />
+              <DataPoint
+                label="From Warehouse"
+                value={mr.set_from_warehouse || "—"}
+              />
+              <DataPoint
+                label="To Warehouse"
+                value={mr.set_warehouse || "—"}
+              />
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="bg-secondary/20 border-b border-border/50">
-                    <th className="p-6 text-[10px] font-black uppercase text-muted-foreground tracking-widest">
-                      Item Detail
+          </InfoCard>
+
+          <InfoCard
+            title="Items"
+            icon={<Package className="h-5 w-5 text-primary" />}
+          >
+            <div className="overflow-hidden rounded-xl border border-border/60">
+              <table className="w-full text-sm">
+                <thead className="border-b border-border/60 bg-secondary/20">
+                  <tr className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                    <th className="px-3 py-2.5 text-left font-semibold">
+                      Item
                     </th>
-                    <th className="p-6 text-[10px] font-black uppercase text-muted-foreground tracking-widest">
-                      Quantity
+                    <th className="px-3 py-2.5 text-right font-semibold">
+                      Qty
                     </th>
-                    <th className="p-6 text-[10px] font-black uppercase text-muted-foreground tracking-widest">
+                    <th className="px-3 py-2.5 text-right font-semibold">
+                      UOM
+                    </th>
+                    <th className="px-3 py-2.5 text-right font-semibold">
                       Warehouse
-                    </th>
-                    <th className="p-6 text-[10px] font-black uppercase text-muted-foreground tracking-widest">
-                      Fulfillment
                     </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/50">
-                  {mr.items?.map((item, idx) => (
-                    <tr
-                      key={idx}
-                      className="group hover:bg-secondary/10 transition-colors"
-                    >
-                      <td className="p-6">
-                        <p className="font-bold text-sm transition-colors group-hover:text-primary">
-                          {item.item_code}
-                        </p>
-                        <p className="text-[11px] text-muted-foreground font-medium mt-1">
-                          {item.item_name ||
-                            item.description ||
-                            "No description"}
-                        </p>
-                      </td>
-                      <td className="p-6">
-                        <div className="flex flex-col">
-                          <span className="font-black text-sm tabular-nums">
-                            {item.qty}
-                          </span>
-                          <span className="text-[10px] font-bold text-muted-foreground uppercase">
-                            {item.uom}
-                          </span>
+                  {items.map((it, i) => (
+                    <tr key={`${it.item_code}-${i}`}>
+                      <td className="px-3 py-2.5">
+                        <div className="font-medium text-foreground">
+                          {it.item_name || it.item_code}
                         </div>
+                        {it.description && (
+                          <div className="text-xs text-muted-foreground line-clamp-1">
+                            {it.description}
+                          </div>
+                        )}
                       </td>
-                      <td className="p-6">
-                        <div className="space-y-2">
-                          {item.from_warehouse && (
-                            <div className="flex items-center gap-2 text-[10px] font-bold text-red-600 bg-red-500/5 px-2 py-1 rounded-lg border border-red-500/10 w-fit">
-                              <LogOut className="h-3 w-3" />{" "}
-                              {item.from_warehouse.split(" - ")[0]}
-                            </div>
-                          )}
-                          <div className="flex items-center gap-2 text-[10px] font-bold text-emerald-600 bg-emerald-500/5 px-2 py-1 rounded-lg border border-emerald-500/10 w-fit">
-                            <LogIn className="h-3 w-3" />{" "}
-                            {item.warehouse?.split(" - ")[0] ||
-                              mr.set_warehouse?.split(" - ")[0]}
-                          </div>
-                        </div>
+                      <td className="px-3 py-2.5 text-right tabular-nums">
+                        {it.qty}
                       </td>
-                      <td className="p-6">
-                        <div className="space-y-1.5">
-                          <div className="flex justify-between text-[10px] font-black uppercase tracking-tighter">
-                            <span className="text-muted-foreground">
-                              Status
-                            </span>
-                            <span className="text-primary">
-                              {Math.round(
-                                ((item.ordered_qty || 0) / item.qty) * 100,
-                              )}
-                              %
-                            </span>
-                          </div>
-                          <div className="h-1.5 w-24 bg-secondary/50 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-primary rounded-full transition-all duration-700"
-                              style={{
-                                width: `${Math.min(((item.ordered_qty || 0) / item.qty) * 100, 100)}%`,
-                              }}
-                            />
-                          </div>
-                          <p className="text-[9px] font-bold text-muted-foreground">
-                            Ord: {item.ordered_qty || 0} / {item.qty}
-                          </p>
-                        </div>
+                      <td className="px-3 py-2.5 text-right text-muted-foreground">
+                        {it.uom || "—"}
+                      </td>
+                      <td className="px-3 py-2.5 text-right text-muted-foreground">
+                        {it.warehouse || mr.set_warehouse || "—"}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          </div>
+          </InfoCard>
         </div>
 
-        <div className="space-y-8">
-          {/* Reason Card */}
-          <div className="bg-card rounded-[2.5rem] border border-border/50 p-8 shadow-sm">
-            <h4 className="font-bold text-xs uppercase tracking-widest text-muted-foreground mb-4 flex items-center gap-2">
-              <FileText className="h-4 w-4 text-primary" /> Internal Note
-            </h4>
-            <p className="text-sm text-foreground/80 leading-relaxed italic">
-              {mr.reason || "No specific reason provided for this request."}
-            </p>
-          </div>
-
-          {/* Stats Card */}
-          <div className="bg-card rounded-[2.5rem] border border-border/50 p-8 shadow-sm space-y-6">
-            <h4 className="font-bold text-xs uppercase tracking-widest text-muted-foreground mb-4">
-              Request Statistics
-            </h4>
+        {/* Sidebar */}
+        <div className="space-y-6 lg:col-span-4">
+          <InfoCard title="Status" variant="gradient">
             <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <span className="text-[11px] font-bold text-muted-foreground uppercase">
-                  Overall Fulfillment
-                </span>
-                <span className="font-black text-primary">
-                  {Math.round(mr.per_ordered || 0)}%
-                </span>
+              <div className="flex items-center gap-3">
+                <StatusBadge status={mr.status || "Draft"} size="lg" />
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-[11px] font-bold text-muted-foreground uppercase">
-                  Supply Type
-                </span>
-                <span className="font-black text-sm">
-                  {mr.material_request_type}
-                </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-[11px] font-bold text-muted-foreground uppercase">
-                  Total Units
-                </span>
-                <span className="font-black text-sm tabular-nums">
-                  {mr.items?.reduce((sum, i) => sum + i.qty, 0)}
-                </span>
-              </div>
-            </div>
-
-            <div className="pt-6 border-t border-border/50">
-              <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-3">
-                Tracking Milestones
-              </p>
-              <div className="space-y-4">
-                <div className="flex items-center gap-4">
-                  <div
-                    className={cn(
-                      "h-8 w-8 rounded-full flex items-center justify-center shrink-0 border-2",
-                      mr.docstatus >= 1
-                        ? "bg-emerald-500/10 border-emerald-500 text-emerald-600"
-                        : "bg-secondary/50 border-border text-muted-foreground",
-                    )}
-                  >
-                    {mr.docstatus >= 1 ? (
-                      <CheckCircle2 className="h-4 w-4" />
-                    ) : (
-                      <Layers className="h-4 w-4" />
-                    )}
+              <div className="space-y-3">
+                <div>
+                  <div className="flex justify-between text-[10px] font-bold uppercase tracking-tighter mb-1.5">
+                    <span className="text-muted-foreground">% Ordered</span>
+                    <span className="text-primary">
+                      {Math.round(mr.per_ordered || 0)}%
+                    </span>
                   </div>
-                  <div>
-                    <p className="text-[11px] font-bold tracking-tight">
-                      Requirement Validated
-                    </p>
-                    <p className="text-[9px] text-muted-foreground font-medium uppercase">
-                      {mr.docstatus >= 1
-                        ? "Authorized by Manager"
-                        : "Awaiting Submission"}
-                    </p>
+                  <div className="h-2 bg-secondary/50 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-primary rounded-full transition-all duration-700"
+                      style={{
+                        width: `${Math.min(mr.per_ordered || 0, 100)}%`,
+                      }}
+                    />
                   </div>
                 </div>
-                <div className="flex items-center gap-4">
-                  <div
-                    className={cn(
-                      "h-8 w-8 rounded-full flex items-center justify-center shrink-0 border-2",
-                      mr.per_ordered >= 100
-                        ? "bg-emerald-500/10 border-emerald-500 text-emerald-600"
-                        : "bg-secondary/50 border-border text-muted-foreground",
-                    )}
-                  >
-                    <ShoppingCart className="h-4 w-4" />
+                <div>
+                  <div className="flex justify-between text-[10px] font-bold uppercase tracking-tighter mb-1.5">
+                    <span className="text-muted-foreground">% Received</span>
+                    <span className="text-primary">
+                      {Math.round(mr.per_received || 0)}%
+                    </span>
                   </div>
-                  <div>
-                    <p className="text-[11px] font-bold tracking-tight">
-                      Procurement Completed
-                    </p>
-                    <p className="text-[9px] text-muted-foreground font-medium uppercase">
-                      {mr.per_ordered >= 100
-                        ? "Orders Fully Placed"
-                        : mr.per_ordered > 0
-                          ? "Partially Ordered"
-                          : "Open for Purchasing"}
-                    </p>
+                  <div className="h-2 bg-secondary/50 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-primary rounded-full transition-all duration-700"
+                      style={{
+                        width: `${Math.min(mr.per_received || 0, 100)}%`,
+                      }}
+                    />
                   </div>
                 </div>
               </div>
             </div>
-          </div>
+          </InfoCard>
 
-          <div className="bg-amber-500/5 rounded-[2rem] border border-amber-500/10 p-6 flex gap-4">
-            <Info className="h-5 w-5 text-amber-500 shrink-0" />
-            <p className="text-[11px] text-amber-800 font-medium leading-relaxed">
-              This request has been indexed for the{" "}
-              <strong>Master Resource Planning (MRP)</strong> engine. Any
-              changes to quantities will affect production schedules.
-            </p>
-          </div>
+          <InfoCard title="What's Next">
+            <WhatsNext actions={whatsNext} />
+          </InfoCard>
+
+          <InfoCard title="Activity">
+            <ActivityTimeline
+              items={[
+                {
+                  id: "created",
+                  type: "created",
+                  description: "Material Request created",
+                  user: mr.owner,
+                  timestamp: mr.creation ?? new Date().toISOString(),
+                },
+                ...(isSubmitted
+                  ? [
+                      {
+                        id: "submitted",
+                        type: "submitted" as const,
+                        description: "Request submitted",
+                        user: mr.modified_by,
+                        timestamp:
+                          mr.modified ?? new Date().toISOString(),
+                      },
+                    ]
+                  : []),
+              ]}
+            />
+          </InfoCard>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmSubmit}
+        onOpenChange={setConfirmSubmit}
+        title="Submit this Material Request?"
+        description="Submitting locks the request and enables procurement processing. This cannot be undone without cancelling."
+        confirmText="Submit"
+        onConfirm={handleSubmit}
+      />
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="Delete this Material Request?"
+        description="This action cannot be undone. Only draft requests can be deleted."
+        confirmText="Delete"
+        variant="destructive"
+        onConfirm={handleDelete}
+        loading={deleteMutation.isPending}
+      />
     </div>
   );
 }

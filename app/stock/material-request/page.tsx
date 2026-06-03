@@ -1,4 +1,3 @@
-// @ts-nocheck
 "use client";
 
 import { useState, useMemo } from "react";
@@ -10,93 +9,63 @@ import {
   MoreVertical,
   Pencil,
   Trash2,
-  Search,
-  FileInput,
+  Eye,
+  CalendarDays,
+  Building2,
+  Clock,
   ShoppingCart,
   ArrowRightLeft,
   LogOut,
-  Factory,
-  UserCheck,
-  Clock,
   CheckCircle2,
   XCircle,
-  Eye,
+  FileText,
   Package,
-  Calendar,
   TrendingUp,
-  Building2,
-  ArrowUpRight,
-  StopCircle,
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useFrappeList, useFrappeDelete } from "@/hooks/generic";
 import {
   PageHeader,
-  LoadingState,
   EmptyState,
+  LoadingState,
   ConfirmDialog,
 } from "@/components/smart";
+import { StatusBadge } from "@/components/smart/status-badge";
+import { KPICard } from "@/components/dashboard/KPICard";
 import type { MaterialRequest } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
-import { format, parseISO } from "date-fns";
 
-const TYPE_CONFIG = {
-  Purchase: {
-    color: "text-emerald-600",
-    bg: "bg-emerald-100 dark:bg-emerald-900/20",
-    icon: ShoppingCart,
-  },
-  "Material Transfer": {
-    color: "text-blue-600",
-    bg: "bg-blue-100 dark:bg-blue-900/20",
-    icon: ArrowRightLeft,
-  },
-  "Material Issue": {
-    color: "text-amber-600",
-    bg: "bg-amber-100 dark:bg-amber-900/20",
-    icon: LogOut,
-  },
-  Manufacture: {
-    color: "text-indigo-600",
-    bg: "bg-indigo-100 dark:bg-indigo-900/20",
-    icon: Factory,
-  },
-  "Customer Provided": {
-    color: "text-purple-600",
-    bg: "bg-purple-100 dark:bg-purple-900/20",
-    icon: UserCheck,
-  },
+const TYPE_CONFIG: Record<
+  string,
+  { icon: React.ElementType; label: string }
+> = {
+  Purchase: { icon: ShoppingCart, label: "Purchase" },
+  "Material Transfer": { icon: ArrowRightLeft, label: "Transfer" },
+  "Material Issue": { icon: LogOut, label: "Issue" },
+  Manufacture: { icon: CheckCircle2, label: "Manufacture" },
+  "Customer Provided": { icon: XCircle, label: "Customer" },
 };
 
-const STATUS_CONFIG = {
-  Draft: { color: "text-slate-600", bg: "bg-slate-100", icon: Pencil },
-  Pending: { color: "text-amber-600", bg: "bg-amber-100", icon: Clock },
-  "Partially Ordered": {
-    color: "text-blue-600",
-    bg: "bg-blue-100",
-    icon: TrendingUp,
-  },
-  Ordered: {
-    color: "text-emerald-600",
-    bg: "bg-emerald-100",
-    icon: CheckCircle2,
-  },
-  Transferred: {
-    color: "text-indigo-600",
-    bg: "bg-indigo-100",
-    icon: CheckCircle2,
-  },
-  Cancelled: { color: "text-gray-400", bg: "bg-gray-100", icon: XCircle },
-  Stopped: { color: "text-red-600", bg: "bg-red-100", icon: StopCircle },
-};
+function getDisplayStatus(mr: MaterialRequest): string {
+  if (mr.docstatus === 2) return "Cancelled";
+  if (mr.docstatus === 0) return "Draft";
+  return mr.status || "Pending";
+}
+
+function formatDate(dateStr?: string): string {
+  if (!dateStr) return "—";
+  return new Date(dateStr).toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
 
 function MaterialRequestCard({
   mr,
@@ -104,186 +73,166 @@ function MaterialRequestCard({
   onView,
   onEdit,
   onDelete,
-  onCreatePO,
-  onCreateSE,
+}: {
+  mr: MaterialRequest;
+  index: number;
+  onView: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
 }) {
-  const typeConfig =
-    TYPE_CONFIG[mr.material_request_type] || TYPE_CONFIG.Purchase;
-  const statusConfig = STATUS_CONFIG[mr.status] || STATUS_CONFIG.Draft;
+  const displayStatus = getDisplayStatus(mr);
+  const typeConfig = TYPE_CONFIG[mr.material_request_type] || TYPE_CONFIG.Purchase;
   const TypeIcon = typeConfig.icon;
-  const StatusIcon = statusConfig.icon;
-  const isDraft = mr.status === "Draft" || mr.docstatus === 0;
-  const progress = mr.per_ordered || mr.per_received || 0;
+  const isDraft = mr.docstatus === 0;
+  const progress = mr.per_ordered || 0;
 
   return (
     <div
       className={cn(
-        "group relative bg-card rounded-[2rem] border border-border/50 p-6",
-        "hover:shadow-xl hover:shadow-primary/5 hover:border-primary/20",
-        "transition-all duration-300 cursor-pointer animate-in fade-in slide-in-from-bottom-4",
+        "group relative bg-card rounded-2xl border border-border/50",
+        "hover:border-primary/20 hover:shadow-xl hover:shadow-primary/5",
+        "transition-all duration-300 cursor-pointer overflow-hidden",
+        "animate-slide-up"
       )}
-      style={{ animationDelay: `${index * 50}ms` }}
+      style={{ animationDelay: `${index * 40}ms` }}
       onClick={onView}
     >
-      {/* Type Badge */}
       <div
         className={cn(
-          "absolute -top-2 left-6 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border",
-          typeConfig.bg,
-          typeConfig.color,
-          "border-current/10 shadow-sm",
+          "absolute top-0 left-0 right-0 h-1",
+          displayStatus === "Draft" && "bg-muted-foreground/50",
+          displayStatus === "Pending" && "bg-amber-500",
+          displayStatus === "Partially Ordered" && "bg-blue-500",
+          displayStatus === "Ordered" && "bg-emerald-500",
+          displayStatus === "Cancelled" && "bg-destructive/50"
         )}
-      >
-        <TypeIcon className="h-3 w-3 inline mr-1.5" />
-        {mr.material_request_type}
-      </div>
+      />
 
-      {/* Header */}
-      <div className="flex items-start justify-between mt-3 mb-4">
-        <div>
-          <h3 className="font-bold text-foreground group-hover:text-primary transition-colors tracking-tight">
-            {mr.name}
-          </h3>
-          <p className="text-[10px] text-muted-foreground mt-1 font-medium font-mono uppercase">
-            {mr.transaction_date
-              ? format(parseISO(mr.transaction_date), "MMM d, yyyy")
-              : "—"}
-          </p>
+      <div className="p-5">
+        <div className="flex items-start justify-between mb-4">
+          <div className="space-y-1">
+            <h3 className="font-bold text-lg text-foreground tracking-tight">
+              {mr.name}
+            </h3>
+            <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+              <TypeIcon className="h-3 w-3" />
+              {mr.material_request_type}
+            </p>
+          </div>
+          <StatusBadge status={displayStatus} size="sm" />
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 rounded-full hover:bg-primary/5"
+
+        <div className="grid grid-cols-3 gap-4 mb-4">
+          <div className="space-y-1">
+            <p className="text-[10px] font-bold uppercase text-muted-foreground/70 tracking-wider">
+              Date
+            </p>
+            <p className="text-sm font-medium text-foreground flex items-center gap-1">
+              <CalendarDays className="h-3 w-3 text-muted-foreground" />
+              {formatDate(mr.transaction_date)}
+            </p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-[10px] font-bold uppercase text-muted-foreground/70 tracking-wider">
+              Required By
+            </p>
+            <p className="text-sm font-medium text-foreground flex items-center gap-1">
+              <Clock className="h-3 w-3 text-muted-foreground" />
+              {formatDate(mr.schedule_date)}
+            </p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-[10px] font-bold uppercase text-muted-foreground/70 tracking-wider">
+              Company
+            </p>
+            <p className="text-sm font-medium text-foreground flex items-center gap-1 truncate">
+              <Building2 className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+              <span className="truncate">{mr.company || "—"}</span>
+            </p>
+          </div>
+        </div>
+
+        {progress > 0 && (
+          <div className="mb-4">
+            <div className="flex justify-between text-[10px] mb-1.5 font-bold uppercase tracking-tighter">
+              <span className="text-muted-foreground">Ordered</span>
+              <span className="text-primary">{Math.round(progress)}%</span>
+            </div>
+            <div className="h-2 bg-secondary/50 rounded-full overflow-hidden">
+              <div
+                className={cn(
+                  "h-full rounded-full transition-all duration-1000",
+                  progress >= 100
+                    ? "bg-emerald-500 shadow-sm"
+                    : "bg-primary"
+                )}
+                style={{ width: `${Math.min(progress, 100)}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between pt-4 border-t border-border/50">
+          <Badge
+            variant="secondary"
+            className="rounded-full text-[10px] font-bold px-2.5"
+          >
+            {mr.material_request_type}
+          </Badge>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 rounded-xl opacity-0 group-hover:opacity-100 transition-all"
+              >
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              className="rounded-xl border-border/50 shadow-xl bg-popover/95 backdrop-blur-xl p-1.5 min-w-[160px]"
             >
-              <MoreVertical className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56 rounded-2xl p-2">
-            <DropdownMenuItem
-              onClick={(e) => {
-                e.stopPropagation();
-                onView();
-              }}
-              className="rounded-xl"
-            >
-              <Eye className="h-4 w-4 mr-2" /> View Details
-            </DropdownMenuItem>
-            {isDraft && (
               <DropdownMenuItem
+                className="rounded-lg cursor-pointer"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onEdit();
+                  onView();
                 }}
-                className="rounded-xl"
               >
-                <Pencil className="h-4 w-4 mr-2" /> Edit Request
+                <Eye className="h-4 w-4 mr-2" />
+                View Details
               </DropdownMenuItem>
-            )}
-            {mr.material_request_type === "Purchase" && mr.docstatus === 1 && (
-              <DropdownMenuItem
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onCreatePO();
-                }}
-                className="rounded-xl text-primary font-bold"
-              >
-                <ShoppingCart className="h-4 w-4 mr-2" /> Create Purchase Order
-              </DropdownMenuItem>
-            )}
-            {mr.material_request_type === "Material Transfer" &&
-              mr.docstatus === 1 && (
+              {isDraft && (
                 <DropdownMenuItem
+                  className="rounded-lg cursor-pointer"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onCreateSE();
+                    onEdit();
                   }}
-                  className="rounded-xl text-primary font-bold"
                 >
-                  <ArrowRightLeft className="h-4 w-4 mr-2" /> Create Stock
-                  Transfer
+                  <Pencil className="h-4 w-4 mr-2" />
+                  Edit
                 </DropdownMenuItem>
               )}
-            {isDraft && (
-              <DropdownMenuItem
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete();
-                }}
-                className="rounded-xl text-destructive"
-              >
-                <Trash2 className="h-4 w-4 mr-2" /> Delete
-              </DropdownMenuItem>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
-      {/* Progress */}
-      {progress > 0 && (
-        <div className="mb-5">
-          <div className="flex justify-between text-[10px] mb-1.5 font-bold uppercase tracking-tighter">
-            <span className="text-muted-foreground">Fulfillment</span>
-            <span className="text-primary">{Math.round(progress)}%</span>
-          </div>
-          <div className="h-2 bg-secondary/50 rounded-full overflow-hidden">
-            <div
-              className={cn(
-                "h-full rounded-full transition-all duration-1000",
-                progress >= 100 ? "bg-emerald-500 shadow-sm" : "bg-primary",
+              {isDraft && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="rounded-lg cursor-pointer text-destructive focus:text-destructive"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete();
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
+                  </DropdownMenuItem>
+                </>
               )}
-              style={{ width: `${Math.min(progress, 100)}%` }}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Info Grid */}
-      <div className="grid grid-cols-1 gap-3 text-xs mb-5">
-        <div className="flex items-center gap-3 p-2 rounded-xl bg-secondary/30 border border-border/50">
-          <div className="p-1.5 rounded-lg bg-background shadow-sm">
-            <Building2 className="h-3 w-3 text-muted-foreground" />
-          </div>
-          <span className="font-bold truncate text-muted-foreground uppercase tracking-tight">
-            {mr.company}
-          </span>
-        </div>
-        <div className="flex items-center justify-between px-1">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Calendar className="h-3.5 w-3.5" />
-            <span className="font-medium tracking-tight">
-              Due:{" "}
-              {mr.schedule_date
-                ? format(parseISO(mr.schedule_date), "MMM d")
-                : "—"}
-            </span>
-          </div>
-          {mr.work_order && (
-            <div className="flex items-center gap-1.5 text-indigo-600 font-bold bg-indigo-500/5 px-2 py-1 rounded-full border border-indigo-500/10">
-              <Factory className="h-3 w-3" />
-              <span className="truncate max-w-[80px] text-[10px]">
-                {mr.work_order}
-              </span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Footer */}
-      <div className="pt-4 border-t border-border/50 flex justify-between items-center">
-        <Badge
-          className={cn(
-            "rounded-full text-[10px] font-black px-3 border-0 shadow-sm",
-            statusConfig.bg,
-            statusConfig.color,
-          )}
-        >
-          <StatusIcon className="h-3 w-3 mr-1.5" />
-          {mr.status}
-        </Badge>
-        <div className="h-8 w-8 rounded-full flex items-center justify-center bg-secondary/50 text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors">
-          <ArrowUpRight className="h-4 w-4" />
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     </div>
@@ -292,14 +241,14 @@ function MaterialRequestCard({
 
 export default function MaterialRequestListPage() {
   const router = useRouter();
-  const [searchTerm, setSearchTerm] = useState("");
-  const [typeFilter, setTypeFilter] = useState("all");
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [deleteTarget, setDeleteTarget] = useState<MaterialRequest | null>(null);
 
   const {
     data: requests,
     isLoading,
-    refetch,
+    error,
   } = useFrappeList<MaterialRequest>("Material Request", {
     fields: [
       "name",
@@ -310,145 +259,182 @@ export default function MaterialRequestListPage() {
       "company",
       "transaction_date",
       "schedule_date",
-      "work_order",
       "docstatus",
     ],
     orderBy: { field: "creation", order: "desc" },
+    search,
     limit: 100,
   });
 
   const deleteMutation = useFrappeDelete("Material Request", {
-    onSuccess: () => {
-      toast.success("Material Request deleted");
-      refetch();
-      setDeleteTarget(null);
-    },
-    onError: (err) => toast.error(err.message),
+    onSuccess: () => setDeleteTarget(null),
   });
 
-  const filtered = useMemo(() => {
+  const filteredRequests = useMemo(() => {
     if (!requests) return [];
-    return requests.filter((mr) => {
-      const matchesSearch =
-        !searchTerm ||
-        mr.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        mr.work_order?.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesType =
-        typeFilter === "all" || mr.material_request_type === typeFilter;
-      return matchesSearch && matchesType;
-    });
-  }, [requests, searchTerm, typeFilter]);
+    if (statusFilter === "all") return requests;
+    return requests.filter((mr) => getDisplayStatus(mr) === statusFilter);
+  }, [requests, statusFilter]);
 
-  const typeCounts = useMemo(() => {
-    const counts: Record<string, number> = { all: requests?.length || 0 };
-    requests?.forEach((mr) => {
-      counts[mr.material_request_type] =
-        (counts[mr.material_request_type] || 0) + 1;
-    });
-    return counts;
+  const kpis = useMemo(() => {
+    if (!requests) return { total: 0, draft: 0, pending: 0, partiallyOrdered: 0 };
+    return {
+      total: requests.length,
+      draft: requests.filter((mr) => mr.docstatus === 0).length,
+      pending: requests.filter((mr) => mr.docstatus === 1 && mr.status === "Pending").length,
+      partiallyOrdered: requests.filter((mr) => mr.status === "Partially Ordered").length,
+    };
   }, [requests]);
 
-  if (isLoading) return <LoadingState type="list" />;
+  const statusCounts = useMemo(() => {
+    if (!requests) return {};
+    return requests.reduce(
+      (acc, mr) => {
+        const s = getDisplayStatus(mr);
+        acc[s] = (acc[s] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>
+    );
+  }, [requests]);
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    await deleteMutation.mutateAsync(deleteTarget.name);
+  };
+
+  if (isLoading) return <LoadingState type="cards" count={6} />;
+  if (error)
+    return (
+      <div className="p-8 text-center text-destructive">
+        Failed to load material requests
+      </div>
+    );
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Material Requests"
-        subtitle="Manage inventory requirements and purchasing demand"
+        subtitle={`${filteredRequests.length} request${filteredRequests.length !== 1 ? "s" : ""}`}
+        showSearch
+        searchValue={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search by ID..."
         primaryAction={{
-          label: "Create Request",
+          label: "New Material Request",
           onClick: () => router.push("/stock/material-request/new"),
           icon: <Plus className="h-4 w-4" />,
         }}
       />
 
-      {/* Filters */}
-      <div className="bg-card rounded-[2rem] border border-border/50 p-2 shadow-sm flex flex-col lg:flex-row gap-2">
-        <div className="relative flex-1 group">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
-          <Input
-            placeholder="Search by request ID or work order..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-11 h-12 rounded-[1.5rem] bg-transparent border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-          />
-        </div>
-
-        <Tabs
-          value={typeFilter}
-          onValueChange={setTypeFilter}
-          className="lg:w-auto"
-        >
-          <TabsList className="bg-secondary/30 p-1 rounded-[1.5rem] h-12 flex-wrap lg:flex-nowrap">
-            <TabsTrigger
-              value="all"
-              className="rounded-full px-5 h-10 font-bold"
-            >
-              All ({typeCounts.all || 0})
-            </TabsTrigger>
-            <TabsTrigger
-              value="Purchase"
-              className="rounded-full px-5 h-10 font-bold"
-            >
-              <ShoppingCart className="h-3.5 w-3.5 mr-2" /> Purchase
-            </TabsTrigger>
-            <TabsTrigger
-              value="Material Transfer"
-              className="rounded-full px-5 h-10 font-bold"
-            >
-              <ArrowRightLeft className="h-3.5 w-3.5 mr-2" /> Transfer
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <KPICard
+          title="Total Requests"
+          value={kpis.total}
+          icon={Package}
+          isLoading={isLoading}
+        />
+        <KPICard
+          title="Draft"
+          value={kpis.draft}
+          icon={FileText}
+          variant="warning"
+          isLoading={isLoading}
+        />
+        <KPICard
+          title="Pending"
+          value={kpis.pending}
+          icon={Clock}
+          variant="default"
+          isLoading={isLoading}
+        />
+        <KPICard
+          title="Partially Ordered"
+          value={kpis.partiallyOrdered}
+          icon={TrendingUp}
+          variant="success"
+          isLoading={isLoading}
+        />
       </div>
 
-      {/* Content */}
-      {filtered.length === 0 ? (
+      <div className="flex gap-2 flex-wrap">
+        {[
+          { key: "all", label: "All", count: requests?.length || 0 },
+          { key: "Draft", label: "Draft", count: statusCounts.Draft || 0 },
+          { key: "Pending", label: "Pending", count: statusCounts.Pending || 0 },
+          {
+            key: "Partially Ordered",
+            label: "Partially Ordered",
+            count: statusCounts["Partially Ordered"] || 0,
+          },
+          { key: "Ordered", label: "Ordered", count: statusCounts.Ordered || 0 },
+        ].map((status) => (
+          <Button
+            key={status.key}
+            variant={statusFilter === status.key ? "default" : "outline"}
+            size="sm"
+            className={cn(
+              "rounded-full gap-2 transition-all",
+              statusFilter === status.key
+                ? "shadow-lg shadow-primary/20"
+                : "hover:bg-secondary/80"
+            )}
+            onClick={() => setStatusFilter(status.key)}
+          >
+            {status.label}
+            <Badge
+              variant="secondary"
+              className={cn(
+                "h-5 min-w-[20px] px-1.5 text-[10px] font-bold",
+                statusFilter === status.key
+                  ? "bg-primary-foreground/20 text-primary-foreground"
+                  : "bg-secondary"
+              )}
+            >
+              {status.count}
+            </Badge>
+          </Button>
+        ))}
+      </div>
+
+      {!requests || requests.length === 0 ? (
         <EmptyState
-          icon={FileInput}
-          title="No requests found"
-          description={
-            searchTerm
-              ? "Change your search or filters to see results"
-              : "Start by creating a new material request for your inventory needs"
-          }
+          title="No material requests found"
+          description="Create your first material request to start tracking procurement"
           action={
-            searchTerm
-              ? undefined
-              : {
-                  label: "New Request",
-                  onClick: () => router.push("/stock/material-request/new"),
-                }
+            <Button
+              onClick={() => router.push("/stock/material-request/new")}
+              className="rounded-full"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Create Material Request
+            </Button>
           }
         />
+      ) : filteredRequests.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">
+          <FileText className="h-12 w-12 mx-auto mb-4 opacity-30" />
+          <p className="font-medium">No material requests match this filter</p>
+          <p className="text-sm mt-1">Try selecting a different status</p>
+        </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filtered.map((mr, idx) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {filteredRequests.map((mr, index) => (
             <MaterialRequestCard
               key={mr.name}
               mr={mr}
-              index={idx}
+              index={index}
               onView={() =>
                 router.push(
-                  `/stock/material-request/${encodeURIComponent(mr.name)}`,
+                  `/stock/material-request/${encodeURIComponent(mr.name)}`
                 )
               }
               onEdit={() =>
                 router.push(
-                  `/stock/material-request/${encodeURIComponent(mr.name)}/edit`,
+                  `/stock/material-request/${encodeURIComponent(mr.name)}/edit`
                 )
               }
-              onDelete={() => setDeleteTarget(mr.name)}
-              onCreatePO={() =>
-                router.push(
-                  `/buying/purchase-order/new?material_request=${encodeURIComponent(mr.name)}`,
-                )
-              }
-              onCreateSE={() =>
-                router.push(
-                  `/stock/stock-entry/new?material_request=${encodeURIComponent(mr.name)}&purpose=Material Transfer`,
-                )
-              }
+              onDelete={() => setDeleteTarget(mr)}
             />
           ))}
         </div>
@@ -457,11 +443,12 @@ export default function MaterialRequestListPage() {
       <ConfirmDialog
         open={!!deleteTarget}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title="Delete Material Request?"
-        description="This action will permanently remove the request. You can only delete draft requests that have not been submitted."
-        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget)}
-        isLoading={deleteMutation.isPending}
+        title="Delete Material Request"
+        description={`Are you sure you want to delete "${deleteTarget?.name}"? This action cannot be undone.`}
+        confirmText="Delete"
         variant="destructive"
+        onConfirm={handleDeleteConfirm}
+        loading={deleteMutation.isPending}
       />
     </div>
   );

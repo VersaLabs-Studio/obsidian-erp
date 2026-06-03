@@ -1,4 +1,6 @@
-// @ts-nocheck
+// app/stock/delivery-note/page.tsx
+// Obsidian ERP v4.0 - Delivery Notes List Page (Premium Card Design)
+
 "use client";
 
 import { useState, useMemo } from "react";
@@ -10,25 +12,19 @@ import {
   MoreVertical,
   Pencil,
   Trash2,
-  Search,
-  Truck,
-  CheckCircle2,
-  Clock,
-  XCircle,
   Eye,
-  Package,
-  Calendar,
-  MapPin,
+  CalendarDays,
   User,
-  FileText,
-  RotateCcw,
-  AlertTriangle,
-  Lock,
-  Receipt,
+  Truck,
   Building2,
+  DollarSign,
+  Package,
+  Receipt,
+  CheckCircle2,
+  FileText,
+  ArrowRight,
+  RotateCcw,
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,52 +35,37 @@ import {
 import { useFrappeList, useFrappeDelete } from "@/hooks/generic";
 import {
   PageHeader,
-  LoadingState,
   EmptyState,
+  LoadingState,
   ConfirmDialog,
 } from "@/components/smart";
+import { StatusBadge } from "@/components/smart/status-badge";
+import { KPICard } from "@/components/dashboard/KPICard";
+import { CommandPalette } from "@/components/command/CommandPalette";
 import type { DeliveryNote } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
-import { format, parseISO } from "date-fns";
 
-const STATUS_CONFIG = {
-  Draft: {
-    color: "text-slate-600",
-    bg: "bg-slate-100 dark:bg-slate-800",
-    icon: Pencil,
-  },
-  "To Bill": {
-    color: "text-amber-600",
-    bg: "bg-amber-100 dark:bg-amber-900/20",
-    icon: FileText,
-  },
-  Completed: {
-    color: "text-emerald-600",
-    bg: "bg-emerald-100 dark:bg-emerald-900/20",
-    icon: CheckCircle2,
-  },
-  Return: {
-    color: "text-red-600",
-    bg: "bg-red-100 dark:bg-red-900/20",
-    icon: RotateCcw,
-  },
-  "Return Issued": {
-    color: "text-orange-600",
-    bg: "bg-orange-100 dark:bg-orange-900/20",
-    icon: AlertTriangle,
-  },
-  Cancelled: {
-    color: "text-gray-400",
-    bg: "bg-gray-100 dark:bg-gray-800",
-    icon: XCircle,
-  },
-  Closed: {
-    color: "text-gray-500",
-    bg: "bg-gray-100 dark:bg-gray-800",
-    icon: Lock,
-  },
-};
+function getDisplayStatus(dn: DeliveryNote): string {
+  if (dn.docstatus === 2) return "Cancelled";
+  return dn.status || "Draft";
+}
+
+function getStatusVariant(
+  status: string
+): "default" | "success" | "warning" | "destructive" {
+  switch (status) {
+    case "Completed":
+      return "success";
+    case "To Bill":
+      return "warning";
+    case "Return":
+    case "Return Issued":
+    case "Cancelled":
+      return "destructive";
+    default:
+      return "default";
+  }
+}
 
 function DeliveryNoteCard({
   dn,
@@ -93,192 +74,215 @@ function DeliveryNoteCard({
   onEdit,
   onDelete,
   onCreateInvoice,
+}: {
+  dn: DeliveryNote;
+  index: number;
+  onView: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  onCreateInvoice: () => void;
 }) {
-  const statusConfig = STATUS_CONFIG[dn.status] || STATUS_CONFIG.Draft;
-  const StatusIcon = statusConfig.icon;
+  const displayStatus = getDisplayStatus(dn);
   const isDraft = dn.docstatus === 0;
   const canInvoice = dn.status === "To Bill";
-  const isReturn = dn.is_return === 1;
   const billedPercent = dn.per_billed || 0;
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("en-ET", {
+      style: "currency",
+      currency: "ETB",
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount || 0);
+  };
+
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return "—";
+    return new Date(dateStr).toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
 
   return (
     <div
       className={cn(
-        "group relative bg-card rounded-2xl border p-6",
-        "hover:shadow-xl hover:shadow-primary/5 hover:border-primary/20",
-        "transition-all duration-300 cursor-pointer animate-in fade-in slide-in-from-bottom-4",
-        isReturn ? "border-red-200 dark:border-red-800/50" : "border-border/50",
+        "group relative bg-card rounded-2xl border border-border/50",
+        "hover:border-primary/20 hover:shadow-xl hover:shadow-primary/5",
+        "transition-all duration-300 cursor-pointer overflow-hidden",
+        "animate-slide-up"
       )}
-      style={{ animationDelay: `${index * 50}ms` }}
+      style={{ animationDelay: `${index * 40}ms` }}
       onClick={onView}
     >
-      {/* Return Badge */}
-      {isReturn && (
-        <div className="absolute -top-2 -left-2 px-2.5 py-1 bg-red-500 text-white text-[10px] font-bold rounded-full shadow-lg">
-          RETURN
-        </div>
-      )}
+      {/* Status Indicator Bar */}
+      <div
+        className={cn(
+          "absolute top-0 left-0 right-0 h-1",
+          displayStatus === "Draft" && "bg-muted-foreground/50",
+          displayStatus === "To Bill" && "bg-amber-500",
+          displayStatus === "Completed" && "bg-emerald-500",
+          displayStatus === "Return" && "bg-destructive",
+          displayStatus === "Return Issued" && "bg-destructive",
+          displayStatus === "Cancelled" && "bg-muted-foreground/50",
+          displayStatus === "Closed" && "bg-muted-foreground/50"
+        )}
+      />
 
-      {/* Header */}
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div
-            className={cn(
-              "h-12 w-12 rounded-xl flex items-center justify-center border",
-              statusConfig.bg,
-              statusConfig.color,
-            )}
-          >
-            <Truck className="h-6 w-6" />
+      <div className="p-5">
+        {/* Header Row */}
+        <div className="flex items-start justify-between mb-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-lg text-foreground tracking-tight">
+                {dn.name}
+              </h3>
+              <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
+            <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+              <User className="h-3 w-3" />
+              {dn.customer_name || dn.customer || "No customer"}
+            </p>
           </div>
-          <div>
-            <h3 className="font-bold text-foreground group-hover:text-primary transition-colors">
-              {dn.name}
-            </h3>
-            <p className="text-xs text-muted-foreground">
-              {dn.posting_date
-                ? format(parseISO(dn.posting_date), "MMM d, yyyy")
-                : "—"}
+
+          {/* Status Badge */}
+          <StatusBadge
+            status={displayStatus}
+            size="sm"
+          />
+        </div>
+
+        {/* Info Grid */}
+        <div className="grid grid-cols-3 gap-4 mb-4">
+          <div className="space-y-1">
+            <p className="text-[10px] font-bold uppercase text-muted-foreground/70 tracking-wider">
+              Posting Date
+            </p>
+            <p className="text-sm font-medium text-foreground flex items-center gap-1">
+              <CalendarDays className="h-3 w-3 text-muted-foreground" />
+              {formatDate(dn.posting_date)}
+            </p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-[10px] font-bold uppercase text-muted-foreground/70 tracking-wider">
+              Billed
+            </p>
+            <p className="text-sm font-medium text-foreground flex items-center gap-1">
+              <Receipt className="h-3 w-3 text-muted-foreground" />
+              {Math.round(billedPercent)}%
+            </p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-[10px] font-bold uppercase text-muted-foreground/70 tracking-wider">
+              Company
+            </p>
+            <p className="text-sm font-medium text-foreground flex items-center gap-1 truncate">
+              <Building2 className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+              <span className="truncate">{dn.company || "—"}</span>
             </p>
           </div>
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 rounded-full"
+
+        {/* Billing Progress Bar */}
+        {billedPercent > 0 && billedPercent < 100 && (
+          <div className="mb-4">
+            <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary rounded-full transition-all"
+                style={{ width: `${billedPercent}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Footer with Amount and Actions */}
+        <div className="flex items-center justify-between pt-4 border-t border-border/50">
+          {/* Grand Total */}
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
+              <DollarSign className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase text-muted-foreground/70 tracking-wider">
+                Grand Total
+              </p>
+              <p className="text-lg font-bold text-foreground tracking-tight">
+                {formatCurrency(dn.grand_total ?? 0)}
+              </p>
+            </div>
+          </div>
+
+          {/* Actions */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 rounded-xl opacity-0 group-hover:opacity-100 transition-all"
+              >
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              className="rounded-xl border-border/50 shadow-xl bg-popover/95 backdrop-blur-xl p-1.5 min-w-[160px]"
             >
-              <MoreVertical className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48 rounded-xl">
-            <DropdownMenuItem
-              onClick={(e) => {
-                e.stopPropagation();
-                onView();
-              }}
-            >
-              <Eye className="h-4 w-4 mr-2" /> View Details
-            </DropdownMenuItem>
-            {isDraft && (
               <DropdownMenuItem
+                className="rounded-lg cursor-pointer"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onEdit();
+                  onView();
                 }}
               >
-                <Pencil className="h-4 w-4 mr-2" /> Edit
+                <Eye className="h-4 w-4 mr-2" />
+                View Details
               </DropdownMenuItem>
-            )}
-            {canInvoice && (
-              <>
-                <DropdownMenuSeparator />
+              {isDraft && (
                 <DropdownMenuItem
+                  className="rounded-lg cursor-pointer"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onCreateInvoice();
+                    onEdit();
                   }}
-                  className="text-emerald-600 focus:text-emerald-600"
                 >
-                  <Receipt className="h-4 w-4 mr-2" /> Create Invoice
+                  <Pencil className="h-4 w-4 mr-2" />
+                  Edit
                 </DropdownMenuItem>
-              </>
-            )}
-            {isDraft && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDelete();
-                  }}
-                  className="text-destructive focus:text-destructive"
-                >
-                  <Trash2 className="h-4 w-4 mr-2" /> Delete
-                </DropdownMenuItem>
-              </>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
-      {/* Customer Info */}
-      <div className="mb-4 p-3 bg-secondary/20 rounded-xl">
-        <div className="flex items-center gap-2 text-sm">
-          <Building2 className="h-4 w-4 text-primary shrink-0" />
-          <span className="font-bold truncate">
-            {dn.customer_name || dn.customer}
-          </span>
+              )}
+              {canInvoice && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="rounded-lg cursor-pointer"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onCreateInvoice();
+                    }}
+                  >
+                    <Receipt className="h-4 w-4 mr-2" />
+                    Create Invoice
+                  </DropdownMenuItem>
+                </>
+              )}
+              {isDraft && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="rounded-lg cursor-pointer text-destructive focus:text-destructive"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete();
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
-        {dn.shipping_address_name && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
-            <MapPin className="h-3 w-3 shrink-0" />
-            <span className="truncate">{dn.shipping_address_name}</span>
-          </div>
-        )}
-      </div>
-
-      {/* Logistics Info */}
-      <div className="grid grid-cols-2 gap-3 text-xs mb-4">
-        <div className="flex items-center gap-1.5 text-muted-foreground">
-          <Package className="h-3.5 w-3.5" />
-          <span>{dn.total_qty || 0} items</span>
-        </div>
-        {dn.driver_name && (
-          <div className="flex items-center gap-1.5 text-muted-foreground">
-            <User className="h-3.5 w-3.5" />
-            <span className="truncate">{dn.driver_name}</span>
-          </div>
-        )}
-        {dn.vehicle_no && (
-          <div className="flex items-center gap-1.5 text-muted-foreground">
-            <Truck className="h-3.5 w-3.5" />
-            <span className="font-mono">{dn.vehicle_no}</span>
-          </div>
-        )}
-        {dn.grand_total > 0 && (
-          <div className="flex items-center gap-1.5 text-foreground font-bold">
-            ETB {dn.grand_total?.toLocaleString()}
-          </div>
-        )}
-      </div>
-
-      {/* Billing Progress (for To Bill status) */}
-      {canInvoice && billedPercent < 100 && (
-        <div className="mb-4">
-          <div className="flex justify-between text-[10px] mb-1">
-            <span className="text-muted-foreground uppercase font-bold tracking-wider">
-              Billed
-            </span>
-            <span className="font-bold">{Math.round(billedPercent)}%</span>
-          </div>
-          <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
-            <div
-              className="h-full bg-amber-500 rounded-full"
-              style={{ width: `${billedPercent}%` }}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Footer */}
-      <div className="pt-3 border-t border-border/50 flex items-center justify-between">
-        <Badge
-          className={cn(
-            "rounded-full text-[10px] font-bold border",
-            statusConfig.bg,
-            statusConfig.color,
-          )}
-        >
-          <StatusIcon className="h-3 w-3 mr-1" />
-          {dn.status}
-        </Badge>
-        {dn.lr_no && (
-          <span className="text-[10px] font-mono text-muted-foreground">
-            LR: {dn.lr_no}
-          </span>
-        )}
       </div>
     </div>
   );
@@ -286,14 +290,14 @@ function DeliveryNoteCard({
 
 export default function DeliveryNoteListPage() {
   const router = useRouter();
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [deleteTarget, setDeleteTarget] = useState<DeliveryNote | null>(null);
 
   const {
     data: deliveryNotes,
     isLoading,
-    refetch,
+    error,
   } = useFrappeList<DeliveryNote>("Delivery Note", {
     fields: [
       "name",
@@ -302,128 +306,215 @@ export default function DeliveryNoteListPage() {
       "posting_date",
       "status",
       "grand_total",
-      "total_qty",
       "per_billed",
-      "driver_name",
-      "vehicle_no",
-      "lr_no",
-      "shipping_address_name",
-      "is_return",
+      "company",
       "docstatus",
+      "is_return",
     ],
     orderBy: { field: "posting_date", order: "desc" },
+    search,
     limit: 100,
   });
 
   const deleteMutation = useFrappeDelete("Delivery Note", {
-    onSuccess: () => {
-      toast.success("Delivery Note deleted");
-      refetch();
-      setDeleteTarget(null);
-    },
+    onSuccess: () => setDeleteTarget(null),
   });
 
-  const filtered = useMemo(() => {
+  const filteredDeliveryNotes = useMemo(() => {
     if (!deliveryNotes) return [];
-    return deliveryNotes.filter((dn) => {
-      const matchesSearch =
-        !searchTerm ||
-        dn.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        dn.customer?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        dn.customer_name?.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesStatus =
-        statusFilter === "all" || dn.status === statusFilter;
-      return matchesSearch && matchesStatus;
-    });
-  }, [deliveryNotes, searchTerm, statusFilter]);
+    let result = deliveryNotes;
+
+    if (statusFilter !== "all") {
+      result = result.filter((dn) => {
+        const displayStatus = getDisplayStatus(dn);
+        return displayStatus === statusFilter;
+      });
+    }
+
+    return result;
+  }, [deliveryNotes, statusFilter]);
 
   const statusCounts = useMemo(() => {
-    const counts: Record<string, number> = { all: deliveryNotes?.length || 0 };
-    deliveryNotes?.forEach((dn) => {
-      counts[dn.status] = (counts[dn.status] || 0) + 1;
-    });
-    return counts;
+    if (!deliveryNotes) return {};
+    return deliveryNotes.reduce((acc, dn) => {
+      const status = getDisplayStatus(dn);
+      acc[status] = (acc[status] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
   }, [deliveryNotes]);
 
-  if (isLoading) return <LoadingState message="Loading delivery notes..." />;
+  const kpis = useMemo(() => {
+    if (!deliveryNotes)
+      return { total: 0, draft: 0, toBill: 0, completed: 0 };
+    return {
+      total: deliveryNotes.length,
+      draft: deliveryNotes.filter((dn) => dn.status === "Draft").length,
+      toBill: deliveryNotes.filter((dn) => dn.status === "To Bill").length,
+      completed: deliveryNotes.filter((dn) => dn.status === "Completed").length,
+    };
+  }, [deliveryNotes]);
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    await deleteMutation.mutateAsync(deleteTarget.name);
+  };
+
+  if (isLoading) return <LoadingState type="cards" count={6} />;
+  if (error)
+    return (
+      <div className="p-8 text-center text-destructive">
+        Failed to load delivery notes
+      </div>
+    );
 
   return (
     <div className="space-y-6">
+      <CommandPalette />
+
       <PageHeader
         title="Delivery Notes"
-        subtitle="Manage deliveries, gate passes, and dispatch tracking"
-        primaryAction={{
-          label: "New Delivery",
-          onClick: () => router.push("/stock/delivery-note/new"),
-          icon: <Plus className="h-4 w-4" />,
-        }}
+        subtitle={`${filteredDeliveryNotes.length} note${
+          filteredDeliveryNotes.length !== 1 ? "s" : ""
+        }`}
+        showSearch
+        searchValue={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search by DN#, customer..."
+        actions={
+          <Button
+            className="rounded-full shadow-lg shadow-primary/20"
+            onClick={() => router.push("/stock/delivery-note/new")}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            New Delivery Note
+          </Button>
+        }
       />
 
-      {/* Filters */}
-      <div className="flex flex-col lg:flex-row gap-4">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search by DN#, customer..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10 rounded-full"
-          />
-        </div>
-
-        <Tabs value={statusFilter} onValueChange={setStatusFilter}>
-          <TabsList className="bg-secondary/30 p-1 rounded-full h-auto flex-wrap">
-            <TabsTrigger value="all" className="rounded-full">
-              All ({statusCounts.all || 0})
-            </TabsTrigger>
-            <TabsTrigger value="Draft" className="rounded-full">
-              Draft
-            </TabsTrigger>
-            <TabsTrigger value="To Bill" className="rounded-full">
-              <FileText className="h-3 w-3 mr-1" /> To Bill
-            </TabsTrigger>
-            <TabsTrigger value="Completed" className="rounded-full">
-              <CheckCircle2 className="h-3 w-3 mr-1" /> Completed
-            </TabsTrigger>
-            <TabsTrigger value="Return" className="rounded-full">
-              <RotateCcw className="h-3 w-3 mr-1" /> Returns
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
+      {/* KPI Bar */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <KPICard
+          title="Total DNs"
+          value={kpis.total}
+          icon={Package}
+          isLoading={isLoading}
+        />
+        <KPICard
+          title="Draft"
+          value={kpis.draft}
+          icon={FileText}
+          variant="warning"
+          isLoading={isLoading}
+        />
+        <KPICard
+          title="To Bill"
+          value={kpis.toBill}
+          icon={Receipt}
+          variant="default"
+          isLoading={isLoading}
+        />
+        <KPICard
+          title="Completed"
+          value={kpis.completed}
+          icon={CheckCircle2}
+          variant="success"
+          isLoading={isLoading}
+        />
       </div>
 
-      {/* Grid */}
-      {filtered.length === 0 ? (
+      {/* Status Filter Pills */}
+      <div className="flex gap-2 flex-wrap">
+        {[
+          { key: "all", label: "All", count: deliveryNotes?.length || 0 },
+          { key: "Draft", label: "Draft", count: statusCounts.Draft || 0 },
+          {
+            key: "To Bill",
+            label: "To Bill",
+            count: statusCounts["To Bill"] || 0,
+          },
+          {
+            key: "Completed",
+            label: "Completed",
+            count: statusCounts.Completed || 0,
+          },
+          {
+            key: "Return",
+            label: "Return",
+            count: statusCounts.Return || 0,
+          },
+        ].map((status) => (
+          <Button
+            key={status.key}
+            variant={statusFilter === status.key ? "default" : "outline"}
+            size="sm"
+            className={cn(
+              "rounded-full gap-2 transition-all",
+              statusFilter === status.key
+                ? "shadow-lg shadow-primary/20"
+                : "hover:bg-secondary/80"
+            )}
+            onClick={() => setStatusFilter(status.key)}
+          >
+            {status.label}
+            <Badge
+              variant="secondary"
+              className={cn(
+                "h-5 min-w-[20px] px-1.5 text-[10px] font-bold",
+                statusFilter === status.key
+                  ? "bg-primary-foreground/20 text-primary-foreground"
+                  : "bg-secondary"
+              )}
+            >
+              {status.count}
+            </Badge>
+          </Button>
+        ))}
+      </div>
+
+      {/* Delivery Notes Grid */}
+      {!deliveryNotes || deliveryNotes.length === 0 ? (
         <EmptyState
-          icon={Truck}
-          title="No delivery notes"
-          description={
-            searchTerm
-              ? "Try different search terms"
-              : "Create your first delivery"
+          title="No delivery notes found"
+          description="Create your first delivery note to start tracking dispatches"
+          action={
+            <Button
+              onClick={() => router.push("/stock/delivery-note/new")}
+              className="rounded-full"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Create Delivery Note
+            </Button>
           }
         />
+      ) : filteredDeliveryNotes.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">
+          <FileText className="h-12 w-12 mx-auto mb-4 opacity-30" />
+          <p className="font-medium">No delivery notes match this filter</p>
+          <p className="text-sm mt-1">Try selecting a different status</p>
+        </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {filtered.map((dn, idx) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {filteredDeliveryNotes.map((dn, index) => (
             <DeliveryNoteCard
               key={dn.name}
               dn={dn}
-              index={idx}
+              index={index}
               onView={() =>
                 router.push(
-                  `/stock/delivery-note/${encodeURIComponent(dn.name)}`,
+                  `/stock/delivery-note/${encodeURIComponent(dn.name)}`
                 )
               }
               onEdit={() =>
                 router.push(
-                  `/stock/delivery-note/${encodeURIComponent(dn.name)}/edit`,
+                  `/stock/delivery-note/${encodeURIComponent(dn.name)}/edit`
                 )
               }
-              onDelete={() => setDeleteTarget(dn.name)}
+              onDelete={() => setDeleteTarget(dn)}
               onCreateInvoice={() =>
                 router.push(
-                  `/accounting/sales-invoice/new?delivery_note=${encodeURIComponent(dn.name)}`,
+                  `/accounting/sales-invoice/new?delivery_note=${encodeURIComponent(
+                    dn.name
+                  )}`
                 )
               }
             />
@@ -431,14 +522,16 @@ export default function DeliveryNoteListPage() {
         </div>
       )}
 
+      {/* Delete Confirmation */}
       <ConfirmDialog
         open={!!deleteTarget}
-        onOpenChange={() => setDeleteTarget(null)}
-        title="Delete Delivery Note?"
-        description="This will permanently delete this delivery note."
-        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget)}
-        loading={deleteMutation.isPending}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title="Delete Delivery Note"
+        description={`Are you sure you want to delete delivery note "${deleteTarget?.name}"? This action cannot be undone.`}
+        confirmText="Delete"
         variant="destructive"
+        onConfirm={handleDeleteConfirm}
+        loading={deleteMutation.isPending}
       />
     </div>
   );

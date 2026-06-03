@@ -1,96 +1,108 @@
-// @ts-nocheck
 "use client";
 
+// app/stock/delivery-note/[name]/page.tsx
+// Obsidian ERP v4.0 — Delivery Note Detail (V4 Golden Template)
+// Action-oriented detail with FlowTracker, WhatsNext, ActivityTimeline.
+// Real flow-chain resolution: upstream SO via items.against_sales_order,
+// downstream Sales Invoice via useFrappeList. OKLCH tokens only.
+
+import { useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import Link from "next/link";
+import { toast } from "sonner";
 import {
-  Pencil,
+  Edit3,
+  Send,
   Trash2,
+  Loader2,
   Truck,
   Package,
-  MapPin,
-  User,
-  Calendar,
-  CheckCircle2,
-  XCircle,
-  FileText,
   Receipt,
-  RotateCcw,
-  Building2,
-  Printer,
-  CreditCard,
-  Lock,
 } from "lucide-react";
-import {
-  useFrappeDoc,
-  useFrappeDelete,
-  useFrappeUpdate,
-} from "@/hooks/generic";
-import {
-  PageHeader,
-  LoadingState,
-  EmptyState,
-  ConfirmDialog,
-} from "@/components/smart";
-import { InfoCard, DataPoint } from "@/components/ui/info-card";
-import { useState } from "react";
-import { toast } from "sonner";
-import type { DeliveryNote } from "@/types/doctype-types";
-import { cn } from "@/lib/utils";
-import { format, parseISO } from "date-fns";
 
-const STATUS_CONFIG = {
-  Draft: {
-    color: "text-slate-600",
-    bg: "bg-slate-50",
-    border: "border-slate-200",
-    icon: Pencil,
-  },
-  "To Bill": {
-    color: "text-amber-600",
-    bg: "bg-amber-50",
-    border: "border-amber-200",
-    icon: FileText,
-  },
-  Completed: {
-    color: "text-emerald-600",
-    bg: "bg-emerald-50",
-    border: "border-emerald-200",
-    icon: CheckCircle2,
-  },
-  Return: {
-    color: "text-red-600",
-    bg: "bg-red-50",
-    border: "border-red-200",
-    icon: RotateCcw,
-  },
-  Cancelled: {
-    color: "text-gray-400",
-    bg: "bg-gray-50",
-    border: "border-gray-200",
-    icon: XCircle,
-  },
-  Closed: {
-    color: "text-gray-500",
-    bg: "bg-gray-50",
-    border: "border-gray-200",
-    icon: Lock,
-  },
-};
+import { PageHeader, LoadingState, ConfirmDialog } from "@/components/smart";
+import { StatusBadge } from "@/components/smart/status-badge";
+import { InfoCard, DataPoint } from "@/components/ui/info-card";
+import { Button } from "@/components/ui/button";
+import { FlowTracker } from "@/components/flows/FlowTracker";
+import { WhatsNext } from "@/components/smart/WhatsNext";
+import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
+import { resolveFlowChain } from "@/lib/flows/flow-chain-resolver";
+import { useFrappeDoc, useFrappeList, useFrappeUpdate, useFrappeDelete } from "@/hooks/generic";
+import type { DeliveryNote } from "@/types/doctype-types";
+import type { FlowStageStatus } from "@/types/flow-types";
+
+const ETB = new Intl.NumberFormat("en-ET", { style: "currency", currency: "ETB" });
+
+interface DNItem {
+  item_code: string;
+  item_name?: string;
+  description?: string;
+  qty: number;
+  rate: number;
+  amount: number;
+  uom?: string;
+  warehouse?: string;
+  against_sales_order?: string;
+}
 
 export default function DeliveryNoteDetailPage() {
-  const { name } = useParams();
+  const params = useParams();
   const router = useRouter();
-  const dnName = decodeURIComponent(name as string);
+  const name = decodeURIComponent(String(params.name));
+
+  const [confirmSubmit, setConfirmSubmit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
 
-  const {
-    data: dn,
-    isLoading,
-    refetch,
-    error,
-  } = useFrappeDoc<DeliveryNote>("Delivery Note", dnName);
+  const { data: dn, isLoading, error } = useFrappeDoc<DeliveryNote>(
+    "Delivery Note",
+    name,
+  );
+
+  // -- Upstream resolution: Sales Order from items.against_sales_order --------
+  const soName = useMemo(() => {
+    const items = ((dn?.items ?? []) as Array<{ against_sales_order?: string }>);
+    return items.find((i) => i?.against_sales_order)?.against_sales_order;
+  }, [dn]);
+
+  // -- Downstream resolution: Sales Invoice filtered on this DN ---------------
+  const { data: invoices, isLoading: loadingInvoices } = useFrappeList<{ name: string }>(
+    "Sales Invoice",
+    { filters: [["Delivery Note Item", "delivery_note", "=", name]] as unknown as [string, string, unknown][], fields: ["name"], limit: 5 },
+    { enabled: !isLoading && !!dn },
+  );
+
+  // -- Build the flow chain from real linked documents -----------------------
+  const chain = useMemo(() => {
+    const siName = invoices?.[0]?.name;
+
+    const stageStatuses: Record<
+      string,
+      { status: FlowStageStatus; documentName?: string; documentUrl?: string }
+    > = {};
+
+    if (soName) {
+      stageStatuses["Sales Order"] = {
+        status: "completed",
+        documentName: soName,
+        documentUrl: `/sales/sales-order/${encodeURIComponent(soName)}`,
+      };
+    }
+    if (siName) {
+      stageStatuses["Sales Invoice"] = {
+        status: "completed",
+        documentName: siName,
+        documentUrl: `/accounting/sales-invoice/${encodeURIComponent(siName)}`,
+      };
+    }
+
+    return resolveFlowChain("Delivery Note", name, stageStatuses);
+  }, [soName, invoices, name]);
+
+  // -- Status actions (real mutations) ----------------------------------------
+  const updateMutation = useFrappeUpdate<DeliveryNote>("Delivery Note", {
+    showToast: false,
+  });
 
   const deleteMutation = useFrappeDelete("Delivery Note", {
     onSuccess: () => {
@@ -99,307 +111,237 @@ export default function DeliveryNoteDetailPage() {
     },
   });
 
-  const updateMutation = useFrappeUpdate("Delivery Note", {
-    onSuccess: () => {
-      refetch();
+  const isDraft = dn?.docstatus === 0;
+  const isSubmitted = dn?.docstatus === 1;
+
+  const handleSubmit = () => {
+    setConfirmSubmit(false);
+    updateMutation.mutate(
+      { name, data: { docstatus: 1 } },
+      {
+        onSuccess: () => toast.success(`Delivery Note ${name} submitted`),
+        onError: (e) =>
+          toast.error("Submit failed", { description: e.message }),
+      },
+    );
+  };
+
+  const handleDelete = () => {
+    setShowDelete(false);
+    deleteMutation.mutate(name);
+  };
+
+  if (isLoading) return <LoadingState />;
+  if (error || !dn) {
+    return (
+      <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6">
+        <p className="text-sm text-destructive">
+          {error?.message ?? "Delivery Note not found."}
+        </p>
+        <Button variant="ghost" className="mt-3" onClick={() => router.push("/stock/delivery-note")}>
+          Back to Delivery Notes
+        </Button>
+      </div>
+    );
+  }
+
+  const items = (dn.items ?? []) as unknown as DNItem[];
+  const grandTotal = dn.grand_total ?? dn.total ?? 0;
+
+  // What's-Next actions
+  const whatsNext = [
+    isDraft && {
+      label: "Submit Delivery Note",
+      description: "Confirm delivery and deduct stock",
+      onClick: () => setConfirmSubmit(true),
+      isPrimary: true,
+      isLoading: updateMutation.isPending,
     },
-  });
-
-  if (isLoading) return <LoadingState type="detail" />;
-  if (error || !dn)
-    return <EmptyState icon={Truck} title="Delivery Note not found" />;
-
-  const statusConfig = STATUS_CONFIG[dn.status] || STATUS_CONFIG.Draft;
-  const isDraft = dn.docstatus === 0;
-  const canInvoice = dn.status === "To Bill";
-  const isReturn = dn.is_return === 1;
-
-  const handleSubmit = async () => {
-    await updateMutation.mutateAsync({ name: dnName, data: { docstatus: 1 } });
-    toast.success("Delivery Note submitted. Stock has been deducted.");
-  };
-
-  const handlePrintGatePass = () => {
-    toast.info("Opening Gate Pass for printing...");
-    // Mock: in production this would open a PDF report URL from Frappe
-  };
+    isSubmitted && {
+      label: "Create Sales Invoice",
+      description: "Phase 2 — billing",
+      onClick: () => {},
+      disabled: true,
+      disabledReason: "Coming in Phase 2",
+    },
+  ].filter(Boolean) as React.ComponentProps<typeof WhatsNext>["actions"];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-12">
       <PageHeader
         title={dn.name}
-        subtitle={`Delivery to ${dn.customer_name || dn.customer}`}
+        subtitle={dn.customer_name || dn.customer}
         backHref="/stock/delivery-note"
-        icon={<Truck className="h-5 w-5 text-primary" />}
         actions={
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
             {isDraft && (
               <>
-                <Button
-                  variant="outline"
-                  className="rounded-full h-9"
-                  onClick={() =>
-                    router.push(
-                      `/stock/delivery-note/${encodeURIComponent(dnName)}/edit`,
-                    )
-                  }
-                >
-                  <Pencil className="h-4 w-4 mr-2" /> Edit
+                <Button variant="outline" size="sm" asChild>
+                  <Link href={`/stock/delivery-note/${encodeURIComponent(name)}/edit`}>
+                    <Edit3 className="mr-1.5 h-4 w-4" /> Edit
+                  </Link>
                 </Button>
                 <Button
-                  onClick={handleSubmit}
+                  size="sm"
+                  onClick={() => setConfirmSubmit(true)}
                   disabled={updateMutation.isPending}
-                  className="rounded-full h-9 shadow-lg shadow-primary/10"
                 >
-                  <CheckCircle2 className="h-4 w-4 mr-2" /> Submit
+                  {updateMutation.isPending ? (
+                    <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="mr-1.5 h-4 w-4" />
+                  )}
+                  Submit
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => setShowDelete(true)}
+                >
+                  <Trash2 className="h-4 w-4" />
                 </Button>
               </>
             )}
-
-            {canInvoice && (
-              <Button
-                onClick={() =>
-                  router.push(
-                    `/accounting/sales-invoice/new?delivery_note=${encodeURIComponent(dnName)}`,
-                  )
-                }
-                className="rounded-full h-9 shadow-lg shadow-emerald-500/10 bg-emerald-600 hover:bg-emerald-700"
-              >
-                <Receipt className="h-4 w-4 mr-2" /> Create Invoice
-              </Button>
-            )}
-
-            <Button
-              variant="outline"
-              onClick={handlePrintGatePass}
-              className="rounded-full h-9"
-            >
-              <Printer className="h-4 w-4 mr-2" /> Gate Pass
-            </Button>
-
-            {isDraft && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setShowDelete(true)}
-                className="rounded-full h-9 w-9 text-destructive hover:bg-destructive/10"
-              >
-                <Trash2 className="h-4 w-4" />
+            {isSubmitted && (
+              <Button variant="outline" size="sm" asChild>
+                <Link href={`/accounting/sales-invoice/new?delivery_note=${encodeURIComponent(name)}`}>
+                  <Receipt className="mr-1.5 h-4 w-4" /> Create Invoice
+                </Link>
               </Button>
             )}
           </div>
         }
       />
 
-      {/* Status & Summary Bar */}
-      <div className="bg-card rounded-2xl border border-border/50 p-6 shadow-sm">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div className="flex items-center gap-4">
-            <Badge
-              className={cn(
-                "px-4 py-1.5 rounded-full text-sm font-bold border shadow-sm",
-                statusConfig.bg,
-                statusConfig.color,
-                statusConfig.border,
-              )}
-            >
-              <statusConfig.icon className="h-4 w-4 mr-2" />
-              {dn.status}
-            </Badge>
-            {isReturn && (
-              <Badge className="bg-red-100 text-red-600 border-red-200 rounded-full px-3 py-1">
-                Return Delivery
-              </Badge>
-            )}
-          </div>
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
+        {/* Center column */}
+        <div className="space-y-6 lg:col-span-8">
+          <InfoCard title="Delivery Details">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <DataPoint label="Customer" value={dn.customer_name || dn.customer} />
+              <DataPoint label="Posting Date" value={dn.posting_date} />
+              <DataPoint label="Company" value={dn.company} />
+              <DataPoint label="PO No" value={dn.po_no || "—"} />
+            </div>
+          </InfoCard>
 
-          <div className="flex items-center gap-6 text-sm">
-            <DataPoint
-              icon={<Calendar className="h-4 w-4 text-blue-500" />}
-              label="Date"
-              value={
-                dn.posting_date ? format(parseISO(dn.posting_date), "PPP") : "—"
-              }
-            />
-            <DataPoint
-              icon={<Package className="h-4 w-4 text-emerald-500" />}
-              label="Items"
-              value={`${dn.total_qty || 0} units`}
-            />
-            {dn.grand_total && (
-              <DataPoint
-                icon={<CreditCard className="h-4 w-4 text-primary" />}
-                label="Value"
-                value={`ETB ${dn.grand_total.toLocaleString()}`}
-              />
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          {/* Items Table */}
-          <InfoCard
-            title="Delivered Items"
-            icon={<Package className="h-5 w-5 text-emerald-500" />}
-          >
-            <div className="overflow-x-auto">
+          <InfoCard title="Items" icon={<Package className="h-5 w-5 text-primary" />}>
+            <div className="overflow-hidden rounded-xl border border-border/60">
               <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border/50 text-muted-foreground">
-                    <th className="text-left py-3 px-2 font-medium uppercase text-[10px] tracking-widest">
-                      Item
-                    </th>
-                    <th className="text-right py-3 px-2 font-medium uppercase text-[10px] tracking-widest">
-                      Qty
-                    </th>
-                    <th className="text-right py-3 px-2 font-medium uppercase text-[10px] tracking-widest">
-                      Rate
-                    </th>
-                    <th className="text-right py-3 px-2 font-medium uppercase text-[10px] tracking-widest">
-                      Amount
-                    </th>
-                    <th className="text-left py-3 px-2 font-medium uppercase text-[10px] tracking-widest">
-                      Warehouse
-                    </th>
+                <thead className="border-b border-border/60 bg-secondary/20">
+                  <tr className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                    <th className="px-3 py-2.5 text-left font-semibold">Item</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Qty</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Rate</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Amount</th>
+                    <th className="px-3 py-2.5 text-left font-semibold">Warehouse</th>
                   </tr>
                 </thead>
-                <tbody>
-                  {dn.items?.map((item: any, idx: number) => (
-                    <tr
-                      key={idx}
-                      className="border-b border-border/20 hover:bg-muted/30 transition-colors"
-                    >
-                      <td className="py-4 px-2">
-                        <div className="font-bold text-foreground">
-                          {item.item_name || item.item_code}
+                <tbody className="divide-y divide-border/50">
+                  {items.map((it, i) => (
+                    <tr key={`${it.item_code}-${i}`}>
+                      <td className="px-3 py-2.5">
+                        <div className="font-medium text-foreground">
+                          {it.item_name || it.item_code}
                         </div>
-                        <div className="text-[10px] text-muted-foreground font-mono">
-                          {item.item_code}
-                        </div>
+                        {it.description && (
+                          <div className="text-xs text-muted-foreground line-clamp-1">
+                            {it.description}
+                          </div>
+                        )}
                       </td>
-                      <td className="text-right py-4 px-2 font-black">
-                        {item.qty} {item.uom}
+                      <td className="px-3 py-2.5 text-right tabular-nums">
+                        {it.qty} {it.uom}
                       </td>
-                      <td className="text-right py-4 px-2 text-muted-foreground">
-                        {item.rate?.toLocaleString()}
+                      <td className="px-3 py-2.5 text-right tabular-nums">
+                        {ETB.format(it.rate)}
                       </td>
-                      <td className="text-right py-4 px-2 font-bold">
-                        {item.amount?.toLocaleString()}
+                      <td className="px-3 py-2.5 text-right font-medium tabular-nums">
+                        {ETB.format(it.amount ?? it.qty * it.rate)}
                       </td>
-                      <td className="py-4 px-2 text-muted-foreground text-xs">
-                        {item.warehouse}
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                        {it.warehouse || "—"}
                       </td>
                     </tr>
                   ))}
                 </tbody>
-                <tfoot>
-                  <tr className="bg-secondary/20">
-                    <td
-                      colSpan={3}
-                      className="text-right py-4 px-2 font-black uppercase text-xs"
-                    >
-                      Grand Total
-                    </td>
-                    <td className="text-right py-4 px-2 font-black text-lg text-primary">
-                      ETB {dn.grand_total?.toLocaleString()}
-                    </td>
-                    <td></td>
-                  </tr>
-                </tfoot>
               </table>
+            </div>
+          </InfoCard>
+
+          <InfoCard title="Logistics" icon={<Truck className="h-5 w-5 text-primary" />}>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <DataPoint label="Driver" value={dn.driver_name || dn.driver || "—"} />
+              <DataPoint label="Vehicle" value={dn.vehicle_no || "—"} />
+              <DataPoint label="Transporter" value={dn.transporter_name || dn.transporter || "—"} />
+              <DataPoint label="LR No" value={dn.lr_no || "—"} />
             </div>
           </InfoCard>
         </div>
 
-        <div className="space-y-6">
-          {/* Customer Info */}
-          <InfoCard
-            title="Customer Details"
-            icon={<Building2 className="h-5 w-5 text-primary" />}
-          >
-            <div className="space-y-4">
-              <div className="p-4 bg-secondary/20 rounded-xl">
-                <p className="font-bold text-lg">
-                  {dn.customer_name || dn.customer}
-                </p>
-                <p className="text-xs text-muted-foreground font-mono">
-                  {dn.customer}
-                </p>
-              </div>
-
-              {dn.shipping_address && (
-                <div>
-                  <p className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest mb-2">
-                    Shipping To
-                  </p>
-                  <div className="p-3 bg-blue-500/5 rounded-xl border border-blue-500/10 text-sm">
-                    <div
-                      dangerouslySetInnerHTML={{ __html: dn.shipping_address }}
-                    />
-                  </div>
-                </div>
+        {/* Sidebar */}
+        <div className="space-y-6 lg:col-span-4">
+          <InfoCard title="Status" variant="gradient">
+            <div className="space-y-3">
+              <StatusBadge status={dn.status} size="lg" />
+              {dn.per_billed !== undefined && (
+                <DataPoint label="% Billed" value={`${dn.per_billed}%`} />
               )}
             </div>
           </InfoCard>
 
-          {/* Logistics Info */}
-          <InfoCard
-            title="Logistics"
-            icon={<Truck className="h-5 w-5 text-amber-500" />}
-          >
-            <div className="space-y-3">
-              {dn.driver_name && (
-                <div className="flex items-center gap-3 p-3 bg-secondary/20 rounded-xl">
-                  <User className="h-5 w-5 text-muted-foreground" />
-                  <div>
-                    <p className="font-bold text-sm">{dn.driver_name}</p>
-                    <p className="text-[10px] text-muted-foreground">Driver</p>
-                  </div>
-                </div>
-              )}
-              {dn.vehicle_no && (
-                <div className="flex items-center gap-3 p-3 bg-secondary/20 rounded-xl">
-                  <Truck className="h-5 w-5 text-muted-foreground" />
-                  <div>
-                    <p className="font-bold font-mono">{dn.vehicle_no}</p>
-                    <p className="text-[10px] text-muted-foreground">Vehicle</p>
-                  </div>
-                </div>
-              )}
-              {dn.transporter_name && (
-                <div className="flex items-center gap-3 p-3 bg-secondary/20 rounded-xl">
-                  <Building2 className="h-5 w-5 text-muted-foreground" />
-                  <div>
-                    <p className="font-bold text-sm">{dn.transporter_name}</p>
-                    <p className="text-[10px] text-muted-foreground">
-                      Transporter
-                    </p>
-                  </div>
-                </div>
-              )}
-              {dn.lr_no && (
-                <div className="p-3 bg-amber-500/5 rounded-xl border border-amber-500/10">
-                  <p className="text-[10px] font-bold uppercase text-amber-600">
-                    Gate Pass / LR No
-                  </p>
-                  <p className="font-mono font-bold">{dn.lr_no}</p>
-                </div>
-              )}
-            </div>
+          <InfoCard title="Flow Tracker">
+            <FlowTracker result={chain} isLoading={loadingInvoices} />
+          </InfoCard>
+
+          <InfoCard title="What's Next">
+            <WhatsNext actions={whatsNext} />
+          </InfoCard>
+
+          <InfoCard title="Activity">
+            <ActivityTimeline
+              items={[
+                {
+                  id: "created",
+                  type: "created",
+                  description: "Delivery Note created",
+                  user: dn.owner,
+                  timestamp: dn.creation ?? new Date().toISOString(),
+                },
+                ...(isSubmitted
+                  ? [
+                      {
+                        id: "submitted",
+                        type: "submitted" as const,
+                        description: "Delivery Note submitted",
+                        user: dn.modified_by,
+                        timestamp: dn.modified ?? new Date().toISOString(),
+                      },
+                    ]
+                  : []),
+              ]}
+            />
           </InfoCard>
         </div>
       </div>
 
       <ConfirmDialog
+        open={confirmSubmit}
+        onOpenChange={setConfirmSubmit}
+        title="Submit this Delivery Note?"
+        description="Submitting confirms delivery and deducts stock. This cannot be undone without cancelling."
+        confirmText="Submit"
+        onConfirm={handleSubmit}
+      />
+      <ConfirmDialog
         open={showDelete}
-        onOpenChange={() => setShowDelete(false)}
-        title="Delete Delivery Note?"
+        onOpenChange={setShowDelete}
+        title="Delete this Delivery Note?"
         description="This action cannot be undone."
-        onConfirm={() => deleteMutation.mutateAsync(dnName)}
-        loading={deleteMutation.isPending}
+        confirmText="Delete"
         variant="destructive"
+        onConfirm={handleDelete}
       />
     </div>
   );

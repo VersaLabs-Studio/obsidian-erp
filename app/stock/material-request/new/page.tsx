@@ -1,525 +1,468 @@
-// @ts-nocheck
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useForm, useFieldArray } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { Button } from "@/components/ui/button";
+import { useMemo, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { useForm, useFieldArray, useWatch } from "react-hook-form";
+import { toast } from "sonner";
 import {
-  Save,
-  Loader2,
   FileInput,
+  Package,
+  ClipboardCheck,
   Plus,
   Trash2,
-  Package,
-  Calendar,
-  ShoppingCart,
-  ArrowRightLeft,
-  LogOut,
-  Factory,
-  UserCheck,
-  Building2,
-  AlertTriangle,
-  Info,
-  Badge,
 } from "lucide-react";
-import { Form } from "@/components/ui/form";
-import { useFrappeCreate, useFrappeDoc } from "@/hooks/generic";
-import { PageHeader, LoadingState } from "@/components/smart";
+
+import { PageHeader } from "@/components/smart";
+import { InfoCard } from "@/components/ui/info-card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   FormInput,
   FormFrappeSelect,
+  FormDatePicker,
   FormSelect,
-  FormTextarea,
 } from "@/components/form";
-import {
-  MaterialRequestCreateSchema,
-  type MaterialRequestFormData,
-} from "@/lib/schemas/doctype-schemas";
-import { toast } from "sonner";
+import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
+import { FlowWizard } from "@/components/flows/FlowWizard";
+import { useFrappeCreate } from "@/hooks/generic";
+import { validateWizardStep } from "@/lib/flows/flow-validation";
+import type { StepValidationResult } from "@/lib/flows/flow-validation";
+import type { WizardStep } from "@/types/flow-types";
 import { cn } from "@/lib/utils";
 
-const REQUEST_TYPES = [
+interface MRItem {
+  item_code: string;
+  item_name?: string;
+  qty: number;
+  uom?: string;
+  warehouse?: string;
+  schedule_date?: string;
+}
+
+interface MRForm {
+  naming_series: string;
+  material_request_type: string;
+  company: string;
+  transaction_date: string;
+  schedule_date: string;
+  set_from_warehouse: string;
+  set_warehouse: string;
+  items: MRItem[];
+}
+
+const EMPTY_ITEM: MRItem = {
+  item_code: "",
+  item_name: "",
+  qty: 1,
+  uom: "Nos",
+  warehouse: "",
+  schedule_date: "",
+};
+
+const WIZARD_STEPS: WizardStep[] = [
   {
-    value: "Purchase",
-    label: "Purchase",
-    icon: ShoppingCart,
-    description: "External supply",
-    bgColor: "bg-emerald-500",
+    id: "step1",
+    label: "Request Type",
+    description: "Define the purpose and timeline",
+    schema: null,
+    fields: [
+      "material_request_type",
+      "company",
+      "transaction_date",
+      "schedule_date",
+    ],
+    icon: "FileInput",
   },
   {
-    value: "Material Transfer",
-    label: "Transfer",
-    icon: ArrowRightLeft,
-    description: "Internal move",
-    bgColor: "bg-blue-500",
-  },
-  {
-    value: "Material Issue",
-    label: "Issue",
-    icon: LogOut,
-    description: "Consumption",
-    bgColor: "bg-amber-500",
-  },
-  {
-    value: "Manufacture",
-    label: "Production",
-    icon: Factory,
-    description: "For manufacturing",
-    bgColor: "bg-indigo-500",
-  },
-  {
-    value: "Customer Provided",
-    label: "Customer",
-    icon: UserCheck,
-    description: "Free of charge",
-    bgColor: "bg-purple-500",
+    id: "step2",
+    label: "Items & Review",
+    description: "Add items and review the request",
+    schema: null,
+    fields: ["items"],
+    icon: "Package",
   },
 ];
 
-function CreateMaterialRequestForm() {
+const REQUEST_TYPE_OPTIONS = [
+  { value: "Purchase", label: "Purchase" },
+  { value: "Material Transfer", label: "Material Transfer" },
+  { value: "Material Issue", label: "Material Issue" },
+];
+
+export default function NewMaterialRequestPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const [step, setStep] = useState(0);
 
-  const preType = searchParams.get("type") || "Purchase";
-  const preWorkOrder = searchParams.get("work_order");
-
-  const form = useForm<MaterialRequestFormData>({
-    resolver: zodResolver(MaterialRequestCreateSchema),
+  const form = useForm<MRForm>({
     defaultValues: {
       naming_series: "MAT-MR-.YYYY.-",
-      material_request_type: preType,
+      material_request_type: "Purchase",
       company: "",
       transaction_date: new Date().toISOString().split("T")[0],
       schedule_date: "",
-      work_order: preWorkOrder || "",
-      set_warehouse: "",
       set_from_warehouse: "",
-      items: [{ item_code: "", qty: 1, uom: "Nos", warehouse: "" }],
-      reason: "",
+      set_warehouse: "",
+      items: [{ ...EMPTY_ITEM }],
     },
   });
 
-  const requestType = form.watch("material_request_type");
-  const isTransfer = requestType === "Material Transfer";
-  const isPurchase = requestType === "Purchase";
+  const { control, getValues, setValue } = form;
+  const { fields, append, remove } = useFieldArray({ control, name: "items" });
 
-  const { fields, append, remove } = useFieldArray({
-    control: form.control,
-    name: "items",
-  });
+  const watchedItems = useWatch({ control, name: "items" });
+  const watchedType = useWatch({ control, name: "material_request_type" });
 
-  // Pre-fill from Work Order
-  const { data: workOrderDetails } = useFrappeDoc(
-    "Work Order",
-    preWorkOrder || "",
-    { enabled: !!preWorkOrder },
-  );
+  const isTransfer = watchedType === "Material Transfer";
 
-  useEffect(() => {
-    if (workOrderDetails) {
-      form.setValue("company", workOrderDetails.company);
-    }
-  }, [workOrderDetails, form]);
-
-  const createMutation = useFrappeCreate("Material Request", {
-    onSuccess: (response) => {
-      toast.success("Material Request created");
-      router.push(
-        `/stock/material-request/${encodeURIComponent(response.data?.name || response.name)}`,
-      );
-    },
-    onError: (err) => toast.error(err.message),
-  });
-
-  const onSubmit = (data: MaterialRequestFormData) => {
-    const payload = {
-      ...data,
-      docstatus: 0,
-      items: data.items.map((item) => ({
-        ...item,
-        warehouse: item.warehouse || data.set_warehouse,
-        from_warehouse: isTransfer
-          ? item.from_warehouse || data.set_from_warehouse
-          : undefined,
-        doctype: "Material Request Item",
-      })),
+  const validationResults = useMemo<Record<string, StepValidationResult>>(() => {
+    const values = { ...getValues(), items: watchedItems };
+    return {
+      step1: validateWizardStep("Material Request", "step1", values),
+      step2: { valid: true, errors: {} },
     };
-    createMutation.mutate(payload);
-  };
+  }, [watchedItems, getValues]);
+
+  const createMutation = useFrappeCreate<
+    { data: { name: string } },
+    Record<string, unknown>
+  >("Material Request", {
+    successMessage: "Material Request created",
+    onSuccess: (res) => {
+      const name = res?.data?.name;
+      if (name) {
+        router.push(`/stock/material-request/${encodeURIComponent(name)}`);
+      }
+    },
+  });
+
+  const handleSubmit = useCallback(() => {
+    const values = getValues();
+    const items = (values.items ?? []).filter(
+      (it) => it.item_code && Number(it.qty) > 0
+    );
+    if (items.length === 0) {
+      toast.error("Add at least one valid item before creating the request.");
+      setStep(1);
+      return;
+    }
+    createMutation.mutate({
+      ...values,
+      items: items.map((it) => ({
+        ...it,
+        schedule_date: it.schedule_date || values.schedule_date,
+        warehouse: it.warehouse || values.set_warehouse,
+      })),
+    });
+  }, [createMutation, getValues]);
 
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
-            {/* Request Type Selection */}
-            <div className="bg-card rounded-[2rem] border border-border/50 p-8 shadow-sm space-y-6">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                  <FileInput className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-lg tracking-tight">
-                    Request Mode
-                  </h3>
-                  <p className="text-xs text-muted-foreground">
-                    Define the purpose of this procurement request
-                  </p>
-                </div>
-              </div>
+    <div className="space-y-6 pb-12">
+      <PageHeader
+        title="New Material Request"
+        subtitle="Create a material request in two steps"
+        backHref="/stock/material-request"
+      />
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
-                {REQUEST_TYPES.map((type) => (
-                  <button
-                    key={type.value}
-                    type="button"
-                    onClick={() =>
-                      form.setValue("material_request_type", type.value)
-                    }
-                    className={cn(
-                      "group relative p-4 rounded-3xl border transition-all text-left",
-                      requestType === type.value
-                        ? "border-primary bg-primary/5 shadow-inner"
-                        : "border-border/50 hover:border-primary/30 bg-secondary/20",
-                    )}
-                  >
-                    <div
-                      className={cn(
-                        "h-8 w-8 rounded-xl flex items-center justify-center mb-3 transition-colors",
-                        requestType === type.value
-                          ? type.bgColor
-                          : "bg-background text-muted-foreground",
-                      )}
-                    >
-                      <type.icon
-                        className={cn(
-                          "h-4 w-4",
-                          requestType === type.value
-                            ? "text-white"
-                            : "group-hover:text-primary",
-                        )}
-                      />
-                    </div>
-                    <p className="font-black text-xs uppercase tracking-tight">
-                      {type.label}
-                    </p>
-                    <p className="text-[9px] text-muted-foreground font-medium truncate">
-                      {type.description}
-                    </p>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Basic Info */}
-            <div className="bg-card rounded-[2rem] border border-border/50 p-8 shadow-sm space-y-6">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
-                  <Building2 className="h-5 w-5 text-blue-500" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-lg tracking-tight">
-                    Core Information
-                  </h3>
-                  <p className="text-xs text-muted-foreground">
-                    Basic details and timeline for the request
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <FormFrappeSelect
-                  control={form.control}
-                  name="company"
-                  label="Company"
-                  doctype="Company"
-                  required
-                />
-                <FormInput
-                  control={form.control}
-                  name="transaction_date"
-                  label="Request Date"
-                  type="date"
-                  required
-                />
-                <FormInput
-                  control={form.control}
-                  name="schedule_date"
-                  label="Required By"
-                  type="date"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
-                <div className="space-y-4">
-                  <FormFrappeSelect
-                    control={form.control}
-                    name="set_warehouse"
-                    label={
-                      isTransfer ? "Target Warehouse" : "Default Warehouse"
-                    }
-                    doctype="Warehouse"
-                    placeholder="Auto-fill for items"
-                    filters={[["is_group", "=", 0]]}
-                  />
-                  <p className="text-[10px] text-muted-foreground italic px-1 flex gap-2">
-                    <Info className="h-3 w-3" /> Materials will be delivered to
-                    this location.
-                  </p>
-                </div>
-                {isTransfer && (
-                  <div className="space-y-4">
-                    <FormFrappeSelect
-                      control={form.control}
-                      name="set_from_warehouse"
-                      label="Source Warehouse"
-                      doctype="Warehouse"
-                      placeholder="Default source"
-                      filters={[["is_group", "=", 0]]}
+      <Form {...form}>
+        <InfoCard className="max-w-3xl">
+          <FlowWizard
+            steps={WIZARD_STEPS}
+            formData={getValues() as unknown as Record<string, unknown>}
+            validationResults={validationResults}
+            isSubmitting={createMutation.isPending}
+            onFormDataChange={() => {}}
+            onStepChange={setStep}
+            onSubmit={handleSubmit}
+            onCancel={() => router.back()}
+            submitLabel="Create Material Request"
+            submittingLabel="Creating..."
+            renderStep={(s) => {
+              if (s.id === "step1") {
+                return (
+                  <div className="space-y-6">
+                    <StepHeading
+                      icon={<FileInput className="h-5 w-5 text-primary" />}
+                      title="Request Type"
+                      description="Define the purpose and timeline for this request."
                     />
-                    <p className="text-[10px] text-muted-foreground italic px-1 flex gap-2">
-                      <Info className="h-3 w-3" /> Materials will be moved from
-                      this location.
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {(requestType === "Manufacture" || preWorkOrder) && (
-                <div className="pt-4 border-t border-border/50">
-                  <FormFrappeSelect
-                    control={form.control}
-                    name="work_order"
-                    label="Linked Work Order"
-                    doctype="Work Order"
-                    placeholder="Link to specific production job..."
-                  />
-                </div>
-              )}
-
-              <FormTextarea
-                control={form.control}
-                name="reason"
-                label="Reason or Internal Note"
-                rows={3}
-                placeholder="Why are these materials needed?"
-              />
-            </div>
-
-            {/* Items Table */}
-            <div className="bg-card rounded-[2rem] border border-border/50 p-8 shadow-lg shadow-primary/5 space-y-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
-                    <Package className="h-5 w-5 text-emerald-500" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-lg tracking-tight">
-                      Requested Items
-                    </h3>
-                    <p className="text-xs text-muted-foreground">
-                      List all items and quantities needed
-                    </p>
-                  </div>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="rounded-full font-bold h-9"
-                  onClick={() =>
-                    append({ item_code: "", qty: 1, uom: "Nos", warehouse: "" })
-                  }
-                >
-                  <Plus className="h-3 w-3 mr-2" /> Add Line
-                </Button>
-              </div>
-
-              <div className="space-y-4">
-                {fields.map((field, index) => (
-                  <div
-                    key={field.id}
-                    className="group relative grid grid-cols-12 gap-4 items-end p-6 bg-secondary/10 rounded-[2rem] border border-border/50 hover:bg-secondary/20 transition-all shadow-inner"
-                  >
-                    <div className="col-span-12 md:col-span-4">
+                    <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                      <FormSelect
+                        control={control}
+                        name="material_request_type"
+                        label="Request Type"
+                        required
+                        options={REQUEST_TYPE_OPTIONS}
+                      />
                       <FormFrappeSelect
-                        control={form.control}
-                        name={`items.${index}.item_code`}
-                        label="Item"
-                        doctype="Item"
-                        placeholder="Select item..."
+                        control={control}
+                        name="company"
+                        label="Company"
+                        required
+                        doctype="Company"
+                        labelField="company_name"
+                        placeholder="Select company..."
+                      />
+                      <FormDatePicker
+                        control={control}
+                        name="transaction_date"
+                        label="Transaction Date"
+                        required
+                      />
+                      <FormDatePicker
+                        control={control}
+                        name="schedule_date"
+                        label="Required By"
+                        required
                       />
                     </div>
-                    <div className="col-span-6 md:col-span-2">
-                      <FormInput
-                        control={form.control}
-                        name={`items.${index}.qty`}
-                        label="Quantity"
-                        type="number"
-                      />
-                    </div>
-                    <div className="col-span-6 md:col-span-2">
+
+                    <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                       <FormFrappeSelect
-                        control={form.control}
-                        name={`items.${index}.uom`}
-                        label="UOM"
-                        doctype="UOM"
-                      />
-                    </div>
-                    {isTransfer && (
-                      <div className="col-span-12 md:col-span-2">
-                        <FormFrappeSelect
-                          control={form.control}
-                          name={`items.${index}.from_warehouse`}
-                          label="From"
-                          doctype="Warehouse"
-                          placeholder="Source"
-                          filters={[["is_group", "=", 0]]}
-                        />
-                      </div>
-                    )}
-                    <div
-                      className={cn(
-                        "col-span-10",
-                        isTransfer ? "md:col-span-1" : "md:col-span-3",
-                      )}
-                    >
-                      <FormFrappeSelect
-                        control={form.control}
-                        name={`items.${index}.warehouse`}
-                        label="Target"
+                        control={control}
+                        name="set_warehouse"
+                        label={isTransfer ? "Target Warehouse" : "Default Warehouse"}
                         doctype="Warehouse"
-                        placeholder="Warehouse"
+                        placeholder="Auto-fill for items"
                         filters={[["is_group", "=", 0]]}
                       />
-                    </div>
-                    <div className="col-span-2 md:col-span-1 flex justify-end pb-1.5">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => remove(index)}
-                        className="h-9 w-9 rounded-full text-destructive hover:bg-destructive/10"
-                        disabled={fields.length === 1}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      {isTransfer && (
+                        <FormFrappeSelect
+                          control={control}
+                          name="set_from_warehouse"
+                          label="Source Warehouse"
+                          doctype="Warehouse"
+                          placeholder="Default source"
+                          filters={[["is_group", "=", 0]]}
+                        />
+                      )}
                     </div>
                   </div>
-                ))}
-              </div>
-            </div>
-          </div>
+                );
+              }
 
-          {/* Sidebar */}
-          <div className="lg:col-span-1">
-            <div className="bg-card rounded-[2rem] border border-border/50 p-8 sticky top-6 space-y-8 shadow-xl shadow-primary/5">
-              <h3 className="font-bold text-lg tracking-tight border-b border-border/50 pb-4">
-                Summary View
-              </h3>
-
-              <div className="space-y-4">
-                <div className="flex justify-between items-center px-2">
-                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
-                    Request Mode
-                  </span>
-                  <Badge
-                    variant="secondary"
-                    className="rounded-lg font-black uppercase text-[10px]"
-                  >
-                    {requestType}
-                  </Badge>
-                </div>
-                <div className="flex justify-between items-center px-2">
-                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
-                    Line Items
-                  </span>
-                  <span className="font-black text-lg">{fields.length}</span>
-                </div>
-                <div className="flex justify-between items-center px-2">
-                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
-                    Gross Qty
-                  </span>
-                  <span className="font-black text-lg text-primary">
-                    {form
-                      .watch("items")
-                      ?.reduce((sum, item) => sum + (Number(item.qty) || 0), 0)}
-                  </span>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                {isPurchase && (
-                  <div className="p-5 bg-emerald-500/5 rounded-3xl border border-emerald-500/10 space-y-3">
-                    <div className="flex items-center gap-2 text-emerald-600">
-                      <ShoppingCart className="h-4 w-4" />
-                      <p className="font-black text-[10px] uppercase tracking-widest">
-                        Supply Logic
-                      </p>
+              if (s.id === "step2") {
+                const totalQty = (watchedItems ?? []).reduce(
+                  (sum, it) => sum + (Number(it?.qty) || 0),
+                  0
+                );
+                return (
+                  <div className="space-y-5">
+                    <div className="flex items-center justify-between">
+                      <StepHeading
+                        icon={<Package className="h-5 w-5 text-primary" />}
+                        title="Items & Review"
+                        description="Add the items you need."
+                      />
                     </div>
-                    <p className="text-[11px] text-emerald-600/80 leading-relaxed font-medium">
-                      This request will be used to generate official Purchase
-                      Orders for external vendors.
-                    </p>
-                  </div>
-                )}
 
-                {isTransfer && (
-                  <div className="p-5 bg-blue-500/5 rounded-3xl border border-blue-500/10 space-y-3">
-                    <div className="flex items-center gap-2 text-blue-600">
-                      <ArrowRightLeft className="h-4 w-4" />
-                      <p className="font-black text-[10px] uppercase tracking-widest">
-                        Movement Logic
-                      </p>
+                    <div className="overflow-hidden rounded-xl border border-border/60 bg-card/40 backdrop-blur-sm">
+                      <table className="w-full text-sm">
+                        <thead className="border-b border-border/60 bg-secondary/20">
+                          <tr className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                            <th className="px-3 py-2.5 text-left font-semibold">
+                              Item
+                            </th>
+                            <th className="px-3 py-2.5 text-right font-semibold">
+                              Qty
+                            </th>
+                            <th className="px-3 py-2.5 text-right font-semibold">
+                              UOM
+                            </th>
+                            <th className="px-3 py-2.5 text-right font-semibold">
+                              Warehouse
+                            </th>
+                            <th className="w-10" />
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/50">
+                          {fields.map((field, index) => (
+                            <tr key={field.id} className="group">
+                              <td className="px-3 py-2 align-top">
+                                <FormFrappeSelect
+                                  control={control}
+                                  name={`items.${index}.item_code`}
+                                  doctype="Item"
+                                  hideLabel
+                                  placeholder="Item..."
+                                  extraFields={[
+                                    "item_name",
+                                    "stock_uom",
+                                  ]}
+                                  onValueChange={(_val, doc) => {
+                                    if (doc) {
+                                      setValue(
+                                        `items.${index}.uom`,
+                                        doc.stock_uom || "Nos"
+                                      );
+                                      setValue(
+                                        `items.${index}.item_name`,
+                                        doc.item_name || ""
+                                      );
+                                    }
+                                  }}
+                                />
+                              </td>
+                              <td className="px-3 py-2 align-top">
+                                <FormField
+                                  control={control}
+                                  name={`items.${index}.qty`}
+                                  render={({ field: f }) => (
+                                    <FormItem>
+                                      <FormControl>
+                                        <Input
+                                          {...f}
+                                          type="number"
+                                          inputMode="decimal"
+                                          className="h-10 rounded-lg border-0 bg-secondary/30 text-right tabular-nums"
+                                          onChange={(e) =>
+                                            f.onChange(Number(e.target.value))
+                                          }
+                                        />
+                                      </FormControl>
+                                    </FormItem>
+                                  )}
+                                />
+                              </td>
+                              <td className="px-3 py-2 align-top">
+                                <FormFrappeSelect
+                                  control={control}
+                                  name={`items.${index}.uom`}
+                                  doctype="UOM"
+                                  hideLabel
+                                  placeholder="UOM"
+                                />
+                              </td>
+                              <td className="px-3 py-2 align-top">
+                                <FormFrappeSelect
+                                  control={control}
+                                  name={`items.${index}.warehouse`}
+                                  doctype="Warehouse"
+                                  hideLabel
+                                  placeholder="Warehouse"
+                                  filters={[["is_group", "=", 0]]}
+                                />
+                              </td>
+                              <td className="px-2 py-2 text-center align-middle">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+                                  onClick={() => remove(index)}
+                                  disabled={fields.length === 1}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <div className="flex items-center justify-between border-t border-border/60 bg-secondary/10 px-3 py-3">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="rounded-full border-dashed"
+                          onClick={() => append({ ...EMPTY_ITEM })}
+                        >
+                          <Plus className="mr-1.5 h-4 w-4" /> Add Item
+                        </Button>
+                        <div className="text-right">
+                          <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                            Total Items
+                          </p>
+                          <p className="text-xl font-bold tabular-nums text-foreground">
+                            {totalQty}
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                    <p className="text-[11px] text-blue-600/80 leading-relaxed font-medium">
-                      This request monitors internal stock distribution and
-                      triggers Material Transfer logs.
-                    </p>
+
+                    <div className="rounded-xl border border-border/60 bg-card/40 p-5 backdrop-blur-sm">
+                      <div className="flex items-center gap-2 mb-3">
+                        <ClipboardCheck className="h-4 w-4 text-primary" />
+                        <h4 className="text-sm font-semibold text-foreground">
+                          Review Summary
+                        </h4>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                            Request Type
+                          </p>
+                          <p className="font-medium text-foreground">
+                            {watchedType}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                            Company
+                          </p>
+                          <p className="font-medium text-foreground">
+                            {getValues().company || "—"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                            Transaction Date
+                          </p>
+                          <p className="font-medium text-foreground">
+                            {getValues().transaction_date}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                            Required By
+                          </p>
+                          <p className="font-medium text-foreground">
+                            {getValues().schedule_date || "—"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-4 border-t border-border/60 pt-4">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">
+                            {(watchedItems ?? []).filter((i) => i?.item_code).length}{" "}
+                            item(s)
+                          </span>
+                          <span className="text-lg font-bold tabular-nums text-primary">
+                            {totalQty} total units
+                          </span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                )}
-              </div>
+                );
+              }
 
-              <Button
-                type="submit"
-                disabled={createMutation.isPending}
-                className="w-full rounded-2xl h-14 font-black uppercase tracking-[0.1em] text-xs shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-all"
-              >
-                {createMutation.isPending ? (
-                  <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                ) : (
-                  <Save className="h-5 w-5 mr-3" />
-                )}
-                Submit for Approval
-              </Button>
-
-              <div className="flex items-center gap-3 p-4 rounded-2xl bg-secondary/30 text-[10px] text-muted-foreground font-medium border border-border/50">
-                <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
-                Submitted requests cannot be modified once approved by inventory
-                managers.
-              </div>
-            </div>
-          </div>
-        </div>
-      </form>
-    </Form>
+              return null;
+            }}
+          />
+        </InfoCard>
+      </Form>
+    </div>
   );
 }
 
-export default function CreateMaterialRequestPage() {
+function StepHeading({
+  icon,
+  title,
+  description,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+}) {
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="New Material Request"
-        subtitle="Operational demand identification and authorization"
-        backHref="/stock/material-request"
-      />
-      <Suspense fallback={<LoadingState />}>
-        <CreateMaterialRequestForm />
-      </Suspense>
+    <div className="flex items-start gap-3">
+      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+        {icon}
+      </div>
+      <div>
+        <h3 className="text-base font-semibold text-foreground">{title}</h3>
+        <p className="text-sm text-muted-foreground">{description}</p>
+      </div>
     </div>
   );
 }

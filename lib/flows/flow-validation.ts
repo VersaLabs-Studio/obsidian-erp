@@ -140,6 +140,62 @@ export const salesInvoiceStepSchemas = {
 };
 
 /**
+ * Material Request step schemas
+ */
+export const materialRequestStepSchemas = {
+  step1: z.object({
+    material_request_type: z.string().min(1, "Request type is required"),
+    company: z.string().min(1, "Company is required"),
+    transaction_date: z.string().min(1, "Transaction date is required"),
+    schedule_date: z.string().optional(),
+    set_from_warehouse: z.string().optional(),
+    set_warehouse: z.string().optional(),
+  }),
+  step2: z.object({
+    items: z
+      .array(
+        z.object({
+          item_code: z.string().min(1, "Item code is required"),
+          qty: z.number().min(0.01, "Quantity must be greater than 0"),
+          uom: z.string().optional(),
+          warehouse: z.string().optional(),
+          schedule_date: z.string().optional(),
+        })
+      )
+      .min(1, "At least one item is required"),
+  }),
+};
+
+/**
+ * Stock Entry step schemas
+ */
+export const stockEntryStepSchemas = {
+  step1: z.object({
+    purpose: z.string().min(1, "Purpose is required"),
+    company: z.string().min(1, "Company is required"),
+    posting_date: z.string().optional(),
+    from_warehouse: z.string().optional(),
+    to_warehouse: z.string().optional(),
+  }),
+  step2: z.object({
+    items: z
+      .array(
+        z.object({
+          item_code: z.string().min(1, "Item code is required"),
+          qty: z.number().min(0.01, "Quantity must be greater than 0"),
+          rate: z.number().optional(),
+          amount: z.number().optional(),
+          uom: z.string().optional(),
+          s_warehouse: z.string().optional(),
+          t_warehouse: z.string().optional(),
+          basic_rate: z.number().optional(),
+        })
+      )
+      .min(1, "At least one item is required"),
+  }),
+};
+
+/**
  * All step schemas indexed by doctype
  */
 export const WIZARD_STEP_SCHEMAS: Record<string, Record<string, z.ZodType>> = {
@@ -147,6 +203,8 @@ export const WIZARD_STEP_SCHEMAS: Record<string, Record<string, z.ZodType>> = {
   "Quotation": quotationStepSchemas,
   "Delivery Note": deliveryNoteStepSchemas,
   "Sales Invoice": salesInvoiceStepSchemas,
+  "Material Request": materialRequestStepSchemas,
+  "Stock Entry": stockEntryStepSchemas,
 };
 
 /**

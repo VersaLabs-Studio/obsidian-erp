@@ -1,8 +1,10 @@
-// @ts-nocheck
 "use client";
 
+// app/stock/stock-entry/page.tsx
+// Obsidian ERP v4.0 — Stock Entries List Page (Premium Card Design)
+
 import { useState, useMemo } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -10,279 +12,277 @@ import {
   MoreVertical,
   Pencil,
   Trash2,
-  Search,
+  Eye,
+  CalendarDays,
+  Building2,
   ArrowRightLeft,
+  ArrowRight,
+  Package,
+  CheckCircle2,
+  FileText,
   LogIn,
   LogOut,
   Factory,
   Cog,
-  Package,
   Truck,
-  Eye,
-  Calendar,
-  Building2,
-  CheckCircle2,
-  Clock,
-  XCircle,
-  ArrowRight,
-  Monitor,
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useFrappeList, useFrappeDelete } from "@/hooks/generic";
 import {
   PageHeader,
-  LoadingState,
   EmptyState,
+  LoadingState,
   ConfirmDialog,
 } from "@/components/smart";
+import { StatusBadge } from "@/components/smart/status-badge";
+import { KPICard } from "@/components/dashboard/KPICard";
 import type { StockEntry } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
-import { format, parseISO } from "date-fns";
 
-const PURPOSE_CONFIG = {
-  "Material Issue": {
-    color: "text-red-600",
-    bg: "bg-red-50 dark:bg-red-900/10",
-    icon: LogOut,
-  },
-  "Material Receipt": {
-    color: "text-emerald-600",
-    bg: "bg-emerald-50 dark:bg-emerald-900/10",
-    icon: LogIn,
-  },
-  "Material Transfer": {
-    color: "text-blue-600",
-    bg: "bg-blue-50 dark:bg-blue-900/10",
-    icon: ArrowRightLeft,
-  },
-  "Material Transfer for Manufacture": {
-    color: "text-indigo-600",
-    bg: "bg-indigo-50 dark:bg-indigo-900/10",
-    icon: Factory,
-  },
-  Manufacture: {
-    color: "text-violet-600",
-    bg: "bg-violet-50 dark:bg-violet-900/10",
-    icon: Cog,
-  },
-  Repack: {
-    color: "text-amber-600",
-    bg: "bg-amber-50 dark:bg-amber-900/10",
-    icon: Package,
-  },
-  "Send to Subcontractor": {
-    color: "text-cyan-600",
-    bg: "bg-cyan-50 dark:bg-cyan-900/10",
-    icon: Truck,
-  },
+const PURPOSE_CONFIG: Record<
+  string,
+  { icon: React.ElementType; label: string }
+> = {
+  "Material Receipt": { icon: LogIn, label: "Receipt" },
+  "Material Issue": { icon: LogOut, label: "Issue" },
+  "Material Transfer": { icon: ArrowRightLeft, label: "Transfer" },
+  "Material Transfer for Manufacture": { icon: Factory, label: "Transfer for Mfg" },
+  Manufacture: { icon: Cog, label: "Manufacture" },
+  Repack: { icon: Package, label: "Repack" },
+  "Send to Subcontractor": { icon: Truck, label: "Subcontractor" },
 };
 
-function StockEntryCard({ entry, index, onView, onEdit, onDelete }) {
+function getDisplayStatus(entry: StockEntry): string {
+  if (entry.docstatus === 2) return "Cancelled";
+  if (entry.docstatus === 1) return "Submitted";
+  return "Draft";
+}
+
+function StockEntryCard({
+  entry,
+  index,
+  onView,
+  onEdit,
+  onDelete,
+}: {
+  entry: StockEntry;
+  index: number;
+  onView: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
   const purposeConfig =
-    PURPOSE_CONFIG[entry.purpose] || PURPOSE_CONFIG["Material Transfer"];
+    PURPOSE_CONFIG[entry.purpose ?? ""] || PURPOSE_CONFIG["Material Transfer"];
   const PurposeIcon = purposeConfig.icon;
+  const displayStatus = getDisplayStatus(entry);
   const isDraft = entry.docstatus === 0;
-  const isSubmitted = entry.docstatus === 1;
+  const isDeletable = entry.docstatus === 0;
+
+  const formatDate = (dateStr: string | undefined) => {
+    if (!dateStr) return "—";
+    return new Date(dateStr).toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
+  const formatCurrency = (amount: number | undefined) => {
+    return new Intl.NumberFormat("en-ET", {
+      style: "currency",
+      currency: "ETB",
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount || 0);
+  };
 
   return (
     <div
       className={cn(
-        "group relative bg-card rounded-[2rem] border border-border/50 p-6",
-        "hover:shadow-xl hover:shadow-primary/5 hover:border-primary/20",
-        "transition-all duration-300 cursor-pointer animate-in fade-in slide-in-from-bottom-4",
+        "group relative bg-card rounded-2xl border border-border/50",
+        "hover:border-primary/20 hover:shadow-xl hover:shadow-primary/5",
+        "transition-all duration-300 cursor-pointer overflow-hidden",
+        "animate-slide-up"
       )}
-      style={{ animationDelay: `${index * 50}ms` }}
+      style={{ animationDelay: `${index * 40}ms` }}
       onClick={onView}
     >
-      {/* Purpose Badge */}
+      {/* Status Indicator Bar */}
       <div
         className={cn(
-          "absolute -top-2 left-6 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border",
-          purposeConfig.bg,
-          purposeConfig.color,
-          "border-current/10 shadow-sm",
+          "absolute top-0 left-0 right-0 h-1",
+          displayStatus === "Draft" && "bg-slate-400",
+          displayStatus === "Submitted" && "bg-emerald-500",
+          displayStatus === "Cancelled" && "bg-muted-foreground/50"
         )}
-      >
-        <PurposeIcon className="h-3 w-3 inline mr-1.5" />
-        {entry.purpose}
-      </div>
+      />
 
-      {/* Header */}
-      <div className="flex items-start justify-between mt-3 mb-4">
-        <div>
-          <h3 className="font-bold text-foreground group-hover:text-primary transition-colors tracking-tight">
-            {entry.name}
-          </h3>
-          <p className="text-[10px] text-muted-foreground mt-1 font-medium font-mono uppercase">
-            {entry.posting_date
-              ? format(parseISO(entry.posting_date), "MMM d, yyyy")
-              : "—"}
-            {entry.posting_time && ` at ${entry.posting_time.slice(0, 5)}`}
-          </p>
+      <div className="p-5">
+        {/* Header Row */}
+        <div className="flex items-start justify-between mb-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-lg text-foreground tracking-tight">
+                {entry.name}
+              </h3>
+              <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
+            <div
+              className={cn(
+                "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold",
+                "bg-secondary/50 text-secondary-foreground"
+              )}
+            >
+              <PurposeIcon className="h-3 w-3" />
+              {purposeConfig.label}
+            </div>
+          </div>
+
+          {/* Status Badge */}
+          <StatusBadge status={displayStatus} />
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 rounded-full hover:bg-primary/5"
+
+        {/* Info Grid */}
+        <div className="grid grid-cols-3 gap-4 mb-4">
+          <div className="space-y-1">
+            <p className="text-[10px] font-bold uppercase text-muted-foreground/70 tracking-wider">
+              Date
+            </p>
+            <p className="text-sm font-medium text-foreground flex items-center gap-1">
+              <CalendarDays className="h-3 w-3 text-muted-foreground" />
+              {formatDate(entry.posting_date)}
+            </p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-[10px] font-bold uppercase text-muted-foreground/70 tracking-wider">
+              Company
+            </p>
+            <p className="text-sm font-medium text-foreground flex items-center gap-1 truncate">
+              <Building2 className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+              <span className="truncate">{entry.company || "—"}</span>
+            </p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-[10px] font-bold uppercase text-muted-foreground/70 tracking-wider">
+              Value Diff
+            </p>
+            <p className="text-sm font-bold tabular-nums text-foreground">
+              {formatCurrency(entry.value_difference)}
+            </p>
+          </div>
+        </div>
+
+        {/* Warehouse Flow */}
+        <div className="flex items-center gap-3 p-3 bg-secondary/30 rounded-xl border border-border/50 mb-4">
+          <div className="flex-1 min-w-0">
+            <p className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider mb-1">
+              Source
+            </p>
+            <p
+              className={cn(
+                "font-medium text-xs truncate",
+                entry.from_warehouse
+                  ? "text-foreground"
+                  : "text-muted-foreground italic"
+              )}
             >
-              <MoreVertical className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48 rounded-2xl p-2">
-            <DropdownMenuItem
-              onClick={(e) => {
-                e.stopPropagation();
-                onView();
-              }}
-              className="rounded-xl"
+              {entry.from_warehouse?.split(" - ")[0] || "—"}
+            </p>
+          </div>
+          <div className="h-7 w-7 rounded-full bg-background flex items-center justify-center shrink-0 border border-border/50">
+            <ArrowRight className="h-3 w-3 text-primary" />
+          </div>
+          <div className="flex-1 min-w-0 text-right">
+            <p className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider mb-1">
+              Target
+            </p>
+            <p
+              className={cn(
+                "font-medium text-xs truncate",
+                entry.to_warehouse
+                  ? "text-foreground"
+                  : "text-muted-foreground italic"
+              )}
             >
-              <Eye className="h-4 w-4 mr-2" /> View Audit Log
-            </DropdownMenuItem>
-            {isDraft && (
-              <>
+              {entry.to_warehouse?.split(" - ")[0] || "—"}
+            </p>
+          </div>
+        </div>
+
+        {/* Footer with Actions */}
+        <div className="flex items-center justify-between pt-4 border-t border-border/50">
+          <div className="flex items-center gap-2">
+            {entry.work_order && (
+              <div className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground bg-secondary/30 px-2 py-1 rounded-full border border-border/50">
+                <Factory className="h-3 w-3" />
+                <span className="truncate max-w-[100px]">
+                  {entry.work_order}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Actions */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 rounded-xl opacity-0 group-hover:opacity-100 transition-all"
+              >
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              className="rounded-xl border-border/50 shadow-xl bg-popover/95 backdrop-blur-xl p-1.5 min-w-[160px]"
+            >
+              <DropdownMenuItem
+                className="rounded-lg cursor-pointer"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onView();
+                }}
+              >
+                <Eye className="h-4 w-4 mr-2" />
+                View Details
+              </DropdownMenuItem>
+              {isDraft && (
                 <DropdownMenuItem
+                  className="rounded-lg cursor-pointer"
                   onClick={(e) => {
                     e.stopPropagation();
                     onEdit();
                   }}
-                  className="rounded-xl"
                 >
-                  <Pencil className="h-4 w-4 mr-2" /> Edit Entry
+                  <Pencil className="h-4 w-4 mr-2" />
+                  Edit
                 </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDelete();
-                  }}
-                  className="rounded-xl text-destructive"
-                >
-                  <Trash2 className="h-4 w-4 mr-2" /> Delete
-                </DropdownMenuItem>
-              </>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
-      {/* Warehouse Flow */}
-      <div className="flex items-center gap-3 p-3 bg-secondary/30 rounded-2xl border border-border/50 mb-4">
-        <div className="flex-1 min-w-0">
-          <p className="text-[9px] uppercase font-black text-muted-foreground tracking-widest mb-1">
-            Source
-          </p>
-          <p
-            className={cn(
-              "font-bold text-xs truncate",
-              entry.from_warehouse
-                ? "text-foreground"
-                : "text-muted-foreground italic",
-            )}
-          >
-            {entry.from_warehouse?.split(" - ")[0] || "No Source"}
-          </p>
+              )}
+              {isDeletable && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="rounded-lg cursor-pointer text-destructive focus:text-destructive"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete();
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
-
-        <div className="h-8 w-8 rounded-full bg-background flex items-center justify-center shrink-0 shadow-sm border border-border/50">
-          <ArrowRight className="h-3.5 w-3.5 text-primary" />
-        </div>
-
-        <div className="flex-1 min-w-0 text-right">
-          <p className="text-[9px] uppercase font-black text-muted-foreground tracking-widest mb-1">
-            Target
-          </p>
-          <p
-            className={cn(
-              "font-bold text-xs truncate",
-              entry.to_warehouse
-                ? "text-foreground"
-                : "text-muted-foreground italic",
-            )}
-          >
-            {entry.to_warehouse?.split(" - ")[0] || "No Target"}
-          </p>
-        </div>
-      </div>
-
-      {/* Info */}
-      <div className="grid grid-cols-2 gap-3 text-xs mb-4">
-        {entry.work_order && (
-          <div className="flex items-center gap-1.5 text-indigo-600 font-bold col-span-2 bg-indigo-500/5 px-3 py-1.5 rounded-xl border border-indigo-500/10">
-            <Factory className="h-3.5 w-3.5" />
-            <span className="truncate">{entry.work_order}</span>
-          </div>
-        )}
-        <div className="flex items-center gap-2 text-muted-foreground bg-secondary/20 px-3 py-1.5 rounded-xl">
-          <Building2 className="h-3.5 w-3.5" />
-          <span className="truncate font-medium">{entry.company}</span>
-        </div>
-        {entry.fg_completed_qty > 0 && (
-          <div className="flex items-center gap-2 text-violet-600 font-bold bg-violet-500/5 px-3 py-1.5 rounded-xl border border-violet-500/10">
-            <Package className="h-3.5 w-3.5" />
-            <span>FG: {entry.fg_completed_qty}</span>
-          </div>
-        )}
-      </div>
-
-      {/* Values */}
-      {(entry.total_outgoing_value > 0 || entry.total_incoming_value > 0) && (
-        <div className="grid grid-cols-2 gap-4 text-[11px] pt-4 border-t border-border/50">
-          <div>
-            <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest mb-1">
-              Outgoing
-            </p>
-            <p className="font-black text-red-600 tabular-nums">
-              ETB{" "}
-              {entry.total_outgoing_value?.toLocaleString(undefined, {
-                minimumFractionDigits: 2,
-              })}
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="text-[9px] text-muted-foreground uppercase font-black tracking-widest mb-1">
-              Incoming
-            </p>
-            <p className="font-black text-emerald-600 tabular-nums">
-              ETB{" "}
-              {entry.total_incoming_value?.toLocaleString(undefined, {
-                minimumFractionDigits: 2,
-              })}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Status */}
-      <div className="mt-4 flex justify-between items-center">
-        <Badge
-          className={cn(
-            "rounded-full text-[10px] font-black px-3 border-0 shadow-sm",
-            isSubmitted
-              ? "bg-emerald-500/10 text-emerald-600"
-              : "bg-slate-500/10 text-slate-600",
-          )}
-        >
-          {isSubmitted ? (
-            <CheckCircle2 className="h-3 w-3 mr-1.5" />
-          ) : (
-            <Clock className="h-3 w-3 mr-1.5" />
-          )}
-          {isSubmitted ? "SUBMITTED" : "DRAFT"}
-        </Badge>
-        {isSubmitted && (
-          <div className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground opacity-50">
-            <Monitor className="h-3 w-3" /> Balanced
-          </div>
-        )}
       </div>
     </div>
   );
@@ -290,20 +290,14 @@ function StockEntryCard({ entry, index, onView, onEdit, onDelete }) {
 
 export default function StockEntryListPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const workOrderFilter = searchParams.get("work_order");
-
-  const [searchTerm, setSearchTerm] = useState("");
-  const [purposeFilter, setPurposeFilter] = useState("all");
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
-
-  const filters: any[] = [];
-  if (workOrderFilter) filters.push(["work_order", "=", workOrderFilter]);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [deleteTarget, setDeleteTarget] = useState<StockEntry | null>(null);
 
   const {
     data: entries,
     isLoading,
-    refetch,
+    error,
   } = useFrappeList<StockEntry>("Stock Entry", {
     fields: [
       "name",
@@ -317,156 +311,217 @@ export default function StockEntryListPage() {
       "fg_completed_qty",
       "total_outgoing_value",
       "total_incoming_value",
+      "value_difference",
       "docstatus",
       "company",
     ],
-    filters: filters.length > 0 ? filters : undefined,
     orderBy: { field: "creation", order: "desc" },
+    search,
     limit: 100,
   });
 
   const deleteMutation = useFrappeDelete("Stock Entry", {
-    onSuccess: () => {
-      toast.success("Stock Entry deleted");
-      refetch();
-      setDeleteTarget(null);
-    },
-    onError: (err) => toast.error(err.message),
+    onSuccess: () => setDeleteTarget(null),
   });
 
-  const filtered = useMemo(() => {
+  const filteredEntries = useMemo(() => {
     if (!entries) return [];
-    return entries.filter((e) => {
-      const matchesSearch =
-        !searchTerm ||
-        e.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        e.work_order?.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesPurpose =
-        purposeFilter === "all" || e.purpose === purposeFilter;
-      return matchesSearch && matchesPurpose;
-    });
-  }, [entries, searchTerm, purposeFilter]);
+    let result = entries;
 
-  if (isLoading) return <LoadingState type="list" />;
+    if (statusFilter !== "all") {
+      result = result.filter((e) => {
+        const displayStatus = getDisplayStatus(e);
+        return displayStatus === statusFilter;
+      });
+    }
+
+    return result;
+  }, [entries, statusFilter]);
+
+  const statusCounts = useMemo(() => {
+    if (!entries) return {};
+    return entries.reduce((acc, e) => {
+      const status = getDisplayStatus(e);
+      acc[status] = (acc[status] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+  }, [entries]);
+
+  const kpis = useMemo(() => {
+    if (!entries)
+      return { total: 0, draft: 0, inProcess: 0, completed: 0 };
+    return {
+      total: entries.length,
+      draft: entries.filter((e) => e.docstatus === 0).length,
+      inProcess: entries.filter((e) => e.docstatus === 1).length,
+      completed: 0,
+    };
+  }, [entries]);
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    await deleteMutation.mutateAsync(deleteTarget.name);
+  };
+
+  if (isLoading) return <LoadingState type="cards" count={6} />;
+  if (error)
+    return (
+      <div className="p-8 text-center text-destructive">
+        Failed to load stock entries
+      </div>
+    );
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Stock Entries"
-        subtitle={
-          workOrderFilter
-            ? `Inventory movements for ${workOrderFilter}`
-            : "Track and manage all warehouse stock movements"
+        subtitle={`${filteredEntries.length} entr${
+          filteredEntries.length !== 1 ? "ies" : "y"
+        }`}
+        showSearch
+        searchValue={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search by ID, work order..."
+        actions={
+          <Button
+            className="rounded-full shadow-lg shadow-primary/20"
+            onClick={() => router.push("/stock/stock-entry/new")}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            New Stock Entry
+          </Button>
         }
-        primaryAction={{
-          label: "Create Entry",
-          onClick: () => router.push("/stock/stock-entry/new"),
-          icon: <Plus className="h-4 w-4" />,
-        }}
       />
 
-      {/* Filters */}
-      <div className="bg-card rounded-[2rem] border border-border/50 p-2 shadow-sm flex flex-col xl:flex-row gap-2">
-        <div className="relative flex-1 group">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
-          <Input
-            placeholder="Search by ID, order or purpose..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-11 h-12 rounded-[1.5rem] bg-transparent border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-          />
-        </div>
-
-        <Tabs
-          value={purposeFilter}
-          onValueChange={setPurposeFilter}
-          className="xl:w-auto overflow-x-auto"
-        >
-          <TabsList className="bg-secondary/30 p-1 rounded-[1.5rem] h-12 inline-flex whitespace-nowrap overflow-visible">
-            <TabsTrigger
-              value="all"
-              className="rounded-full px-5 h-10 font-bold"
-            >
-              All
-            </TabsTrigger>
-            <TabsTrigger
-              value="Material Receipt"
-              className="rounded-full px-5 h-10 font-bold"
-            >
-              <LogIn className="h-3.5 w-3.5 mr-2" /> Receipt
-            </TabsTrigger>
-            <TabsTrigger
-              value="Material Issue"
-              className="rounded-full px-5 h-10 font-bold"
-            >
-              <LogOut className="h-3.5 w-3.5 mr-2" /> Issue
-            </TabsTrigger>
-            <TabsTrigger
-              value="Material Transfer"
-              className="rounded-full px-5 h-10 font-bold"
-            >
-              <ArrowRightLeft className="h-3.5 w-3.5 mr-2" /> Transfer
-            </TabsTrigger>
-            <TabsTrigger
-              value="Manufacture"
-              className="rounded-full px-5 h-10 font-bold"
-            >
-              <Cog className="h-3.5 w-3.5 mr-2" /> Manufacture
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
+      {/* KPI Bar */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <KPICard
+          title="Total Entries"
+          value={kpis.total}
+          icon={ArrowRightLeft}
+          isLoading={isLoading}
+        />
+        <KPICard
+          title="Draft"
+          value={kpis.draft}
+          icon={FileText}
+          variant="warning"
+          isLoading={isLoading}
+        />
+        <KPICard
+          title="Submitted"
+          value={kpis.inProcess}
+          icon={CheckCircle2}
+          variant="default"
+          isLoading={isLoading}
+        />
+        <KPICard
+          title="Cancelled"
+          value={statusCounts.Cancelled || 0}
+          icon={Package}
+          variant="danger"
+          isLoading={isLoading}
+        />
       </div>
 
-      {/* Content */}
-      {filtered.length === 0 ? (
+      {/* Status Filter Pills */}
+      <div className="flex gap-2 flex-wrap">
+        {[
+          { key: "all", label: "All", count: entries?.length || 0 },
+          { key: "Draft", label: "Draft", count: statusCounts.Draft || 0 },
+          {
+            key: "Submitted",
+            label: "Submitted",
+            count: statusCounts.Submitted || 0,
+          },
+          {
+            key: "Cancelled",
+            label: "Cancelled",
+            count: statusCounts.Cancelled || 0,
+          },
+        ].map((status) => (
+          <Button
+            key={status.key}
+            variant={statusFilter === status.key ? "default" : "outline"}
+            size="sm"
+            className={cn(
+              "rounded-full gap-2 transition-all",
+              statusFilter === status.key
+                ? "shadow-lg shadow-primary/20"
+                : "hover:bg-secondary/80"
+            )}
+            onClick={() => setStatusFilter(status.key)}
+          >
+            {status.label}
+            <Badge
+              variant="secondary"
+              className={cn(
+                "h-5 min-w-[20px] px-1.5 text-[10px] font-bold",
+                statusFilter === status.key
+                  ? "bg-primary-foreground/20 text-primary-foreground"
+                  : "bg-secondary"
+              )}
+            >
+              {status.count}
+            </Badge>
+          </Button>
+        ))}
+      </div>
+
+      {/* Stock Entries Grid */}
+      {!entries || entries.length === 0 ? (
         <EmptyState
-          icon={ArrowRightLeft}
           title="No stock entries found"
-          description={
-            searchTerm
-              ? "No movements match your criteria"
-              : "Record your first stock movement to update your inventory levels"
-          }
+          description="Record your first stock movement to update inventory levels"
           action={
-            searchTerm
-              ? undefined
-              : {
-                  label: "New Entry",
-                  onClick: () => router.push("/stock/stock-entry/new"),
-                }
+            <Button
+              onClick={() => router.push("/stock/stock-entry/new")}
+              className="rounded-full"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Create Stock Entry
+            </Button>
           }
         />
+      ) : filteredEntries.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">
+          <ArrowRightLeft className="h-12 w-12 mx-auto mb-4 opacity-30" />
+          <p className="font-medium">No stock entries match this filter</p>
+          <p className="text-sm mt-1">Try selecting a different status</p>
+        </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filtered.map((entry, idx) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {filteredEntries.map((entry, index) => (
             <StockEntryCard
               key={entry.name}
               entry={entry}
-              index={idx}
+              index={index}
               onView={() =>
                 router.push(
-                  `/stock/stock-entry/${encodeURIComponent(entry.name)}`,
+                  `/stock/stock-entry/${encodeURIComponent(entry.name)}`
                 )
               }
               onEdit={() =>
                 router.push(
-                  `/stock/stock-entry/${encodeURIComponent(entry.name)}/edit`,
+                  `/stock/stock-entry/${encodeURIComponent(entry.name)}/edit`
                 )
               }
-              onDelete={() => setDeleteTarget(entry.name)}
+              onDelete={() => setDeleteTarget(entry)}
             />
           ))}
         </div>
       )}
 
+      {/* Delete Confirmation */}
       <ConfirmDialog
         open={!!deleteTarget}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title="Delete Stock Entry?"
-        description="This will permanently delete the draft stock entry. Submitted entries cannot be deleted."
-        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget)}
-        isLoading={deleteMutation.isPending}
+        title="Delete Stock Entry"
+        description={`Are you sure you want to delete stock entry "${deleteTarget?.name}"? This action cannot be undone.`}
+        confirmText="Delete"
         variant="destructive"
+        onConfirm={handleDeleteConfirm}
+        loading={deleteMutation.isPending}
       />
     </div>
   );
