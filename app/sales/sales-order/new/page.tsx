@@ -1,99 +1,54 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+// app/sales/sales-order/new/page.tsx
+// Obsidian ERP v4.0 — Sales Order Create (V4 SmartForm Wizard)
+// GOLDEN TEMPLATE — every transactional create page copies this pattern.
+// Per Architecture V4 Part 2 §2 (SmartForm Wizard) + §3.3 (Create Template).
+// Flow engine: FlowWizard (Zod step gating) + AUTO_FILL_REGISTRY (Quotation→Sales Order).
+// Premium UI: OKLCH semantic tokens only, glassmorphism, Framer Motion via FlowWizard.
+
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { motion, useReducedMotion } from "framer-motion";
+import { useForm, useFieldArray, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import {
-  ShoppingCart,
-  Calendar,
+  UserRound,
   Package,
-  CheckCircle2,
+  ClipboardCheck,
+  Plus,
+  Trash2,
   Lock,
 } from "lucide-react";
 
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { Form } from "@/components/ui/form";
 import { PageHeader } from "@/components/smart";
-import { FlowWizard } from "@/components/flows/FlowWizard";
-import { FlowAutoFill } from "@/components/flows/FlowAutoFill";
+import { InfoCard } from "@/components/ui/info-card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   FormInput,
   FormFrappeSelect,
   FormDatePicker,
 } from "@/components/form";
-import { useFrappeDoc, useFrappeCreate } from "@/hooks/generic";
+import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
+import { FlowWizard } from "@/components/flows/FlowWizard";
+import { useFrappeCreate, useFrappeDoc } from "@/hooks/generic";
 import {
-  AUTO_FILL_REGISTRY,
+  getAutoFillMapping,
   applyAutoFill,
   applyItemAutoFill,
 } from "@/lib/flows/flow-auto-fill";
-import {
-  validateWizardStep,
-  salesOrderStepSchemas,
-  type StepValidationResult,
-} from "@/lib/flows/flow-validation";
-import { SalesOrderCreateSchema } from "@/lib/schemas/doctype-schemas";
+import { validateWizardStep } from "@/lib/flows/flow-validation";
+import type { StepValidationResult } from "@/lib/flows/flow-validation";
 import type { WizardStep } from "@/types/flow-types";
-import type { AutoFillRegistryEntry } from "@/types/flow-types";
-import type {
-  Quotation,
-  SalesOrderCreateRequest,
-} from "@/types/doctype-types";
+import type { Quotation } from "@/types/doctype-types";
+import { cn } from "@/lib/utils";
 
-const MOTION = {
-  fast: { duration: 0.15, ease: [0.4, 0, 0.2, 1] as const },
-  normal: { duration: 0.25, ease: [0.4, 0, 0.2, 1] as const },
-};
-
-const containerVariants = {
-  hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { staggerChildren: 0.07 } },
-};
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 16 },
-  show: { opacity: 1, y: 0, transition: MOTION.normal },
-};
-
-const SALES_ORDER_STEPS: WizardStep[] = [
-  {
-    id: "step1",
-    label: "Customer & Dates",
-    description: "Customer information and key dates",
-    schema: salesOrderStepSchemas.step1,
-    fields: [
-      "customer",
-      "company",
-      "transaction_date",
-      "delivery_date",
-      "po_no",
-    ],
-    icon: "Users",
-  },
-  {
-    id: "step2",
-    label: "Order Items",
-    description: "Line items, taxes, and totals",
-    schema: salesOrderStepSchemas.step2,
-    fields: ["items", "taxes_and_charges", "grand_total"],
-    icon: "Package",
-  },
-  {
-    id: "step3",
-    label: "Review & Confirm",
-    description: "Review all details before creating",
-    schema: salesOrderStepSchemas.step3,
-    fields: ["confirmed"],
-    icon: "CheckCircle2",
-  },
-];
-
-interface SalesOrderItem {
+// ---------------------------------------------------------------------------
+// Form model — concrete item shape so the field array is fully typed
+// (avoids the z.array(z.unknown()) inference pain; the factory route's Zod
+// schema remains the authoritative server-side gate).
+// ---------------------------------------------------------------------------
+interface SOItem {
   item_code: string;
   item_name?: string;
   description?: string;
@@ -102,988 +57,565 @@ interface SalesOrderItem {
   amount?: number;
   uom?: string;
   warehouse?: string;
-  item_group?: string;
-  brand?: string;
-  conversion_factor?: number;
 }
 
-const salesOrderFormSchema = SalesOrderCreateSchema.extend({
-  customer_name: z.string().optional(),
-  items: z.array(
-    z.object({
-      item_code: z.string(),
-      item_name: z.string().optional(),
-      description: z.string().optional(),
-      qty: z.number(),
-      rate: z.number(),
-      amount: z.number().optional(),
-      uom: z.string().optional(),
-      warehouse: z.string().optional(),
-      item_group: z.string().optional(),
-      brand: z.string().optional(),
-      conversion_factor: z.number().optional(),
-    })
-  ),
-  confirmed: z.boolean().optional(),
+interface SOForm {
+  naming_series: string;
+  customer: string;
+  customer_name?: string;
+  company: string;
+  transaction_date: string;
+  delivery_date: string;
+  order_type: string;
+  currency: string;
+  selling_price_list: string;
+  price_list_currency: string;
+  conversion_rate: number;
+  plc_conversion_rate: number;
+  customer_address?: string;
+  contact_person?: string;
+  taxes_and_charges?: string;
+  tc_name?: string;
+  terms?: string;
+  po_no?: string;
+  po_date?: string;
+  status: string;
+  items: SOItem[];
+}
+
+const EMPTY_ITEM: SOItem = {
+  item_code: "",
+  item_name: "",
+  description: "",
+  qty: 1,
+  rate: 0,
+  amount: 0,
+  uom: "Nos",
+};
+
+const WIZARD_STEPS: WizardStep[] = [
+  {
+    id: "step1",
+    label: "Customer & Dates",
+    description: "Confirm the customer and set the delivery timeline",
+    schema: null,
+    fields: ["customer", "company", "transaction_date", "delivery_date"],
+    icon: "UserRound",
+  },
+  {
+    id: "step2",
+    label: "Order Items",
+    description: "Review and adjust the items on this order",
+    schema: null,
+    fields: ["items"],
+    icon: "Package",
+  },
+  {
+    id: "step3",
+    label: "Review & Confirm",
+    description: "Review the order before creating it",
+    schema: null,
+    fields: [],
+    icon: "ClipboardCheck",
+  },
+];
+
+const ETB = new Intl.NumberFormat("en-ET", {
+  style: "currency",
+  currency: "ETB",
 });
-
-type SalesOrderFormData = z.infer<typeof salesOrderFormSchema>;
-
-function StepCustomerDates({
-  form,
-  autoFilledFields,
-  mapping,
-}: {
-  form: ReturnType<typeof useForm<SalesOrderFormData>>;
-  autoFilledFields: Set<string>;
-  mapping: AutoFillRegistryEntry | null;
-}) {
-  const formData = form.watch();
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h3 className="font-bold text-lg text-foreground tracking-tight">
-          Customer & Dates
-        </h3>
-        <p className="text-sm text-muted-foreground mt-1">
-          Core order information. Auto-filled fields are locked.
-        </p>
-      </div>
-
-      {mapping && (
-        <FlowAutoFill
-          sourceDoctype={mapping.sourceDoctype}
-          sourceName={formData.customer_name || undefined}
-          filledCount={
-            mapping.headerMappings.filter((m) => m.isReadOnly).length
-          }
-          userFillCount={mapping.userMustFill.length}
-        />
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="space-y-1.5">
-          <label className="text-[10px] font-bold uppercase text-muted-foreground/70 tracking-wider">
-            Customer
-            <span className="text-destructive ml-0.5">*</span>
-            {autoFilledFields.has("customer") && (
-              <Lock className="inline h-3 w-3 ml-1 text-primary" />
-            )}
-          </label>
-          {autoFilledFields.has("customer") ? (
-            <div className="flex h-12 items-center rounded-xl border border-primary/20 bg-primary/5 px-3 text-sm dark:bg-primary/10">
-              <span className="text-foreground font-medium truncate">
-                {formData.customer_name || formData.customer || "—"}
-              </span>
-            </div>
-          ) : (
-            <FormFrappeSelect
-              control={form.control}
-              name="customer"
-              doctype="Customer"
-              labelField="customer_name"
-              placeholder="Search customer..."
-              onValueChange={(val, doc) => {
-                if (doc?.customer_name) {
-                  form.setValue("customer_name", doc.customer_name);
-                }
-              }}
-              hideLabel
-            />
-          )}
-        </div>
-
-        <div className="space-y-1.5">
-          <label className="text-[10px] font-bold uppercase text-muted-foreground/70 tracking-wider">
-            Company
-            <span className="text-destructive ml-0.5">*</span>
-            {autoFilledFields.has("company") && (
-              <Lock className="inline h-3 w-3 ml-1 text-primary" />
-            )}
-          </label>
-          {autoFilledFields.has("company") ? (
-            <div className="flex h-12 items-center rounded-xl border border-primary/20 bg-primary/5 px-3 text-sm dark:bg-primary/10">
-              <span className="text-foreground font-medium truncate">
-                {formData.company || "—"}
-              </span>
-            </div>
-          ) : (
-            <FormFrappeSelect
-              control={form.control}
-              name="company"
-              doctype="Company"
-              labelField="company_name"
-              placeholder="Select company..."
-              hideLabel
-            />
-          )}
-        </div>
-
-        <div className="space-y-1.5">
-          <label className="text-[10px] font-bold uppercase text-muted-foreground/70 tracking-wider">
-            Order Date
-            <span className="text-destructive ml-0.5">*</span>
-            {autoFilledFields.has("transaction_date") && (
-              <Lock className="inline h-3 w-3 ml-1 text-primary" />
-            )}
-          </label>
-          {autoFilledFields.has("transaction_date") ? (
-            <div className="flex h-12 items-center rounded-xl border border-primary/20 bg-primary/5 px-3 text-sm dark:bg-primary/10">
-              <Calendar className="h-4 w-4 mr-2 text-muted-foreground shrink-0" />
-              <span className="text-foreground font-medium">
-                {formData.transaction_date || "—"}
-              </span>
-            </div>
-          ) : (
-            <FormDatePicker
-              control={form.control}
-              name="transaction_date"
-              label="Order Date"
-              required
-            />
-          )}
-        </div>
-
-        <FormDatePicker
-          control={form.control}
-          name="delivery_date"
-          label="Delivery Date"
-          required
-        />
-
-        <FormInput
-          control={form.control}
-          name="po_no"
-          label="Customer PO No"
-          placeholder="External reference..."
-        />
-
-        <div className="space-y-1.5">
-          <label className="text-[10px] font-bold uppercase text-muted-foreground/70 tracking-wider">
-            Order Type
-            {autoFilledFields.has("order_type") && (
-              <Lock className="inline h-3 w-3 ml-1 text-primary" />
-            )}
-          </label>
-          <div className="flex h-12 items-center rounded-xl border border-primary/20 bg-primary/5 px-3 text-sm dark:bg-primary/10">
-            <span className="text-foreground font-medium">
-              {formData.order_type || "Sales"}
-            </span>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function StepOrderItems({
-  form,
-  autoFilledFields,
-  mapping,
-}: {
-  form: ReturnType<typeof useForm<SalesOrderFormData>>;
-  autoFilledFields: Set<string>;
-  mapping: AutoFillRegistryEntry | null;
-}) {
-  const formData = form.watch();
-  const items = formData.items || [];
-
-  const handleItemChange = useCallback(
-    (index: number, field: string, value: unknown) => {
-      const updated = [...items];
-      updated[index] = { ...updated[index], [field]: value };
-
-      if (field === "qty" || field === "rate") {
-        const qty = Number(updated[index].qty) || 0;
-        const rate = Number(updated[index].rate) || 0;
-        updated[index].amount = qty * rate;
-      }
-
-      form.setValue("items", updated);
-    },
-    [items, form]
-  );
-
-  const subtotal = useMemo(() => {
-    return items.reduce((acc: number, item: SalesOrderItem) => {
-      const qty = Number(item.qty) || 0;
-      const rate = Number(item.rate) || 0;
-      return acc + qty * rate;
-    }, 0);
-  }, [items]);
-
-  const formatCurrency = useCallback((amount: number) => {
-    return new Intl.NumberFormat("en-ET", {
-      style: "currency",
-      currency: "ETB",
-    }).format(amount || 0);
-  }, []);
-
-  const readOnlyItemFields = useMemo(() => {
-    if (!mapping) return new Set<string>();
-    return new Set(
-      mapping.itemMappings
-        .filter((m) => m.isReadOnly)
-        .map((m) => m.targetField)
-    );
-  }, [mapping]);
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h3 className="font-bold text-lg text-foreground tracking-tight">
-          Order Items
-        </h3>
-        <p className="text-sm text-muted-foreground mt-1">
-          Review and adjust line items. Editable fields allow quantity and rate
-          changes.
-        </p>
-      </div>
-
-      {mapping && items.length > 0 && (
-        <FlowAutoFill
-          sourceDoctype={mapping.sourceDoctype}
-          sourceName={formData.customer_name || undefined}
-          filledCount={
-            mapping.itemMappings.filter((m) => m.isReadOnly).length *
-            items.length
-          }
-          userFillCount={
-            mapping.itemMappings.filter((m) => !m.isReadOnly).length *
-            items.length
-          }
-        />
-      )}
-
-      <div className="rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="bg-secondary/20 border-b border-border">
-              <tr>
-                <th className="px-4 py-3 text-[10px] font-bold uppercase text-muted-foreground/70 tracking-wider w-[25%]">
-                  Item
-                </th>
-                <th className="px-4 py-3 text-[10px] font-bold uppercase text-muted-foreground/70 tracking-wider w-[30%]">
-                  Description
-                </th>
-                <th className="px-4 py-3 text-[10px] font-bold uppercase text-muted-foreground/70 tracking-wider w-[12%] text-right">
-                  Qty
-                </th>
-                <th className="px-4 py-3 text-[10px] font-bold uppercase text-muted-foreground/70 tracking-wider w-[15%] text-right">
-                  Rate
-                </th>
-                <th className="px-4 py-3 text-[10px] font-bold uppercase text-muted-foreground/70 tracking-wider w-[13%] text-right">
-                  Amount
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/50">
-              {items.map((item: SalesOrderItem, index: number) => {
-                const qty = Number(item.qty) || 0;
-                const rate = Number(item.rate) || 0;
-                const amount = qty * rate;
-
-                return (
-                  <motion.tr
-                    key={index}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.05, ...MOTION.fast }}
-                    className="group hover:bg-secondary/10 transition-colors"
-                  >
-                    <td className="p-3">
-                      {readOnlyItemFields.has("item_code") ? (
-                        <div className="flex items-center gap-1.5 h-10 rounded-xl bg-primary/5 px-3 border border-primary/20 dark:bg-primary/10">
-                          <Lock className="h-3 w-3 text-primary shrink-0" />
-                          <span className="text-sm font-medium text-foreground truncate">
-                            {item.item_code || "—"}
-                          </span>
-                        </div>
-                      ) : (
-                        <input
-                          type="text"
-                          value={item.item_code}
-                          onChange={(e) =>
-                            handleItemChange(
-                              index,
-                              "item_code",
-                              e.target.value
-                            )
-                          }
-                          className="flex h-10 w-full rounded-xl border border-input bg-secondary/30 px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        />
-                      )}
-                    </td>
-
-                    <td className="p-3">
-                      {readOnlyItemFields.has("description") ? (
-                        <div className="flex items-center gap-1.5 min-h-[40px] rounded-xl bg-primary/5 px-3 py-2 border border-primary/20 dark:bg-primary/10">
-                          <span className="text-xs text-muted-foreground truncate">
-                            {item.description || "—"}
-                          </span>
-                        </div>
-                      ) : (
-                        <textarea
-                          value={item.description || ""}
-                          onChange={(e) =>
-                            handleItemChange(
-                              index,
-                              "description",
-                              e.target.value
-                            )
-                          }
-                          rows={2}
-                          className="flex w-full rounded-xl border border-input bg-secondary/30 px-3 py-2 text-xs resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        />
-                      )}
-                    </td>
-
-                    <td className="p-3">
-                      <input
-                        type="number"
-                        value={item.qty}
-                        onChange={(e) =>
-                          handleItemChange(index, "qty", Number(e.target.value))
-                        }
-                        min={0}
-                        step={1}
-                        className="flex h-10 w-full rounded-xl border border-input bg-secondary/30 px-3 text-sm text-right font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      />
-                    </td>
-
-                    <td className="p-3">
-                      <input
-                        type="number"
-                        value={item.rate}
-                        onChange={(e) =>
-                          handleItemChange(
-                            index,
-                            "rate",
-                            Number(e.target.value)
-                          )
-                        }
-                        min={0}
-                        step={0.01}
-                        className="flex h-10 w-full rounded-xl border border-input bg-secondary/30 px-3 text-sm text-right font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      />
-                    </td>
-
-                    <td className="p-3">
-                      <div className="h-10 px-3 rounded-xl bg-primary/5 flex items-center justify-end font-semibold text-primary text-sm">
-                        {formatCurrency(amount)}
-                      </div>
-                    </td>
-                  </motion.tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="p-4 bg-secondary/5 border-t border-border flex justify-end">
-          <div className="text-right">
-            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-              Subtotal
-            </p>
-            <p className="text-2xl font-bold tracking-tight text-primary">
-              {formatCurrency(subtotal)}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <FormInput
-          control={form.control}
-          name="taxes_and_charges"
-          label="Tax Template"
-          placeholder="Select tax template..."
-        />
-
-        <div className="flex items-end">
-          <div className="bg-secondary/20 p-4 rounded-2xl border border-border/50 w-full">
-            <div className="flex justify-between items-center">
-              <span className="text-sm font-bold text-foreground">
-                Grand Total Est.
-              </span>
-              <span className="text-2xl font-black text-primary tracking-tighter">
-                {formatCurrency(subtotal)}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {items.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-12 text-center">
-          <Package className="h-12 w-12 text-muted-foreground/40 mb-4" />
-          <p className="text-sm text-muted-foreground">
-            No items to display
-          </p>
-          <p className="text-xs text-muted-foreground/60 mt-1">
-            Items will appear here when loaded from a quotation
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function StepReview({
-  form,
-  confirmed,
-  onConfirmedChange,
-}: {
-  form: ReturnType<typeof useForm<SalesOrderFormData>>;
-  confirmed: boolean;
-  onConfirmedChange: (val: boolean) => void;
-}) {
-  const formData = form.watch();
-  const items = formData.items || [];
-  const subtotal = useMemo(() => {
-    return items.reduce((acc: number, item: SalesOrderItem) => {
-      const qty = Number(item.qty) || 0;
-      const rate = Number(item.rate) || 0;
-      return acc + qty * rate;
-    }, 0);
-  }, [items]);
-
-  const formatCurrency = useCallback((amount: number) => {
-    return new Intl.NumberFormat("en-ET", {
-      style: "currency",
-      currency: "ETB",
-    }).format(amount || 0);
-  }, []);
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h3 className="font-bold text-lg text-foreground tracking-tight">
-          Review & Confirm
-        </h3>
-        <p className="text-sm text-muted-foreground mt-1">
-          Verify all details before creating the Sales Order.
-        </p>
-      </div>
-
-      <div className="bg-card rounded-2xl shadow-lg border border-border/50 p-6 space-y-6">
-        <div>
-          <h4 className="text-[10px] font-bold uppercase text-muted-foreground/70 tracking-wider mb-3">
-            Customer & Dates
-          </h4>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            <SummaryField
-              label="Customer"
-              value={formData.customer_name || formData.customer}
-            />
-            <SummaryField label="Company" value={formData.company} />
-            <SummaryField label="Order Type" value={formData.order_type} />
-            <SummaryField
-              label="Order Date"
-              value={formData.transaction_date}
-            />
-            <SummaryField
-              label="Delivery Date"
-              value={formData.delivery_date}
-            />
-            {formData.po_no && (
-              <SummaryField label="Customer PO" value={formData.po_no} />
-            )}
-            <SummaryField label="Currency" value={formData.currency} />
-            <SummaryField
-              label="Price List"
-              value={formData.selling_price_list}
-            />
-          </div>
-        </div>
-
-        <div className="h-px bg-border" />
-
-        <div>
-          <h4 className="text-[10px] font-bold uppercase text-muted-foreground/70 tracking-wider mb-3">
-            Order Items ({items.length})
-          </h4>
-          <div className="rounded-xl border border-border/50 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-secondary/20">
-                <tr>
-                  <th className="px-3 py-2 text-left text-[10px] font-bold text-muted-foreground/70 uppercase tracking-wider">
-                    Item
-                  </th>
-                  <th className="px-3 py-2 text-right text-[10px] font-bold text-muted-foreground/70 uppercase tracking-wider">
-                    Qty
-                  </th>
-                  <th className="px-3 py-2 text-right text-[10px] font-bold text-muted-foreground/70 uppercase tracking-wider">
-                    Rate
-                  </th>
-                  <th className="px-3 py-2 text-right text-[10px] font-bold text-muted-foreground/70 uppercase tracking-wider">
-                    Amount
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/50">
-                {items.map((item: SalesOrderItem, index: number) => (
-                  <tr
-                    key={index}
-                    className="hover:bg-secondary/10 transition-colors"
-                  >
-                    <td className="px-3 py-2">
-                      <span className="font-medium text-foreground">
-                        {item.item_code}
-                      </span>
-                      {item.item_name &&
-                        item.item_name !== item.item_code && (
-                          <span className="ml-1 text-xs text-muted-foreground">
-                            ({item.item_name})
-                          </span>
-                        )}
-                    </td>
-                    <td className="px-3 py-2 text-right font-medium">
-                      {item.qty}
-                    </td>
-                    <td className="px-3 py-2 text-right font-medium">
-                      {formatCurrency(item.rate)}
-                    </td>
-                    <td className="px-3 py-2 text-right font-semibold text-primary">
-                      {formatCurrency(
-                        (Number(item.qty) || 0) * (Number(item.rate) || 0)
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div className="h-px bg-border" />
-
-        <div className="flex justify-end">
-          <div className="text-right space-y-1">
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-muted-foreground">Subtotal</span>
-              <span className="text-sm font-bold">
-                {formatCurrency(subtotal)}
-              </span>
-            </div>
-            {formData.taxes_and_charges && (
-              <div className="flex items-center gap-4">
-                <span className="text-sm text-muted-foreground">
-                  Tax Template
-                </span>
-                <span className="text-sm font-medium">
-                  {formData.taxes_and_charges}
-                </span>
-              </div>
-            )}
-            <div className="h-px bg-border my-2" />
-            <div className="flex items-center gap-4">
-              <span className="text-base font-bold text-foreground">
-                Grand Total
-              </span>
-              <span className="text-3xl font-black text-primary tracking-tighter">
-                {formatCurrency(subtotal)}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={MOTION.normal}
-        className={cn(
-          "flex items-center gap-3 rounded-xl border p-4 cursor-pointer transition-all",
-          confirmed
-            ? "border-primary/30 bg-primary/5 dark:bg-primary/10"
-            : "border-border bg-card hover:border-primary/20"
-        )}
-        onClick={() => onConfirmedChange(!confirmed)}
-      >
-        <div
-          className={cn(
-            "flex h-6 w-6 items-center justify-center rounded-full border-2 transition-all",
-            confirmed
-              ? "border-primary bg-primary text-primary-foreground"
-              : "border-muted-foreground/30"
-          )}
-        >
-          {confirmed && <CheckCircle2 className="h-4 w-4" />}
-        </div>
-        <div>
-          <p className="text-sm font-medium text-foreground">
-            I confirm all details are correct
-          </p>
-          <p className="text-xs text-muted-foreground">
-            This will create a Sales Order document in Draft status
-          </p>
-        </div>
-      </motion.div>
-    </div>
-  );
-}
-
-function SummaryField({
-  label,
-  value,
-}: {
-  label: string;
-  value?: string | null;
-}) {
-  return (
-    <div>
-      <p className="text-[10px] font-bold text-muted-foreground/70 uppercase tracking-wider">
-        {label}
-      </p>
-      <p className="text-sm font-medium text-foreground mt-0.5 truncate">
-        {value || "—"}
-      </p>
-    </div>
-  );
-}
-
-function PageSkeleton() {
-  return (
-    <div className="space-y-6 p-6">
-      <div className="h-14 rounded-full bg-muted animate-pulse" />
-      <div className="flex items-center gap-2">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-full bg-muted animate-pulse" />
-            <div className="h-3 w-20 rounded bg-muted animate-pulse" />
-            {i < 3 && <div className="h-px w-8 bg-muted" />}
-          </div>
-        ))}
-      </div>
-      <div className="space-y-4">
-        <div className="h-6 w-48 rounded bg-muted animate-pulse" />
-        <div className="grid grid-cols-2 gap-4">
-          {[1, 2, 3, 4].map((i) => (
-            <div
-              key={i}
-              className="h-12 rounded-xl bg-muted animate-pulse"
-            />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default function NewSalesOrderPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const quotationId = searchParams.get("quotation");
-  const prefersReducedMotion = useReducedMotion();
 
-  const [currentStep, setCurrentStep] = useState(0);
-  const [confirmed, setConfirmed] = useState(false);
+  const [step, setStep] = useState(0);
   const [autoFilledFields, setAutoFilledFields] = useState<Set<string>>(
-    new Set()
+    new Set(),
   );
 
-  const mapping = useMemo(
-    () => AUTO_FILL_REGISTRY["Quotation->Sales Order"] ?? null,
-    []
-  );
-
-  const form = useForm<SalesOrderFormData>({
-    resolver: zodResolver(salesOrderFormSchema),
-    mode: "onChange",
+  const form = useForm<SOForm>({
     defaultValues: {
       naming_series: "SAL-ORD-.YYYY.-",
       customer: "",
-      customer_name: "",
-      order_type: "Sales",
+      company: "",
       transaction_date: new Date().toISOString().split("T")[0],
       delivery_date: "",
-      company: "",
+      order_type: "Sales",
       currency: "ETB",
-      conversion_rate: 1,
       selling_price_list: "Standard Selling",
       price_list_currency: "ETB",
+      conversion_rate: 1,
       plc_conversion_rate: 1,
       status: "Draft",
-      items: [],
-      po_no: "",
-      taxes_and_charges: "",
-      confirmed: false,
+      items: [{ ...EMPTY_ITEM }],
     },
   });
 
-  const {
-    data: quotation,
-    isLoading: isLoadingQuotation,
-    error: quotationError,
-  } = useFrappeDoc<Quotation>("Quotation", quotationId ?? "", {
-    enabled: !!quotationId,
-  });
+  const { control, getValues, reset, setValue } = form;
+  const { fields, append, remove } = useFieldArray({ control, name: "items" });
+
+  const watchedItems = useWatch({ control, name: "items" });
+  const watchedCustomer = useWatch({ control, name: "customer" });
+
+  // -- Auto-fill from upstream Quotation via the registry --------------------
+  const { data: quotation, isLoading: loadingQuotation } =
+    useFrappeDoc<Quotation>("Quotation", quotationId ?? "", {
+      enabled: !!quotationId,
+    });
 
   useEffect(() => {
-    if (!quotation || !mapping) return;
+    if (!quotation) return;
+    const mapping = getAutoFillMapping("Quotation", "Sales Order");
+    if (!mapping) return;
 
-    const headerData = applyAutoFill(
+    const header = applyAutoFill(
       quotation as unknown as Record<string, unknown>,
-      mapping
+      mapping,
     );
+    const items = applyItemAutoFill(
+      (quotation as { items?: Record<string, unknown>[] }).items ?? [],
+      mapping,
+    ) as unknown as SOItem[];
 
-    const sourceItems = Array.isArray(quotation.items)
-      ? (quotation.items as Record<string, unknown>[])
-      : [];
-    const mappedItems = applyItemAutoFill(sourceItems, mapping);
+    reset({
+      ...getValues(),
+      ...(header as Partial<SOForm>),
+      items: items.length ? items : [{ ...EMPTY_ITEM }],
+      // Auto-fill never carries the delivery date — the user must set it.
+      delivery_date: "",
+    });
 
-    const filled = new Set<string>();
-    for (const m of mapping.headerMappings) {
-      const sourceVal = (
-        quotation as unknown as Record<string, unknown>
-      )[m.sourceField];
-      if (sourceVal !== undefined && sourceVal !== null && sourceVal !== "") {
-        filled.add(m.targetField);
-      }
-    }
-
+    const filled = new Set<string>([
+      ...mapping.headerMappings
+        .filter((m) => m.isReadOnly)
+        .map((m) => m.targetField),
+      "items",
+    ]);
     setAutoFilledFields(filled);
 
-    // Apply header fields via RHF
-    for (const [key, value] of Object.entries(headerData)) {
-      if (value !== undefined && value !== null) {
-        form.setValue(
-          key as keyof SalesOrderFormData,
-          value as SalesOrderFormData[keyof SalesOrderFormData]
-        );
-      }
-    }
-
-    // Apply mapped items
-    if (mappedItems.length > 0) {
-      const items: SalesOrderItem[] = mappedItems.map((item) => ({
-        item_code: String(item.item_code ?? ""),
-        item_name: item.item_name ? String(item.item_name) : undefined,
-        description: item.description ? String(item.description) : undefined,
-        qty: Number(item.qty) || 1,
-        rate: Number(item.rate) || 0,
-        amount: Number(item.amount) || 0,
-        uom: item.uom ? String(item.uom) : "Nos",
-        warehouse: item.warehouse ? String(item.warehouse) : undefined,
-        item_group: item.item_group ? String(item.item_group) : undefined,
-        brand: item.brand ? String(item.brand) : undefined,
-        conversion_factor: item.conversion_factor
-          ? Number(item.conversion_factor)
-          : undefined,
-      }));
-      form.setValue("items", items);
-    }
-
-    toast.success(`Loaded data from Quotation ${quotationId}`, {
-      description: "Please specify the delivery date to proceed.",
+    toast.success(`Loaded from Quotation ${quotationId}`, {
+      description: "Set the delivery date to continue.",
     });
-  }, [quotation, mapping, quotationId, form]);
+  }, [quotation, quotationId, reset, getValues]);
 
-  const validationResults = useMemo((): Record<string, StepValidationResult> => {
-    const formValues = form.getValues();
+  const isAuto = useCallback(
+    (field: string) => autoFilledFields.has(field),
+    [autoFilledFields],
+  );
 
-    const step1Data = {
-      customer: formValues.customer,
-      company: formValues.company,
-      transaction_date: formValues.transaction_date,
-      delivery_date: formValues.delivery_date,
-      currency: formValues.currency,
-      selling_price_list: formValues.selling_price_list,
-      order_type: formValues.order_type,
-      territory: "",
-      customer_address: "",
-      shipping_address_name: "",
-      contact_person: "",
-    };
+  // -- Live subtotal ----------------------------------------------------------
+  const subtotal = useMemo(
+    () =>
+      (watchedItems ?? []).reduce(
+        (sum, it) => sum + (Number(it?.qty) || 0) * (Number(it?.rate) || 0),
+        0,
+      ),
+    [watchedItems],
+  );
 
-    const step2Data = {
-      items: (formValues.items || []).map((item) => ({
-        item_code: item.item_code,
-        qty: item.qty,
-        rate: item.rate,
-        amount: item.amount,
-        uom: item.uom,
-        warehouse: item.warehouse,
-        description: item.description,
-      })),
-    };
-
-    const step3Data = { confirmed };
-
+  // -- Per-step validation (gates the wizard's Next button) ------------------
+  const validationResults = useMemo<Record<string, StepValidationResult>>(() => {
+    const values = { ...getValues(), items: watchedItems };
     return {
-      step1: validateWizardStep("Sales Order", "step1", step1Data),
-      step2: validateWizardStep("Sales Order", "step2", step2Data),
-      step3: validateWizardStep("Sales Order", "step3", step3Data),
+      step1: validateWizardStep("Sales Order", "step1", values),
+      step2: validateWizardStep("Sales Order", "step2", values),
+      step3: { valid: true, errors: {} },
     };
-  }, [form, confirmed]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchedItems, watchedCustomer, step, getValues]);
 
-  const handleStepChange = useCallback((step: number) => {
-    setCurrentStep(step);
-  }, []);
-
+  // -- Persistence ------------------------------------------------------------
   const createMutation = useFrappeCreate<
     { data: { name: string } },
-    SalesOrderCreateRequest
+    Record<string, unknown>
   >("Sales Order", {
-    successMessage: "Sales Order created successfully",
-    onSuccess: (data) => {
-      router.push(
-        `/sales/sales-order/${encodeURIComponent(data.data.name)}`
-      );
+    successMessage: "Sales Order created",
+    onSuccess: (res) => {
+      const name = res?.data?.name;
+      if (name) {
+        router.push(`/sales/sales-order/${encodeURIComponent(name)}`);
+      }
     },
-    onError: () => {},
   });
 
-  const onSubmit = useCallback(
-    (data: SalesOrderFormData) => {
-      if (!confirmed) {
-        toast.error("Please confirm the order details");
-        return;
-      }
-
-      const payload = {
-        naming_series: data.naming_series,
-        customer: data.customer,
-        order_type: data.order_type,
-        transaction_date: data.transaction_date,
-        delivery_date: data.delivery_date,
-        company: data.company,
-        currency: data.currency,
-        conversion_rate: data.conversion_rate,
-        selling_price_list: data.selling_price_list,
-        price_list_currency: data.price_list_currency,
-        plc_conversion_rate: data.plc_conversion_rate,
-        status: "Draft" as const,
-        items: (data.items || []).filter(
-          (item) => item.item_code && item.qty > 0
-        ),
-        po_no: data.po_no || undefined,
-        taxes_and_charges: data.taxes_and_charges || undefined,
-        customer_address: data.customer_address || undefined,
-        contact_person: data.contact_person || undefined,
-      } as SalesOrderCreateRequest;
-
-      createMutation.mutate(payload);
-    },
-    [confirmed, createMutation]
-  );
-
   const handleSubmit = useCallback(() => {
-    form.handleSubmit(onSubmit)();
-  }, [form, onSubmit]);
-
-  const handleCancel = useCallback(() => {
-    router.back();
-  }, [router]);
-
-  const renderStep = useCallback(
-    (step: WizardStep) => {
-      switch (step.id) {
-        case "step1":
-          return (
-            <StepCustomerDates
-              form={form}
-              autoFilledFields={autoFilledFields}
-              mapping={mapping}
-            />
-          );
-        case "step2":
-          return (
-            <StepOrderItems
-              form={form}
-              autoFilledFields={autoFilledFields}
-              mapping={mapping}
-            />
-          );
-        case "step3":
-          return (
-            <StepReview
-              form={form}
-              confirmed={confirmed}
-              onConfirmedChange={setConfirmed}
-            />
-          );
-        default:
-          return null;
-      }
-    },
-    [form, autoFilledFields, mapping, confirmed]
-  );
-
-  if (quotationId && isLoadingQuotation) {
-    return <PageSkeleton />;
-  }
-
-  if (quotationId && quotationError) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10">
-          <ShoppingCart className="h-8 w-8 text-destructive" />
-        </div>
-        <div className="text-center space-y-2">
-          <h3 className="text-lg font-semibold text-foreground">
-            Failed to load Quotation
-          </h3>
-          <p className="text-sm text-muted-foreground max-w-md">
-            Could not load Quotation {quotationId}. Please check the reference
-            and try again.
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          onClick={() => router.push("/sales/quotation")}
-        >
-          Back to Quotations
-        </Button>
-      </div>
+    const values = getValues();
+    const items = (values.items ?? []).filter(
+      (it) => it.item_code && Number(it.qty) > 0,
     );
-  }
+    if (items.length === 0) {
+      toast.error("Add at least one valid item before creating the order.");
+      setStep(1);
+      return;
+    }
+    createMutation.mutate({
+      ...values,
+      items: items.map((it) => ({
+        ...it,
+        amount: (Number(it.qty) || 0) * (Number(it.rate) || 0),
+      })),
+      conversion_rate: 1,
+      plc_conversion_rate: 1,
+      currency: "ETB",
+      price_list_currency: "ETB",
+    });
+  }, [createMutation, getValues]);
 
   return (
-    <Form {...form}>
-      <motion.div
-        variants={containerVariants}
-        initial="hidden"
-        animate="show"
-        className="space-y-6 pb-20"
-      >
-        <motion.div variants={itemVariants}>
-          <PageHeader
-            title="Create Sales Order"
-            subtitle={
-              quotationId
-                ? `Converting Quotation ${quotationId}`
-                : "Create a new order from scratch"
-            }
-            backHref="/sales/sales-order"
-          />
-        </motion.div>
+    <div className="space-y-6 pb-12">
+      <PageHeader
+        title="New Sales Order"
+        subtitle={
+          quotationId
+            ? `From Quotation ${quotationId}`
+            : "Create a sales order in three steps"
+        }
+        backHref="/sales/sales-order"
+      />
 
-        <motion.div variants={itemVariants} className="max-w-4xl mx-auto">
+      <Form {...form}>
+        <InfoCard className="max-w-3xl">
           <FlowWizard
-            steps={SALES_ORDER_STEPS}
-            formData={form.watch()}
+            steps={WIZARD_STEPS}
+            formData={getValues() as unknown as Record<string, unknown>}
             validationResults={validationResults}
             isSubmitting={createMutation.isPending}
-            onFormDataChange={(data) => {
-              for (const [key, value] of Object.entries(data)) {
-                form.setValue(
-                  key as keyof SalesOrderFormData,
-                  value as SalesOrderFormData[keyof SalesOrderFormData]
-                );
-              }
-            }}
-            onStepChange={handleStepChange}
+            onFormDataChange={() => {}}
+            onStepChange={setStep}
             onSubmit={handleSubmit}
-            onCancel={handleCancel}
-            renderStep={renderStep}
+            onCancel={() => router.back()}
             submitLabel="Create Sales Order"
             submittingLabel="Creating..."
+            renderStep={(s) => {
+              // ---- STEP 1 — Customer & Dates ----------------------------
+              if (s.id === "step1") {
+                return (
+                  <div className="space-y-6">
+                    <StepHeading
+                      icon={<UserRound className="h-5 w-5 text-primary" />}
+                      title="Customer & Dates"
+                      description="Confirm who this order is for and when it's due."
+                    />
+                    <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                      <FieldWrap
+                        auto={isAuto("customer")}
+                        loading={loadingQuotation}
+                      >
+                        <FormFrappeSelect
+                          control={control}
+                          name="customer"
+                          label="Customer"
+                          required
+                          doctype="Customer"
+                          labelField="customer_name"
+                          placeholder="Search customer..."
+                          disabled={isAuto("customer")}
+                        />
+                      </FieldWrap>
+                      <FieldWrap auto={isAuto("company")}>
+                        <FormFrappeSelect
+                          control={control}
+                          name="company"
+                          label="Company"
+                          required
+                          doctype="Company"
+                          labelField="company_name"
+                          placeholder="Select company..."
+                          disabled={isAuto("company")}
+                        />
+                      </FieldWrap>
+                      <FormDatePicker
+                        control={control}
+                        name="transaction_date"
+                        label="Order Date"
+                        required
+                      />
+                      <FormDatePicker
+                        control={control}
+                        name="delivery_date"
+                        label="Delivery Date"
+                        required
+                      />
+                      <FormFrappeSelect
+                        control={control}
+                        name="customer_address"
+                        label="Shipping Address"
+                        doctype="Address"
+                        labelField="address_title"
+                        disabled={!watchedCustomer}
+                        filters={
+                          watchedCustomer
+                            ? ([
+                                ["Dynamic Link", "link_name", "=", watchedCustomer],
+                              ] as unknown as [string, string, unknown][])
+                            : []
+                        }
+                        placeholder={
+                          watchedCustomer
+                            ? "Select address..."
+                            : "Select a customer first"
+                        }
+                      />
+                      <FormInput
+                        control={control}
+                        name="po_no"
+                        label="Customer PO No"
+                        placeholder="Optional reference"
+                      />
+                    </div>
+                  </div>
+                );
+              }
+
+              // ---- STEP 2 — Items ---------------------------------------
+              if (s.id === "step2") {
+                return (
+                  <div className="space-y-5">
+                    <div className="flex items-center justify-between">
+                      <StepHeading
+                        icon={<Package className="h-5 w-5 text-primary" />}
+                        title="Order Items"
+                        description="Adjust quantities and rates as needed."
+                      />
+                      {isAuto("items") && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                          <Lock className="h-3 w-3" />
+                          Auto-filled
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="overflow-hidden rounded-xl border border-border/60 bg-card/40 backdrop-blur-sm">
+                      <table className="w-full text-sm">
+                        <thead className="border-b border-border/60 bg-secondary/20">
+                          <tr className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                            <th className="px-3 py-2.5 text-left font-semibold">Item</th>
+                            <th className="px-3 py-2.5 text-right font-semibold">Qty</th>
+                            <th className="px-3 py-2.5 text-right font-semibold">Rate</th>
+                            <th className="px-3 py-2.5 text-right font-semibold">Amount</th>
+                            <th className="w-10" />
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border/50">
+                          {fields.map((field, index) => {
+                            const qty = Number(watchedItems?.[index]?.qty) || 0;
+                            const rate = Number(watchedItems?.[index]?.rate) || 0;
+                            return (
+                              <tr key={field.id} className="group">
+                                <td className="px-3 py-2 align-top">
+                                  <FormFrappeSelect
+                                    control={control}
+                                    name={`items.${index}.item_code`}
+                                    doctype="Item"
+                                    hideLabel
+                                    placeholder="Item..."
+                                    extraFields={[
+                                      "standard_rate",
+                                      "stock_uom",
+                                      "item_name",
+                                      "description",
+                                    ]}
+                                    onValueChange={(_val, doc) => {
+                                      if (doc) {
+                                        setValue(
+                                          `items.${index}.rate`,
+                                          Number(doc.standard_rate) || 0,
+                                        );
+                                        setValue(
+                                          `items.${index}.uom`,
+                                          doc.stock_uom || "Nos",
+                                        );
+                                        setValue(
+                                          `items.${index}.item_name`,
+                                          doc.item_name || "",
+                                        );
+                                      }
+                                    }}
+                                  />
+                                </td>
+                                <td className="px-3 py-2 align-top">
+                                  <NumberCell
+                                    control={control}
+                                    name={`items.${index}.qty`}
+                                  />
+                                </td>
+                                <td className="px-3 py-2 align-top">
+                                  <NumberCell
+                                    control={control}
+                                    name={`items.${index}.rate`}
+                                  />
+                                </td>
+                                <td className="px-3 py-3 text-right align-middle font-semibold tabular-nums text-foreground">
+                                  {ETB.format(qty * rate)}
+                                </td>
+                                <td className="px-2 py-2 text-center align-middle">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+                                    onClick={() => remove(index)}
+                                    disabled={fields.length === 1}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                      <div className="flex items-center justify-between border-t border-border/60 bg-secondary/10 px-3 py-3">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="rounded-full border-dashed"
+                          onClick={() => append({ ...EMPTY_ITEM })}
+                        >
+                          <Plus className="mr-1.5 h-4 w-4" /> Add Item
+                        </Button>
+                        <div className="text-right">
+                          <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                            Subtotal
+                          </p>
+                          <p className="text-xl font-bold tabular-nums text-foreground">
+                            {ETB.format(subtotal)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              // ---- STEP 3 — Review --------------------------------------
+              const v = getValues();
+              return (
+                <div className="space-y-5">
+                  <StepHeading
+                    icon={<ClipboardCheck className="h-5 w-5 text-primary" />}
+                    title="Review & Confirm"
+                    description="Confirm the details below to create the order."
+                  />
+                  <div className="rounded-xl border border-border/60 bg-card/40 p-5 backdrop-blur-sm">
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <Summary label="Customer" value={v.customer_name || v.customer} />
+                      <Summary label="Company" value={v.company} />
+                      <Summary label="Order Date" value={v.transaction_date} />
+                      <Summary label="Delivery Date" value={v.delivery_date} />
+                    </div>
+                    <div className="mt-4 border-t border-border/60 pt-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">
+                          {(watchedItems ?? []).filter((i) => i?.item_code).length}{" "}
+                          item(s)
+                        </span>
+                        <div className="text-right">
+                          <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                            Grand Total
+                          </span>
+                          <p className="text-2xl font-bold tabular-nums text-primary">
+                            {ETB.format(subtotal)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            }}
           />
-        </motion.div>
-      </motion.div>
-    </Form>
+        </InfoCard>
+      </Form>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Local presentational helpers
+// ---------------------------------------------------------------------------
+function StepHeading({
+  icon,
+  title,
+  description,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="flex items-start gap-3">
+      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+        {icon}
+      </div>
+      <div>
+        <h3 className="text-base font-semibold text-foreground">{title}</h3>
+        <p className="text-sm text-muted-foreground">{description}</p>
+      </div>
+    </div>
+  );
+}
+
+function FieldWrap({
+  auto,
+  loading,
+  children,
+}: {
+  auto?: boolean;
+  loading?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={cn("relative", loading && "animate-pulse")}>
+      {children}
+      {auto && (
+        <span className="pointer-events-none absolute right-2 top-0 inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+          <Lock className="h-3 w-3" />
+        </span>
+      )}
+    </div>
+  );
+}
+
+function Summary({ label, value }: { label: string; value?: string }) {
+  return (
+    <div>
+      <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        {label}
+      </p>
+      <p className="font-medium text-foreground">{value || "—"}</p>
+    </div>
+  );
+}
+
+// Typed numeric cell for the items table (no @ts-nocheck needed).
+function NumberCell({
+  control,
+  name,
+}: {
+  control: ReturnType<typeof useForm<SOForm>>["control"];
+  name: `items.${number}.qty` | `items.${number}.rate`;
+}) {
+  return (
+    <FormField
+      control={control}
+      name={name}
+      render={({ field }) => (
+        <FormItem>
+          <FormControl>
+            <Input
+              {...field}
+              type="number"
+              inputMode="decimal"
+              className="h-10 rounded-lg border-0 bg-secondary/30 text-right tabular-nums"
+              onChange={(e) => field.onChange(Number(e.target.value))}
+            />
+          </FormControl>
+        </FormItem>
+      )}
+    />
   );
 }

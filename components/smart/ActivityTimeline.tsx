@@ -51,12 +51,13 @@ const ACTIVITY_ICONS: Record<ActivityItem["type"], LucideIcon> = {
   status_change: CheckCircle2,
 };
 
+// OKLCH semantic tokens only — no off-palette colors (premium-ui anti-slop rule).
 const ACTIVITY_COLORS: Record<ActivityItem["type"], string> = {
-  created: "bg-blue-100 text-blue-600 dark:bg-blue-900/50 dark:text-blue-400",
-  updated: "bg-amber-100 text-amber-600 dark:bg-amber-900/50 dark:text-amber-400",
-  submitted: "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/50 dark:text-emerald-400",
-  commented: "bg-purple-100 text-purple-600 dark:bg-purple-900/50 dark:text-purple-400",
-  assigned: "bg-primary/10 text-primary",
+  created: "bg-primary/10 text-primary",
+  updated: "bg-secondary text-secondary-foreground",
+  submitted: "bg-primary/10 text-primary",
+  commented: "bg-muted text-muted-foreground",
+  assigned: "bg-secondary text-secondary-foreground",
   status_change: "bg-primary/10 text-primary",
 };
 
