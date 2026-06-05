@@ -29,6 +29,8 @@ export const BUILT_MODULES = new Set<string>([
   "Opportunity",
   // Phase 2g — CRM pivot (Lead → Customer)
   "Customer",
+  // Phase 2h — Purchase Receipt (procure-to-pay close)
+  "Purchase Receipt",
 ]);
 
 export function isModuleBuilt(doctype: string): boolean {

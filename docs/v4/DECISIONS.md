@@ -476,4 +476,39 @@ Architecture: `lib/stores/notification-store.ts` (subscribe/getSnapshot pattern 
 
 ---
 
+## B7 Completion — Company Injection Verified (Phase 2H)
+
+**Decided in:** Phase 2H (2026-06-05)
+
+Phase 2G removed `company` from all Zod step schemas and built `getActiveCompany()`, but only injected `company` in 3 payloads (JE, PE, WO). Phase 2H completes B7 by injecting `company: getActiveCompany()` into all 13 remaining create payloads:
+
+SO, Quotation, DN, SI, PI, MR, SE, PO, RFQ, SQ, WO (new page), BOM, Opportunity.
+
+No create page now POSTs without a company field. The company field is no longer rendered as a user-selectable input in wizard steps (it was already removed from schemas in 2G); the value is injected at submit time from `getActiveCompany()`.
+
+---
+
+## B10 — Purchase Receipt Module (Phase 2H)
+
+**Decided in:** Phase 2H (2026-06-05)
+
+**Decision:** Build Purchase Receipt as a first-class module (4 pages: list, new, detail, edit), completing the procure-to-pay chain per WORKFLOW_PART1 §6.2.
+
+**Implementation:**
+- Cloned from Delivery Note golden template, inverted for inbound goods (supplier instead of customer)
+- `purchaseReceiptStepSchemas` added: step1 (supplier + posting_date), step2 (items with warehouse required), step3 (review)
+- "Purchase Receipt" added to `BUILT_MODULES` and `WIZARD_STEP_SCHEMAS`
+- Auto-fill registry already had `Purchase Order->Purchase Receipt` and `Purchase Receipt->Purchase Invoice` entries (Phase 2c)
+- PO detail WhatsNext "Create Purchase Receipt" now enabled (was disabled because module wasn't built)
+- PR detail WhatsNext "Create Purchase Invoice" enabled
+- PR added to error resolver route maps (LINKED_DOC_EXISTS + DUPLICATE)
+- FlowRail: `PURCHASE_FLOW` already had Purchase Receipt stage (Phase 2c)
+- 7 new tests: step schemas, validation, warehouse requirement
+
+**Field spec derived from:** PO spec (§5.2) + DN spec (§4.5) — Part 2 has no dedicated PR section.
+
+**Naming series:** `MAT-PRE-.YYYY.-` (matches Frappe convention).
+
+---
+
 *Decisions documented by the Tech Lead on 2026-06-01. These decisions are locked per IMPLEMENTATION_HANDOFF.md §3 — do not re-open mid-build.*

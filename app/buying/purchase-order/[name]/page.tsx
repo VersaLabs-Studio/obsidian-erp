@@ -228,7 +228,7 @@ export default function PurchaseOrderDetailPage() {
           `/stock/purchase-receipt/new?purchase_order=${encodeURIComponent(name)}`,
         ),
       disabled: !isModuleBuilt("Purchase Receipt"),
-      disabledReason: "Coming soon",
+      disabledReason: "Module not available",
     },
   ].filter(Boolean) as React.ComponentProps<typeof WhatsNext>["actions"];
 

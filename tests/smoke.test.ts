@@ -179,9 +179,57 @@ describe("Module Availability — A2 fix", () => {
   });
 
   it("isModuleBuilt returns false for modules not yet built", () => {
-    // Add entries here as new modules are planned but not yet implemented
-    // Currently all planned modules are built
     expect(isModuleBuilt("Nonexistent Module")).toBe(false);
+  });
+});
+
+describe("Purchase Receipt — Phase 2H module availability", () => {
+  it("Purchase Receipt is in BUILT_MODULES", () => {
+    expect(isModuleBuilt("Purchase Receipt")).toBe(true);
+  });
+
+  it("Purchase Receipt step schemas exist in WIZARD_STEP_SCHEMAS", () => {
+    expect(WIZARD_STEP_SCHEMAS["Purchase Receipt"]).toBeDefined();
+    expect(WIZARD_STEP_SCHEMAS["Purchase Receipt"]["step1"]).toBeDefined();
+    expect(WIZARD_STEP_SCHEMAS["Purchase Receipt"]["step2"]).toBeDefined();
+    expect(WIZARD_STEP_SCHEMAS["Purchase Receipt"]["step3"]).toBeDefined();
+  });
+
+  it("Purchase Receipt step1 is invalid without supplier", () => {
+    const result = validateWizardStep("Purchase Receipt", "step1", {
+      supplier: "",
+      posting_date: "",
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors.supplier).toBe("Supplier is required");
+  });
+
+  it("Purchase Receipt step1 is valid with supplier and posting_date", () => {
+    const result = validateWizardStep("Purchase Receipt", "step1", {
+      supplier: "SUP-001",
+      posting_date: "2026-06-05",
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it("Purchase Receipt step2 is invalid with empty items", () => {
+    const result = validateWizardStep("Purchase Receipt", "step2", { items: [] });
+    expect(result.valid).toBe(false);
+  });
+
+  it("Purchase Receipt step2 is valid with at least one valid item", () => {
+    const result = validateWizardStep("Purchase Receipt", "step2", {
+      items: [{ item_code: "ITEM-001", qty: 5, warehouse: "WH-001" }],
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it("Purchase Receipt step2 requires warehouse per item", () => {
+    const result = validateWizardStep("Purchase Receipt", "step2", {
+      items: [{ item_code: "ITEM-001", qty: 5 }],
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors["items.0.warehouse"]).toBeDefined();
   });
 });
 

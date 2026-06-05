@@ -417,6 +417,32 @@ export const opportunityStepSchemas = {
 };
 
 /**
+ * Purchase Receipt step schemas (Phase 2H — inbound goods)
+ * Mirrors Delivery Note but for supplier deliveries.
+ */
+export const purchaseReceiptStepSchemas = {
+  step1: z.object({
+    supplier: z.string().min(1, "Supplier is required"),
+    posting_date: z.string().min(1, "Posting date is required"),
+  }),
+  step2: z.object({
+    items: z
+      .array(
+        z.object({
+          item_code: z.string().min(1, "Item code is required"),
+          qty: z.number().min(0.01, "Quantity must be greater than 0"),
+          rate: z.number().min(0, "Rate must be non-negative").optional(),
+          warehouse: z.string().min(1, "Warehouse is required"),
+        })
+      )
+      .min(1, "At least one item is required"),
+  }),
+  step3: z.object({
+    confirmed: z.boolean().optional(),
+  }),
+};
+
+/**
  * Work Order step schemas
  */
 export const workOrderStepSchemas = {
@@ -455,6 +481,7 @@ export const WIZARD_STEP_SCHEMAS: Record<string, Record<string, z.ZodType>> = {
   "Work Order": workOrderStepSchemas,
   "Lead": leadStepSchemas,
   "Opportunity": opportunityStepSchemas,
+  "Purchase Receipt": purchaseReceiptStepSchemas,
 };
 
 /**
