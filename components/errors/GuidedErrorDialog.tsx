@@ -6,6 +6,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { addNotification } from "@/lib/stores/notification-store";
 import {
   Dialog,
   DialogContent,
@@ -33,6 +34,12 @@ export function useGuidedError() {
 
   const showError = useCallback((r: Resolution) => {
     setResolution(r);
+    // B9: Capture to notification store
+    addNotification({
+      kind: "guided",
+      title: r.title,
+      message: r.explanation,
+    });
   }, []);
 
   const dismiss = useCallback(() => {

@@ -25,6 +25,9 @@ import {
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
 import { FlowWizard } from "@/components/flows/FlowWizard";
 import { useFrappeCreate, useFrappeDoc } from "@/hooks/generic";
+import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
+import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
+import { getActiveCompany } from "@/lib/settings/company";
 import {
   getAutoFillMapping,
   applyAutoFill,
@@ -202,6 +205,8 @@ export default function NewSalesInvoicePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [watchedAll]);
 
+  const { resolution, showError, dismiss } = useGuidedError();
+
   const createMutation = useFrappeCreate<
     { data: { name: string } },
     Record<string, unknown>
@@ -213,6 +218,7 @@ export default function NewSalesInvoicePage() {
         router.push(`/accounting/sales-invoice/${encodeURIComponent(name)}`);
       }
     },
+    onError: (err) => showError(resolveFrappeError(err, { doctype: "Sales Invoice" })),
   });
 
   const handleSubmit = useCallback(() => {
@@ -525,6 +531,7 @@ export default function NewSalesInvoicePage() {
           />
         </InfoCard>
       </Form>
+      <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
     </div>
   );
 }

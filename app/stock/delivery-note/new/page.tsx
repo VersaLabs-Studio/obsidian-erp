@@ -32,6 +32,9 @@ import {
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
 import { FlowWizard } from "@/components/flows/FlowWizard";
 import { useFrappeCreate, useFrappeDoc } from "@/hooks/generic";
+import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
+import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
+import { getActiveCompany } from "@/lib/settings/company";
 import {
   getAutoFillMapping,
   applyAutoFill,
@@ -247,6 +250,7 @@ export default function NewDeliveryNotePage() {
   }, [watchedAll]);
 
   // -- Persistence ------------------------------------------------------------
+  const { resolution, showError, dismiss } = useGuidedError();
   const createMutation = useFrappeCreate<
     { data: { name: string } },
     Record<string, unknown>
@@ -258,6 +262,7 @@ export default function NewDeliveryNotePage() {
         router.push(`/stock/delivery-note/${encodeURIComponent(name)}`);
       }
     },
+    onError: (err) => showError(resolveFrappeError(err, { doctype: "Delivery Note" })),
   });
 
   const handleSubmit = useCallback(() => {
@@ -645,6 +650,7 @@ export default function NewDeliveryNotePage() {
           />
         </InfoCard>
       </Form>
+      <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
     </div>
   );
 }

@@ -7,3 +7,4 @@ export { FormSelect } from "./form-select";
 export { FormSwitch } from "./form-switch";
 export { FormFrappeSelect } from "./form-frappe-select";
 export { FormDatePicker } from "./form-date-picker";
+export { FieldWrap } from "./field-wrap";

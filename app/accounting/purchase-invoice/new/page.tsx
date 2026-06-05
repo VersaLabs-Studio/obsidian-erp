@@ -30,6 +30,9 @@ import {
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
 import { FlowWizard } from "@/components/flows/FlowWizard";
 import { useFrappeCreate } from "@/hooks/generic";
+import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
+import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
+import { getActiveCompany } from "@/lib/settings/company";
 import { validateWizardStep } from "@/lib/flows/flow-validation";
 import type { StepValidationResult } from "@/lib/flows/flow-validation";
 import type { WizardStep } from "@/types/flow-types";
@@ -163,6 +166,8 @@ export default function NewPurchaseInvoicePage() {
     [watchedAll],
   );
 
+  const { resolution, showError, dismiss } = useGuidedError();
+
   const createMutation = useFrappeCreate<
     { data: { name: string } },
     Record<string, unknown>
@@ -176,6 +181,7 @@ export default function NewPurchaseInvoicePage() {
         );
       }
     },
+    onError: (err) => showError(resolveFrappeError(err, { doctype: "Purchase Invoice" })),
   });
 
   const handleSubmit = useCallback(() => {
@@ -444,6 +450,7 @@ export default function NewPurchaseInvoicePage() {
           />
         </InfoCard>
       </Form>
+      <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
     </div>
   );
 }

@@ -48,19 +48,16 @@ describe("Wizard Gate Regression — A1 fix", () => {
   it("Sales Order step1 is invalid when required fields are empty", () => {
     const result = validateWizardStep("Sales Order", "step1", {
       customer: "",
-      company: "",
       transaction_date: "",
       delivery_date: "",
     });
     expect(result.valid).toBe(false);
     expect(result.errors.customer).toBe("Customer is required");
-    expect(result.errors.company).toBe("Company is required");
   });
 
   it("Sales Order step1 flips to valid once all required fields are set", () => {
     const result = validateWizardStep("Sales Order", "step1", {
       customer: "CUST-001",
-      company: "My Company",
       transaction_date: "2026-06-04",
       delivery_date: "2026-06-10",
     });
@@ -83,7 +80,6 @@ describe("Wizard Gate Regression — A1 fix", () => {
   it("Delivery Note step1 is invalid without customer/company", () => {
     const result = validateWizardStep("Delivery Note", "step1", {
       customer: "",
-      company: "",
       posting_date: "",
     });
     expect(result.valid).toBe(false);
@@ -93,7 +89,6 @@ describe("Wizard Gate Regression — A1 fix", () => {
   it("Delivery Note step1 flips to valid with all required fields", () => {
     const result = validateWizardStep("Delivery Note", "step1", {
       customer: "CUST-001",
-      company: "My Company",
       posting_date: "2026-06-04",
     });
     expect(result.valid).toBe(true);
@@ -102,7 +97,7 @@ describe("Wizard Gate Regression — A1 fix", () => {
   it("Stock Entry step1 is invalid without purpose", () => {
     const result = validateWizardStep("Stock Entry", "step1", {
       purpose: "",
-      company: "",
+      posting_date: "",
     });
     expect(result.valid).toBe(false);
     expect(result.errors.purpose).toBe("Purpose is required");
@@ -111,7 +106,7 @@ describe("Wizard Gate Regression — A1 fix", () => {
   it("Stock Entry step1 flips to valid with purpose and company", () => {
     const result = validateWizardStep("Stock Entry", "step1", {
       purpose: "Material Receipt",
-      company: "My Company",
+      posting_date: "2026-06-05",
     });
     expect(result.valid).toBe(true);
   });
@@ -119,8 +114,8 @@ describe("Wizard Gate Regression — A1 fix", () => {
   it("Material Request step1 is invalid without material_request_type", () => {
     const result = validateWizardStep("Material Request", "step1", {
       material_request_type: "",
-      company: "",
       transaction_date: "",
+      schedule_date: "",
     });
     expect(result.valid).toBe(false);
   });
@@ -128,8 +123,8 @@ describe("Wizard Gate Regression — A1 fix", () => {
   it("Material Request step1 flips to valid with all required fields", () => {
     const result = validateWizardStep("Material Request", "step1", {
       material_request_type: "Purchase",
-      company: "My Company",
       transaction_date: "2026-06-04",
+      schedule_date: "2026-06-10",
     });
     expect(result.valid).toBe(true);
   });
@@ -276,7 +271,6 @@ describe("Wizard pristine state — A1 fix", () => {
     // The validation logic itself is correct — the gate is in FlowWizard.
     const result = validateWizardStep("Sales Order", "step1", {
       customer: "",
-      company: "",
       transaction_date: "",
       delivery_date: "",
     });
@@ -289,7 +283,6 @@ describe("Wizard pristine state — A1 fix", () => {
   it("Sales Order step1 is valid when default values are filled", () => {
     const result = validateWizardStep("Sales Order", "step1", {
       customer: "CUST-001",
-      company: "Test Company",
       transaction_date: "2026-06-04",
       delivery_date: "2026-06-10",
     });

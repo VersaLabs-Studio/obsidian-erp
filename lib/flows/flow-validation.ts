@@ -24,7 +24,6 @@ export const salesOrderStepSchemas = {
   /** Step 1: Customer & Dates */
   step1: z.object({
     customer: z.string().min(1, "Customer is required"),
-    company: z.string().min(1, "Company is required"),
     transaction_date: z.string().min(1, "Transaction date is required"),
     delivery_date: z.string().min(1, "Delivery date is required"),
     currency: z.string().optional(),
@@ -66,7 +65,6 @@ export const salesOrderStepSchemas = {
 export const quotationStepSchemas = {
   step1: z.object({
     party_name: z.string().min(1, "Customer/Lead is required"),
-    company: z.string().min(1, "Company is required"),
     transaction_date: z.string().min(1, "Transaction date is required"),
     valid_till: z.string().min(1, "Valid till date is required"),
     quotation_to: z.string().optional(),
@@ -94,7 +92,6 @@ export const quotationStepSchemas = {
 export const deliveryNoteStepSchemas = {
   step1: z.object({
     customer: z.string().min(1, "Customer is required"),
-    company: z.string().min(1, "Company is required"),
     posting_date: z.string().min(1, "Posting date is required"),
   }),
   step2: z.object({
@@ -119,7 +116,6 @@ export const deliveryNoteStepSchemas = {
 export const salesInvoiceStepSchemas = {
   step1: z.object({
     customer: z.string().min(1, "Customer is required"),
-    company: z.string().min(1, "Company is required"),
     posting_date: z.string().min(1, "Posting date is required"),
     due_date: z.string().min(1, "Due date is required"),
   }),
@@ -145,9 +141,8 @@ export const salesInvoiceStepSchemas = {
 export const materialRequestStepSchemas = {
   step1: z.object({
     material_request_type: z.string().min(1, "Request type is required"),
-    company: z.string().min(1, "Company is required"),
     transaction_date: z.string().min(1, "Transaction date is required"),
-    schedule_date: z.string().optional(),
+    schedule_date: z.string().min(1, "Required by date is required"),
     set_from_warehouse: z.string().optional(),
     set_warehouse: z.string().optional(),
   }),
@@ -172,8 +167,7 @@ export const materialRequestStepSchemas = {
 export const stockEntryStepSchemas = {
   step1: z.object({
     purpose: z.string().min(1, "Purpose is required"),
-    company: z.string().min(1, "Company is required"),
-    posting_date: z.string().optional(),
+    posting_date: z.string().min(1, "Posting date is required"),
     from_warehouse: z.string().optional(),
     to_warehouse: z.string().optional(),
   }),
@@ -201,7 +195,6 @@ export const stockEntryStepSchemas = {
 export const purchaseInvoiceStepSchemas = {
   step1: z.object({
     supplier: z.string().min(1, "Supplier is required"),
-    company: z.string().min(1, "Company is required"),
     posting_date: z.string().min(1, "Posting date is required"),
   }),
   step2: z.object({
@@ -271,9 +264,8 @@ export const journalEntryStepSchemas = {
 export const purchaseOrderStepSchemas = {
   step1: z.object({
     supplier: z.string().min(1, "Supplier is required"),
-    company: z.string().min(1, "Company is required"),
     transaction_date: z.string().min(1, "Transaction date is required"),
-    schedule_date: z.string().optional(),
+    schedule_date: z.string().min(1, "Required by date is required"),
   }),
   step2: z.object({
     items: z
@@ -297,7 +289,6 @@ export const purchaseOrderStepSchemas = {
  */
 export const rfqStepSchemas = {
   step1: z.object({
-    company: z.string().min(1, "Company is required"),
     transaction_date: z.string().min(1, "Transaction date is required"),
   }),
   step2: z.object({
@@ -328,7 +319,6 @@ export const rfqStepSchemas = {
 export const supplierQuotationStepSchemas = {
   step1: z.object({
     supplier: z.string().min(1, "Supplier is required"),
-    company: z.string().min(1, "Company is required"),
     transaction_date: z.string().min(1, "Transaction date is required"),
   }),
   step2: z.object({
@@ -411,7 +401,6 @@ export const opportunityStepSchemas = {
   step1: z.object({
     opportunity_from: z.string().min(1, "Source type is required"),
     party_name: z.string().min(1, "Lead/Customer is required"),
-    company: z.string().min(1, "Company is required"),
     transaction_date: z.string().min(1, "Date is required"),
   }),
   step2: z.object({

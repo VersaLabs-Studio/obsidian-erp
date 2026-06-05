@@ -31,6 +31,7 @@ import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
 import { resolveFlowChain } from "@/lib/flows/flow-chain-resolver";
 import { getAutoFillMapping, applyAutoFill } from "@/lib/flows/flow-auto-fill";
+import { getActiveCompany } from "@/lib/settings/company";
 import { useFrappeDoc, useFrappeList, useFrappeUpdate, useFrappeCreate } from "@/hooks/generic";
 import type { SalesOrder } from "@/types/doctype-types";
 import type { FlowStageStatus } from "@/types/flow-types";
@@ -215,17 +216,40 @@ export default function SalesOrderDetailPage() {
       }
 
       const header = applyAutoFill(soData, mapping);
+
+      // Resolve fg_warehouse: prefer item warehouse, else SO-level set_warehouse
+      const fgWarehouse = item.warehouse || (soData.set_warehouse as string) || "";
+      if (!fgWarehouse) {
+        showError({
+          code: "MANDATORY_MISSING",
+          title: "No warehouse set",
+          explanation: `Item ${item.item_code} has no finished-goods warehouse. Set a warehouse on the Sales Order line or the order header before creating Work Orders.`,
+          details: [`Item: ${item.item_code}`],
+          severity: "warning",
+          actions: [
+            {
+              label: "Dismiss",
+              kind: "dismiss",
+              variant: "ghost",
+              run: () => {},
+            },
+          ],
+        });
+        continue;
+      }
+
       const woPayload = {
         ...header,
         production_item: item.item_code,
         item_name: item.item_name,
         qty: item.qty,
-        fg_warehouse: item.warehouse || "",
+        fg_warehouse: fgWarehouse,
         sales_order: name,
         bom_no: bomNo,
+        company: getActiveCompany(),
         naming_series: "MFG-WO-.YYYY.-",
-        status: "Draft",
-        docstatus: 0,
+        planned_start_date: (order?.delivery_date as string) || new Date().toISOString().split("T")[0],
+        skip_transfer: 1,
       };
 
       createWOMutation.mutate(woPayload);

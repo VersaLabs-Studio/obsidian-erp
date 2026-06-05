@@ -28,6 +28,9 @@ import {
 } from "lucide-react";
 import { useFrappeCreate } from "@/hooks/generic";
 import { PageHeader } from "@/components/smart";
+import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
+import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
+import { getActiveCompany } from "@/lib/settings/company";
 import { InfoCard } from "@/components/ui/info-card";
 import { FlowWizard } from "@/components/flows/FlowWizard";
 import { validateWizardStep } from "@/lib/flows/flow-validation";
@@ -122,6 +125,8 @@ export default function CreateJournalEntryPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [watchedAll]);
 
+  const { resolution, showError, dismiss } = useGuidedError();
+
   const createMutation = useFrappeCreate<{ data: JournalEntry }, any>(
     "Journal Entry",
     {
@@ -129,6 +134,7 @@ export default function CreateJournalEntryPage() {
         router.push(
           `/accounting/journal-entry/${encodeURIComponent(data.data.name)}`,
         ),
+      onError: (err) => showError(resolveFrappeError(err, { doctype: "Journal Entry" })),
     },
   );
 
@@ -138,7 +144,7 @@ export default function CreateJournalEntryPage() {
       return;
     }
     const values = getValues();
-    await createMutation.mutateAsync(values);
+    await createMutation.mutateAsync({ ...values, company: getActiveCompany() });
   }, [isBalanced, getValues, createMutation]);
 
   return (
@@ -458,6 +464,7 @@ export default function CreateJournalEntryPage() {
           />
         </InfoCard>
       </Form>
+      <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
     </div>
   );
 }

@@ -162,7 +162,14 @@ export default function LeadDetailPage() {
     allowedTransitions.length > 0 && {
       label: "Change Status",
       description: `Current: ${lead.status}`,
-      onClick: () => {},
+      onClick: () => {
+        // Scroll to the status change menu in the header
+        const statusMenu = document.querySelector("[data-status-menu]");
+        if (statusMenu) {
+          statusMenu.scrollIntoView({ behavior: "smooth", block: "center" });
+          (statusMenu as HTMLElement).focus();
+        }
+      },
       disabled: false,
     },
   ].filter(Boolean) as React.ComponentProps<typeof WhatsNext>["actions"];

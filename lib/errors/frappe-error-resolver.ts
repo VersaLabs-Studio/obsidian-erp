@@ -4,6 +4,8 @@
 // All errors pass through resolveFrappeError → typed Resolution.
 // Each future phase adds strategies as it meets new error classes.
 
+import { extractFrappeMessage } from "./extract-frappe-message";
+
 export interface ResolutionAction {
   label: string;
   kind: "navigate" | "prefill" | "mutate" | "dismiss";
@@ -154,24 +156,74 @@ const strategies: ErrorStrategy[] = [
   {
     code: "DUPLICATE",
     match: (m) =>
-      /Duplicate/i.test(m) || /already exists/i.test(m),
+      /Duplicate/i.test(m) || /already exists/i.test(m) || /already used/i.test(m) || /must be unique/i.test(m),
     resolve: (msg) => {
-      const dupMatch = msg.match(/['"]?(.+?)['"]?\s+already exists/i);
-      const existing = dupMatch?.[1] ?? "A record with these details";
+      // Parse: "Email Address must be unique, it is already used in CRM-LEAD-2026-00001"
+      // Or: "Purchase Order PO-001 already exists"
+      const nameMatch = msg.match(/([A-Z]{2,}-[\w-]+-\d+(?:-\d+)?)/i);
+      const existing = nameMatch?.[1]?.trim() ?? "A record with these details";
+
+      const routeMap: Record<string, string> = {
+        "CRM-LEAD": "crm/lead",
+        "CRM-OPP": "crm/opportunity",
+        "CUST-": "crm/customer",
+        "SAL-QTN": "sales/quotation",
+        "SAL-ORD": "sales/sales-order",
+        "MAT-DN": "stock/delivery-note",
+        "MAT-STE": "stock/stock-entry",
+        "MAT-MR": "stock/material-request",
+        "ACC-SINV": "accounting/sales-invoice",
+        "ACC-PE": "accounting/payment-entry",
+        "ACC-PINV": "accounting/purchase-invoice",
+        "ACC-JE": "accounting/journal-entry",
+        "PUR-ORD": "buying/purchase-order",
+        "PUR-RFQ": "buying/request-for-quotation",
+        "PUR-SQTN": "buying/supplier-quotation",
+        "MFG-BOM": "manufacturing/bom",
+        "MFG-WO": "manufacturing/work-order",
+      };
+
+      let route = "";
+      if (nameMatch) {
+        for (const [prefix, r] of Object.entries(routeMap)) {
+          if (existing.startsWith(prefix)) {
+            route = r;
+            break;
+          }
+        }
+      }
+
+      const actions: Array<{
+        label: string;
+        kind: "navigate" | "dismiss";
+        variant: "default" | "ghost";
+        run: () => void;
+      }> = [];
+
+      if (nameMatch && route) {
+        actions.push({
+          label: `Open ${existing}`,
+          kind: "navigate",
+          variant: "default",
+          run: () => {
+            window.location.href = `/${route}/${encodeURIComponent(existing)}`;
+          },
+        });
+      }
+
+      actions.push({
+        label: "Dismiss",
+        kind: "dismiss",
+        variant: "ghost",
+        run: () => {},
+      });
 
       return {
         title: "Duplicate entry",
         explanation: `${existing} already exists. You can open the existing record or change your entry to avoid the conflict.`,
         details: [`Existing: ${existing}`],
         severity: "warning",
-        actions: [
-          {
-            label: "Dismiss",
-            kind: "dismiss",
-            variant: "ghost",
-            run: () => {},
-          },
-        ],
+        actions,
       };
     },
   },
@@ -242,12 +294,7 @@ export function resolveFrappeError(
   err: unknown,
   ctx: { doctype: string; values?: unknown },
 ): Resolution {
-  const rawMessage =
-    err instanceof Error
-      ? err.message
-      : typeof err === "string"
-        ? err
-        : "An unexpected error occurred";
+  const rawMessage = extractFrappeMessage(err);
 
   // Try each strategy in order
   for (const strategy of strategies) {

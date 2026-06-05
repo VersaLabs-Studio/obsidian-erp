@@ -48,6 +48,8 @@ import {
   BookOpen,
 } from "lucide-react";
 import { useState, useEffect } from "react";
+import { useNotifications } from "@/lib/stores/use-notifications";
+import { NotificationsPanel } from "@/components/notifications/notifications-panel";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
@@ -330,6 +332,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [openSections, setOpenSections] = useState<string[]>(["Inventory"]); // Default open
+  const [notifOpen, setNotifOpen] = useState(false);
+  const { unreadCount } = useNotifications();
   const pathname = usePathname();
 
   // Close mobile menu on route change
@@ -551,14 +555,21 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-2">
             {/* Theme Toggle */}
             <ThemeToggle />
-            <Button
-              size="icon"
-              variant="ghost"
-              className="relative rounded-full hover:bg-card shadow-sm transition-all duration-300 hover:scale-105"
-            >
-              <Bell className="h-5 w-5 text-muted-foreground" />
-              <span className="absolute top-1.5 right-1.5 h-2.5 w-2.5 bg-red-500 rounded-full border-2 border-background animate-pulse" />
-            </Button>
+            <div className="relative">
+              <Button
+                size="icon"
+                variant="ghost"
+                className="relative rounded-full hover:bg-card shadow-sm transition-all duration-300 hover:scale-105"
+                onClick={() => setNotifOpen(!notifOpen)}
+                aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
+              >
+                <Bell className="h-5 w-5 text-muted-foreground" />
+                {unreadCount > 0 && (
+                  <span className="absolute top-1.5 right-1.5 h-2.5 w-2.5 bg-red-500 rounded-full border-2 border-background animate-pulse" />
+                )}
+              </Button>
+              <NotificationsPanel open={notifOpen} onClose={() => setNotifOpen(false)} />
+            </div>
             <div className="hidden sm:block h-6 w-[1px] bg-border/50 mx-1" />
             <Button
               variant="outline"

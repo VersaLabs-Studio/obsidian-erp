@@ -32,6 +32,9 @@ import {
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
 import { FlowWizard } from "@/components/flows/FlowWizard";
 import { useFrappeCreate, useFrappeDoc, useFrappeList } from "@/hooks/generic";
+import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
+import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
+import { getActiveCompany } from "@/lib/settings/company";
 import {
   getAutoFillMapping,
   applyAutoFill,
@@ -242,6 +245,7 @@ function CreatePaymentEntryForm() {
   );
 
   // -- Persistence ------------------------------------------------------------
+  const { resolution, showError, dismiss } = useGuidedError();
   const createMutation = useFrappeCreate<
     { data: { name: string } },
     Record<string, unknown>
@@ -253,12 +257,14 @@ function CreatePaymentEntryForm() {
         router.push(`/accounting/payment-entry/${encodeURIComponent(name)}`);
       }
     },
+    onError: (err) => showError(resolveFrappeError(err, { doctype: "Payment Entry" })),
   });
 
   const handleSubmit = useCallback(() => {
     const values = getValues();
     createMutation.mutate({
       ...values,
+      company: getActiveCompany(),
       naming_series: "ACC-PAY-.YYYY.-",
       received_amount: values.paid_amount,
       source_exchange_rate: 1,
@@ -602,6 +608,7 @@ function CreatePaymentEntryForm() {
           />
         </InfoCard>
       </Form>
+      <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
     </div>
   );
 }
