@@ -184,6 +184,7 @@ const strategies: ErrorStrategy[] = [
         "PUR-SQTN": "buying/supplier-quotation",
         "MFG-BOM": "manufacturing/bom",
         "MFG-WO": "manufacturing/work-order",
+        "MAT-RECO": "stock/stock-reconciliation",
       };
 
       let route = "";
@@ -265,6 +266,7 @@ const strategies: ErrorStrategy[] = [
         "Journal Entry": "accounting/journal-entry",
         "BOM": "manufacturing/bom",
         "Quotation": "sales/quotation",
+        "Stock Reconciliation": "stock/stock-reconciliation",
       };
       const route = routeMap[linkedDoctype] ?? linkedDoctype.toLowerCase().replace(/\s+/g, "-");
 

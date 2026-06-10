@@ -198,6 +198,29 @@ export const DOCTYPE_CONFIG: Record<string, DocTypeConfig> = {
     defaultSortField: "posting_date",
     defaultSortOrder: "desc",
   },
+  "Stock Reconciliation": {
+    apiPath: "stock/stock-reconciliation",
+    module: "Stock",
+    labelField: "name",
+    searchFields: ["name", "purpose", "posting_date"],
+    defaultSortField: "posting_date",
+    defaultSortOrder: "desc",
+  },
+  Bin: {
+    apiPath: "stock/bin",
+    module: "Stock",
+    labelField: "item_code",
+    searchFields: ["item_code", "warehouse"],
+    defaultSortField: "item_code",
+  },
+  "Stock Ledger Entry": {
+    apiPath: "stock/stock-ledger-entry",
+    module: "Stock",
+    labelField: "name",
+    searchFields: ["item_code", "warehouse", "voucher_no"],
+    defaultSortField: "posting_date",
+    defaultSortOrder: "desc",
+  },
 
   // ============================================================================
   // CRM MODULE

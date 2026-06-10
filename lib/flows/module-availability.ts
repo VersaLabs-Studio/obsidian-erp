@@ -31,6 +31,8 @@ export const BUILT_MODULES = new Set<string>([
   "Customer",
   // Phase 2h — Purchase Receipt (procure-to-pay close)
   "Purchase Receipt",
+  // Phase 2i — Stock Visibility
+  "Stock Reconciliation",
 ]);
 
 export function isModuleBuilt(doctype: string): boolean {
