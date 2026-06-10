@@ -118,10 +118,11 @@ export function resolveFlowChain(
  * Get the route path for a doctype
  * Maps doctype names to their URL paths
  */
-function getDocTypeRoute(doctype: string): string {
+export function getDocTypeRoute(doctype: string): string {
   const routeMap: Record<string, string> = {
     Lead: "crm/lead",
     Opportunity: "crm/opportunity",
+    Customer: "crm/customer",
     Quotation: "sales/quotation",
     "Sales Order": "sales/sales-order",
     "Work Order": "manufacturing/work-order",
@@ -136,9 +137,34 @@ function getDocTypeRoute(doctype: string): string {
     "Supplier Quotation": "buying/supplier-quotation",
     "Stock Entry": "stock/stock-entry",
     BOM: "manufacturing/bom",
+    "Stock Reconciliation": "stock/stock-reconciliation",
   };
 
   return routeMap[doctype] || doctype.toLowerCase().replace(/\s+/g, "-");
+}
+
+/**
+ * G2: Derive the auto-fill query-param name from a source doctype.
+ * E.g. "Quotation" → "quotation", "Sales Order" → "sales_order"
+ * This is the same param the WhatsNext "Create X" links already use.
+ */
+export function getAutoFillParam(sourceDoctype: string): string {
+  return sourceDoctype.toLowerCase().replace(/\s+/g, "_");
+}
+
+/**
+ * G2: Build the real create URL for a downstream doctype from a source document.
+ * E.g. buildCreateUrl("Quotation", "QTN-001", "Sales Order")
+ *   → "/sales/sales-order/new?quotation=QTN-001"
+ */
+export function buildCreateUrl(
+  sourceDoctype: string,
+  sourceName: string,
+  targetDoctype: string,
+): string {
+  const route = getDocTypeRoute(targetDoctype);
+  const param = getAutoFillParam(sourceDoctype);
+  return `/${route}/new?${param}=${encodeURIComponent(sourceName)}`;
 }
 
 /**

@@ -89,7 +89,7 @@ const WIZARD_STEPS: WizardStep[] = [
     label: "Company & Date",
     description: "Set the purchasing entity and timeline",
     schema: null,
-    fields: ["company", "transaction_date"],
+    fields: ["transaction_date"],
     icon: "Building2",
   },
   {
@@ -124,7 +124,6 @@ export default function NewRequestForQuotationPage() {
   const form = useForm<RFQForm>({
     defaultValues: {
       naming_series: "PUR-RFQ-.YYYY.-",
-      company: "",
       transaction_date: new Date().toISOString().split("T")[0],
       message_for_supplier: "",
       status: "Draft",
@@ -310,22 +309,6 @@ export default function NewRequestForQuotationPage() {
                       description="Set the purchasing entity and RFQ date."
                     />
                     <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                      <FieldWrap
-                        auto={isAuto("company")}
-                        loading={loadingMR}
-                        error={triedNextSteps.has(step) ? validationResults?.step1?.errors?.company : undefined}
-                      >
-                        <FormFrappeSelect
-                          control={control}
-                          name="company"
-                          label="Company"
-                          required
-                          doctype="Company"
-                          labelField="company_name"
-                          placeholder="Select company..."
-                          disabled={isAuto("company")}
-                        />
-                      </FieldWrap>
                       <FormDatePicker
                         control={control}
                         name="transaction_date"

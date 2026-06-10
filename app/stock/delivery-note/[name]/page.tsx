@@ -308,7 +308,7 @@ export default function DeliveryNoteDetailPage() {
           </InfoCard>
 
           <InfoCard title="Flow Tracker">
-            <FlowRail result={chain} isLoading={loadingInvoices} />
+            <FlowRail result={chain} currentDocName={name} sourceDoctype="Delivery Note" isLoading={loadingInvoices} />
           </InfoCard>
 
           <InfoCard title="What's Next">

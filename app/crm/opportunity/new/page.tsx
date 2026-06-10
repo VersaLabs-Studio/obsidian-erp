@@ -62,7 +62,7 @@ const WIZARD_STEPS: WizardStep[] = [
     label: "Source & Contact",
     description: "Where this opportunity comes from",
     schema: null,
-    fields: ["opportunity_from", "party_name", "company", "transaction_date"],
+    fields: ["opportunity_from", "party_name", "transaction_date"],
     icon: "Target",
   },
   {
@@ -90,7 +90,6 @@ export default function NewOpportunityPage() {
     defaultValues: {
       opportunity_from: oppFrom,
       party_name: searchParams.get("party_name") || "",
-      company: searchParams.get("company_name") || "",
       transaction_date: new Date().toISOString().split("T")[0],
       opportunity_type: "",
       sales_stage: "",
@@ -207,15 +206,6 @@ export default function NewOpportunityPage() {
                           watchedOppFrom === "Lead" ? "lead_name" : "customer_name"
                         }
                         placeholder={`Select ${watchedOppFrom.toLowerCase()}...`}
-                      />
-                      <FormFrappeSelect
-                        control={control}
-                        name="company"
-                        label="Company"
-                        required
-                        doctype="Company"
-                        labelField="company_name"
-                        placeholder="Select company..."
                       />
                       <FormDatePicker
                         control={control}

@@ -57,7 +57,7 @@ const WIZARD_STEPS: WizardStep[] = [
     label: "General Info",
     description: "Set company, voucher type, and posting date",
     schema: null,
-    fields: ["company", "voucher_type", "posting_date"],
+    fields: ["voucher_type", "posting_date"],
     icon: "BookOpen",
   },
   {
@@ -81,7 +81,6 @@ export default function CreateJournalEntryPage() {
       naming_series: "ACC-JV-.YYYY.-",
       voucher_type: "Journal Entry",
       posting_date: new Date().toISOString().split("T")[0],
-      company: "",
       accounts: [
         { account: "", debit: 0, credit: 0, party_type: "", party: "" },
         { account: "", debit: 0, credit: 0, party_type: "", party: "" },
@@ -183,15 +182,7 @@ export default function CreateJournalEntryPage() {
                       </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                      <FormFrappeSelect
-                        control={control}
-                        name="company"
-                        label="Company"
-                        required
-                        doctype="Company"
-                        labelField="company_name"
-                      />
-                      <FormSelect
+                       <FormSelect
                         control={control}
                         name="voucher_type"
                         label="Voucher Type"

@@ -192,7 +192,7 @@ export default function MaterialRequestDetailPage() {
       />
 
       <InfoCard title="Procurement Flow" className="overflow-hidden">
-        <FlowRail result={chain} isLoading={loadingPO} />
+        <FlowRail result={chain} currentDocName={name} sourceDoctype="Material Request" isLoading={loadingPO} />
       </InfoCard>
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">

@@ -82,7 +82,7 @@ const WIZARD_STEPS: WizardStep[] = [
     label: "Customer & Source",
     description: "Confirm the customer and invoice dates",
     schema: null,
-    fields: ["customer", "company", "posting_date", "due_date", "delivery_note"],
+    fields: ["customer", "posting_date", "due_date", "delivery_note"],
     icon: "UserRound",
   },
   {
@@ -123,7 +123,6 @@ export default function NewSalesInvoicePage() {
     defaultValues: {
       naming_series: "ACC-SINV-.YYYY.-",
       customer: "",
-      company: "",
       posting_date: new Date().toISOString().split("T")[0],
       due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
         .toISOString()
@@ -294,21 +293,6 @@ export default function NewSalesInvoicePage() {
                           labelField="customer_name"
                           placeholder="Search customer..."
                           disabled={isAuto("customer")}
-                        />
-                      </FieldWrap>
-                      <FieldWrap
-                        auto={isAuto("company")}
-                        error={triedNextSteps.has(step) ? validationResults?.step1?.errors?.company : undefined}
-                      >
-                        <FormFrappeSelect
-                          control={control}
-                          name="company"
-                          label="Company"
-                          required
-                          doctype="Company"
-                          labelField="company_name"
-                          placeholder="Select company..."
-                          disabled={isAuto("company")}
                         />
                       </FieldWrap>
                       <FormDatePicker

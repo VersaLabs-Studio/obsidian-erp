@@ -75,7 +75,6 @@ export default function EditDeliveryNotePage() {
   const form = useForm<DNForm>({
     defaultValues: {
       customer: "",
-      company: "",
       posting_date: "",
       posting_time: "",
       set_warehouse: "",
@@ -228,7 +227,6 @@ export default function EditDeliveryNotePage() {
                 return (
                   <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                     <FormFrappeSelect control={control} name="customer" label="Customer" required doctype="Customer" labelField="customer_name" />
-                    <FormFrappeSelect control={control} name="company" label="Company" required doctype="Company" labelField="company_name" />
                     <FormDatePicker control={control} name="posting_date" label="Posting Date" required />
                     <FormInput control={control} name="posting_time" label="Posting Time" type="time" />
                     <FormFrappeSelect

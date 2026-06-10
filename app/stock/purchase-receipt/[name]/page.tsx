@@ -304,7 +304,7 @@ export default function PurchaseReceiptDetailPage() {
           </InfoCard>
 
           <InfoCard title="Flow Tracker">
-            <FlowRail result={chain} isLoading={loadingInvoices} />
+            <FlowRail result={chain} currentDocName={name} sourceDoctype="Purchase Receipt" isLoading={loadingInvoices} />
           </InfoCard>
 
           <InfoCard title="What's Next">

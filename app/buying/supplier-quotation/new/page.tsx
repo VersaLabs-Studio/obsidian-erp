@@ -84,7 +84,7 @@ const WIZARD_STEPS: WizardStep[] = [
     label: "Supplier & Date",
     description: "Select the supplier and set quotation date",
     schema: null,
-    fields: ["supplier", "company", "transaction_date"],
+    fields: ["supplier", "transaction_date"],
     icon: "Truck",
   },
   {
@@ -125,7 +125,6 @@ export default function NewSupplierQuotationPage() {
     defaultValues: {
       naming_series: "PUR-SQTN-.YYYY.-",
       supplier: "",
-      company: "",
       transaction_date: new Date().toISOString().split("T")[0],
       currency: "ETB",
       conversion_rate: 1,
@@ -318,21 +317,6 @@ export default function NewSupplierQuotationPage() {
                           labelField="supplier_name"
                           placeholder="Select supplier..."
                           disabled={isAuto("supplier")}
-                        />
-                      </FieldWrap>
-                      <FieldWrap
-                        auto={isAuto("company")}
-                        error={triedNextSteps.has(step) ? validationResults?.step1?.errors?.company : undefined}
-                      >
-                        <FormFrappeSelect
-                          control={control}
-                          name="company"
-                          label="Company"
-                          required
-                          doctype="Company"
-                          labelField="company_name"
-                          placeholder="Select company..."
-                          disabled={isAuto("company")}
                         />
                       </FieldWrap>
                       <FormDatePicker

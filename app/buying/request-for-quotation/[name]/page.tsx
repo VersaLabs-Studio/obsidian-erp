@@ -166,7 +166,7 @@ export default function RequestForQuotationDetailPage() {
 
       {/* Flow Tracker */}
       <InfoCard title="Procurement Flow" className="overflow-hidden">
-        <FlowRail result={chain} />
+        <FlowRail result={chain} currentDocName={name} sourceDoctype="Request for Quotation" />
       </InfoCard>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

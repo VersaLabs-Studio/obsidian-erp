@@ -103,7 +103,7 @@ const WIZARD_STEPS: WizardStep[] = [
     label: "Customer & Dates",
     description: "Confirm the customer and set the delivery timeline",
     schema: null,
-    fields: ["customer", "company", "transaction_date", "delivery_date"],
+    fields: ["customer", "transaction_date", "delivery_date"],
     icon: "UserRound",
   },
   {
@@ -144,7 +144,6 @@ export default function NewSalesOrderPage() {
     defaultValues: {
       naming_series: "SAL-ORD-.YYYY.-",
       customer: "",
-      company: "",
       transaction_date: new Date().toISOString().split("T")[0],
       delivery_date: "",
       order_type: "Sales",
@@ -329,21 +328,6 @@ export default function NewSalesOrderPage() {
                           labelField="customer_name"
                           placeholder="Search customer..."
                           disabled={isAuto("customer")}
-                        />
-                      </FieldWrap>
-                      <FieldWrap
-                        auto={isAuto("company")}
-                        error={triedNextSteps.has(step) ? validationResults?.step1?.errors?.company : undefined}
-                      >
-                        <FormFrappeSelect
-                          control={control}
-                          name="company"
-                          label="Company"
-                          required
-                          doctype="Company"
-                          labelField="company_name"
-                          placeholder="Select company..."
-                          disabled={isAuto("company")}
                         />
                       </FieldWrap>
                       <FormDatePicker

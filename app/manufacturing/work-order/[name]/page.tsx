@@ -586,7 +586,7 @@ export default function WorkOrderDetailPage() {
           </InfoCard>
 
           <InfoCard title="Journey">
-            <FlowRail result={chain} isLoading={loadingSE} />
+            <FlowRail result={chain} currentDocName={name} sourceDoctype="Work Order" isLoading={loadingSE} />
           </InfoCard>
 
           <WhatsNext actions={whatsNext} />

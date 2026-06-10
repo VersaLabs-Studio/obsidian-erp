@@ -90,7 +90,7 @@ const WIZARD_STEPS: WizardStep[] = [
     label: "Entry Type & Warehouses",
     description: "Set the purpose, company, date, and warehouses",
     schema: null,
-    fields: ["purpose", "company", "posting_date", "from_warehouse", "to_warehouse"],
+    fields: ["purpose", "posting_date", "from_warehouse", "to_warehouse"],
     icon: "ArrowRightLeft",
   },
   {
@@ -122,7 +122,6 @@ export default function NewStockEntryPage() {
       naming_series: "MAT-STE-.YYYY.-",
       stock_entry_type: "Material Transfer",
       purpose: "Material Transfer",
-      company: "",
       posting_date: new Date().toISOString().split("T")[0],
       from_warehouse: "",
       to_warehouse: "",
@@ -242,15 +241,6 @@ export default function NewStockEntryPage() {
                         required
                         options={PURPOSE_OPTIONS}
                         placeholder="Select purpose..."
-                      />
-                      <FormFrappeSelect
-                        control={control}
-                        name="company"
-                        label="Company"
-                        required
-                        doctype="Company"
-                        labelField="company_name"
-                        placeholder="Select company..."
                       />
                       <FormDatePicker
                         control={control}

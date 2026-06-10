@@ -377,7 +377,7 @@ export default function JournalEntryDetailPage() {
           </Card>
 
           <InfoCard title="Flow">
-            <FlowRail result={chain} />
+            <FlowRail result={chain} currentDocName={name} sourceDoctype="Journal Entry" />
           </InfoCard>
         </div>
       </div>

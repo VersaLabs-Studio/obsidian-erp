@@ -114,7 +114,17 @@ const navigation = [
         href: "/stock/stock-entry",
         icon: ArrowRightLeft,
       },
-      { title: "Stock Balance", href: "/stock/balance", icon: Scale },
+      { title: "Stock Balance", href: "/stock/stock-balance", icon: Scale },
+      {
+        title: "Stock Ledger",
+        href: "/stock/stock-ledger",
+        icon: ClipboardList,
+      },
+      {
+        title: "Stock Reconciliation",
+        href: "/stock/stock-reconciliation",
+        icon: ClipboardList,
+      },
       { title: "Settings", href: "/stock/settings", icon: Settings },
     ],
   },

@@ -23,10 +23,14 @@ export const AUTO_FILL_REGISTRY: Record<string, AutoFillRegistryEntry> = {
   "Quotation->Sales Order": {
     sourceDoctype: "Quotation",
     targetDoctype: "Sales Order",
+    // G1: Quotation stores party in `party_name`, not `customer`.
+    // `customer` is populated server-side after insert when quotation_to="Customer".
+    // Guard: only apply when quotation_to === "Customer" (not Lead quotations).
+    autoFillGuard: (sourceDoc: Record<string, unknown>) =>
+      sourceDoc.quotation_to === "Customer",
     headerMappings: [
-      { sourceField: "customer", targetField: "customer", isReadOnly: true, sourceLabel: "Customer" },
-      { sourceField: "customer_name", targetField: "customer_name", isReadOnly: true, sourceLabel: "Customer Name" },
-      { sourceField: "company", targetField: "company", isReadOnly: true, sourceLabel: "Company" },
+      { sourceField: "party_name", targetField: "customer", isReadOnly: true, sourceLabel: "Customer" },
+      { sourceField: "party_name", targetField: "customer_name", isReadOnly: true, sourceLabel: "Customer Name" },
       { sourceField: "currency", targetField: "currency", isReadOnly: true, sourceLabel: "Currency" },
       { sourceField: "conversion_rate", targetField: "conversion_rate", isReadOnly: true, sourceLabel: "Exchange Rate" },
       { sourceField: "selling_price_list", targetField: "selling_price_list", isReadOnly: true, sourceLabel: "Price List" },
@@ -442,6 +446,11 @@ export function applyAutoFill(
   sourceDoc: Record<string, unknown>,
   mapping: AutoFillRegistryEntry
 ): Record<string, unknown> {
+  // G1: If the mapping has a guard and it fails, return only the defaults
+  if (mapping.autoFillGuard && !mapping.autoFillGuard(sourceDoc)) {
+    return { ...mapping.defaults };
+  }
+
   const target: Record<string, unknown> = { ...mapping.defaults };
 
   // Map header fields

@@ -70,7 +70,6 @@ const WIZARD_STEPS: WizardStep[] = [
     schema: null,
     fields: [
       "material_request_type",
-      "company",
       "transaction_date",
       "schedule_date",
     ],
@@ -101,7 +100,6 @@ export default function NewMaterialRequestPage() {
     defaultValues: {
       naming_series: "MAT-MR-.YYYY.-",
       material_request_type: "Purchase",
-      company: "",
       transaction_date: new Date().toISOString().split("T")[0],
       schedule_date: "",
       set_from_warehouse: "",
@@ -220,15 +218,6 @@ export default function NewMaterialRequestPage() {
                         label="Request Type"
                         required
                         options={REQUEST_TYPE_OPTIONS}
-                      />
-                      <FormFrappeSelect
-                        control={control}
-                        name="company"
-                        label="Company"
-                        required
-                        doctype="Company"
-                        labelField="company_name"
-                        placeholder="Select company..."
                       />
                       <FormDatePicker
                         control={control}

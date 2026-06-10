@@ -107,7 +107,7 @@ const WIZARD_STEPS: WizardStep[] = [
     label: "Customer & Shipping",
     description: "Confirm the customer and set delivery details",
     schema: null,
-    fields: ["customer", "company", "posting_date", "shipping_address_name", "po_no"],
+    fields: ["customer", "posting_date", "shipping_address_name", "po_no"],
     icon: "UserRound",
   },
   {
@@ -148,7 +148,6 @@ export default function NewDeliveryNotePage() {
     defaultValues: {
       naming_series: "MAT-DN-.YYYY.-",
       customer: "",
-      company: "",
       posting_date: new Date().toISOString().split("T")[0],
       posting_time: new Date().toTimeString().slice(0, 5),
       print_without_amount: 0,
@@ -342,21 +341,6 @@ export default function NewDeliveryNotePage() {
                           labelField="customer_name"
                           placeholder="Search customer..."
                           disabled={isAuto("customer")}
-                        />
-                      </FieldWrap>
-                      <FieldWrap
-                        auto={isAuto("company")}
-                        error={triedNextSteps.has(step) ? validationResults?.step1?.errors?.company : undefined}
-                      >
-                        <FormFrappeSelect
-                          control={control}
-                          name="company"
-                          label="Company"
-                          required
-                          doctype="Company"
-                          labelField="company_name"
-                          placeholder="Select company..."
-                          disabled={isAuto("company")}
                         />
                       </FieldWrap>
                       <FormDatePicker

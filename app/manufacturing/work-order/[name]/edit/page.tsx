@@ -47,7 +47,6 @@ function EditWorkOrderForm() {
       naming_series: "MFG-WO-.YYYY.-",
       production_item: "",
       bom_no: "",
-      company: "",
       qty: 1,
       fg_warehouse: "",
       planned_start_date: "",
@@ -263,13 +262,6 @@ function EditWorkOrderForm() {
                   name="qty"
                   label="Quantity to Produce"
                   type="number"
-                  required
-                />
-                <FormFrappeSelect
-                  control={form.control}
-                  name="company"
-                  label="Company"
-                  doctype="Company"
                   required
                 />
               </div>

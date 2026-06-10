@@ -219,7 +219,7 @@ export default function StockEntryDetailPage() {
       {/* Flow Tracker — upstream Work Order link */}
       {se.work_order && (
         <InfoCard title="Manufacturing Flow" className="overflow-hidden">
-          <FlowRail result={chain} isLoading={false} />
+          <FlowRail result={chain} currentDocName={name} sourceDoctype="Stock Entry" isLoading={false} />
         </InfoCard>
       )}
 

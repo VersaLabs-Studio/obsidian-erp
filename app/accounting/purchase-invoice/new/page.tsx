@@ -81,7 +81,7 @@ const WIZARD_STEPS: WizardStep[] = [
     label: "Supplier & Source",
     description: "Set the supplier and billing details",
     schema: null,
-    fields: ["supplier", "company", "posting_date", "bill_no", "bill_date"],
+    fields: ["supplier", "posting_date", "bill_no", "bill_date"],
     icon: "Truck",
   },
   {
@@ -116,7 +116,6 @@ export default function NewPurchaseInvoicePage() {
     defaultValues: {
       naming_series: "ACC-PINV-.YYYY.-",
       supplier: "",
-      company: "",
       posting_date: new Date().toISOString().split("T")[0],
       due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
         .toISOString()
@@ -247,15 +246,6 @@ export default function NewPurchaseInvoicePage() {
                         doctype="Supplier"
                         labelField="supplier_name"
                         placeholder="Search supplier..."
-                      />
-                      <FormFrappeSelect
-                        control={control}
-                        name="company"
-                        label="Company"
-                        required
-                        doctype="Company"
-                        labelField="company_name"
-                        placeholder="Select company..."
                       />
                       <FormDatePicker
                         control={control}

@@ -101,7 +101,6 @@ function CreateWorkOrderForm() {
       naming_series: "MFG-WO-.YYYY.-",
       production_item: preItem || "",
       bom_no: preBom || "",
-      company: "",
       qty: preQty ? parseFloat(preQty) : 1,
       sales_order: salesOrderId || "",
       expected_delivery_date: "",
@@ -308,16 +307,6 @@ function CreateWorkOrderForm() {
                       label="Quantity to Produce"
                       type="number"
                       required
-                    />
-                    <FormFrappeSelect
-                      control={control}
-                      name="company"
-                      label="Company"
-                      required
-                      doctype="Company"
-                      labelField="company_name"
-                      placeholder="Select company..."
-                      disabled={isAuto("company")}
                     />
                   </div>
                   <div className="grid grid-cols-1 gap-5 md:grid-cols-2 pt-2">

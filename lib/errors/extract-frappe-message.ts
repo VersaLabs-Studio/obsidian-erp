@@ -2,6 +2,9 @@
 // Obsidian ERP v4.0 — Normalises Frappe / frappe-js-sdk errors into a
 // human-readable string.  The resolver (frappe-error-resolver.ts) calls
 // this as its first step so strategies always match on clean text.
+//
+// G4: ALL return paths route through sanitizeResult() to guarantee
+// [object Object] never reaches the user.
 
 interface FrappeError {
   _server_messages?: string;
@@ -25,9 +28,35 @@ function stripHtml(input: string): string {
   return input.replace(/<[^>]*>/g, "");
 }
 
-export function extractFrappeMessage(err: unknown): string {
-  let result: string;
+/**
+ * G4: Single exit gate — every return from extractFrappeMessage passes
+ * through this. Catches [object Object], "[object Object]", and any
+ * stringified-object patterns.
+ */
+function sanitizeResult(raw: string): string {
+  if (!raw) return "An unexpected error occurred";
+  if (
+    raw === "[object Object]" ||
+    raw.includes("[object Object]") ||
+    /^\{"[^"]+":\s*/.test(raw) // starts like JSON object
+  ) {
+    // Try to extract a readable message from the JSON
+    try {
+      const parsed = JSON.parse(raw);
+      if (typeof parsed === "object" && parsed !== null) {
+        if (typeof parsed.message === "string") return stripHtml(parsed.message);
+        if (typeof parsed.error === "string") return stripHtml(parsed.error);
+        if (typeof parsed.exception === "string") return stripHtml(parsed.exception);
+      }
+    } catch {
+      // not JSON — just the broken string
+    }
+    return "An unexpected error occurred";
+  }
+  return raw;
+}
 
+export function extractFrappeMessage(err: unknown): string {
   // 1. _server_messages  (JSON array of strings, each may be a JSON object with .message)
   if (isFrappeError(err) && typeof err._server_messages === "string") {
     try {
@@ -37,7 +66,8 @@ export function extractFrappeMessage(err: unknown): string {
           try {
             const parsed = JSON.parse(entry);
             if (typeof parsed === "object" && parsed !== null && "message" in parsed) {
-              return String(parsed.message);
+              const msg = parsed.message;
+              return typeof msg === "string" ? stripHtml(msg) : String(msg);
             }
           } catch {
             // not JSON — treat as plain string
@@ -46,33 +76,31 @@ export function extractFrappeMessage(err: unknown): string {
           return stripHtml(entry);
         }
         if (typeof entry === "object" && entry !== null && "message" in entry) {
-          return String((entry as { message: unknown }).message);
+          const msg = (entry as { message: unknown }).message;
+          return typeof msg === "string" ? stripHtml(msg) : String(msg);
         }
         return String(entry);
       });
-      result = parts.join(" · ");
+      return sanitizeResult(parts.join(" · "));
     } catch {
       // malformed JSON — fall through
-      result = "";
     }
-
-    if (result) return result;
   }
 
   // 2. exception — "ValidationError: Some human message" → take after last ":"
   if (isFrappeError(err) && typeof err.exception === "string" && err.exception) {
     const parts = err.exception.split(":");
     const humanMsg = parts.length > 1 ? parts.slice(-1)[0].trim() : err.exception.trim();
-    if (humanMsg) return humanMsg;
+    if (humanMsg) return sanitizeResult(humanMsg);
   }
 
   // 3. message (string | object | array)
   if (isFrappeError(err) && err.message !== undefined && err.message !== null) {
     if (typeof err.message === "string" && err.message) {
-      return err.message;
+      return sanitizeResult(err.message);
     }
-    // object/array → stringify as last resort (but guard against [object Object] later)
-    return JSON.stringify(err.message);
+    // object/array → stringify then sanitize
+    return sanitizeResult(JSON.stringify(err.message));
   }
 
   // 4. httpStatus
@@ -82,23 +110,16 @@ export function extractFrappeMessage(err: unknown): string {
 
   // 5. Standard Error fallback
   if (err instanceof Error && err.message) {
-    return err.message;
+    return sanitizeResult(err.message);
   }
 
   // 6. Plain string
   if (typeof err === "string" && err) {
-    return err;
+    return sanitizeResult(err);
   }
 
   // 7. Fallback
-  result = "An unexpected error occurred";
-
-  // Guard: NEVER return [object Object]
-  if (result.includes("[object Object]")) {
-    result = "An unexpected error occurred";
-  }
-
-  return result;
+  return "An unexpected error occurred";
 }
 
 // ---------------------------------------------------------------------------
@@ -148,4 +169,11 @@ export const KNOWN_FRAPPE_ERROR_FIXTURES = {
   plainString: "Field customer is mandatory",
 
   emptyObject: {} as unknown,
+
+  // G4 fixture: _server_messages where entry.message is an object (the actual bug)
+  serverMessagesObjectMessage: {
+    _server_messages: JSON.stringify([
+      JSON.stringify({ message: { code: "ERR_MANDATORY", field: "company" } }),
+    ]),
+  } as FrappeError,
 };

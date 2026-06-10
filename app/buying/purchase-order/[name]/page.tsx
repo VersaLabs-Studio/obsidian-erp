@@ -341,7 +341,7 @@ export default function PurchaseOrderDetailPage() {
 
       {/* Flow Tracker */}
       <InfoCard title="Procurement Flow" className="overflow-hidden">
-        <FlowRail result={chain} isLoading={loadingPR} />
+        <FlowRail result={chain} currentDocName={name} sourceDoctype="Purchase Order" isLoading={loadingPR} />
       </InfoCard>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
@@ -455,7 +455,7 @@ export default function PurchaseOrderDetailPage() {
           </InfoCard>
 
           <InfoCard title="Journey">
-            <FlowRail result={chain} isLoading={loadingPR} />
+            <FlowRail result={chain} currentDocName={name} sourceDoctype="Purchase Order" isLoading={loadingPR} />
           </InfoCard>
 
           <WhatsNext actions={whatsNext} />

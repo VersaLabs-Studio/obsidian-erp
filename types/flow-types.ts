@@ -104,6 +104,8 @@ export interface AutoFillRegistryEntry {
   sourceDoctype: string;
   /** Target doctype */
   targetDoctype: string;
+  /** Optional guard — return false to skip auto-fill entirely (e.g. Quotation→SO when quotation_to=Lead) */
+  autoFillGuard?: (sourceDoc: Record<string, unknown>) => boolean;
   /** Header field mappings */
   headerMappings: AutoFillMapping[];
   /** Child table field mappings */

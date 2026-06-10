@@ -4,6 +4,7 @@
 // B9: Notification history panel — B1 surface, dual-theme, accessible.
 
 import { useEffect, useRef, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -62,6 +63,7 @@ export function NotificationsPanel({
     useNotifications();
   const panelRef = useRef<HTMLDivElement>(null);
   const prefersReducedMotion = useReducedMotion();
+  const router = useRouter();
 
   // Escape to close
   useEffect(() => {
@@ -86,10 +88,10 @@ export function NotificationsPanel({
     (id: string, href?: string) => {
       markRead(id);
       if (href) {
-        window.location.href = href;
+        router.push(href); // G5: use Next.js client routing, not window.location.href
       }
     },
-    [markRead],
+    [markRead, router],
   );
 
   return (

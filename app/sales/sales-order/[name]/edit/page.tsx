@@ -69,7 +69,6 @@ export default function EditSalesOrderPage() {
   const form = useForm<SOForm>({
     defaultValues: {
       customer: "",
-      company: "",
       transaction_date: "",
       delivery_date: "",
       items: [{ ...EMPTY_ITEM }],
@@ -201,7 +200,6 @@ export default function EditSalesOrderPage() {
                 return (
                   <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                     <FormFrappeSelect control={control} name="customer" label="Customer" required doctype="Customer" labelField="customer_name" />
-                    <FormFrappeSelect control={control} name="company" label="Company" required doctype="Company" labelField="company_name" />
                     <FormDatePicker control={control} name="transaction_date" label="Order Date" required />
                     <FormDatePicker control={control} name="delivery_date" label="Delivery Date" required />
                     <FormFrappeSelect

@@ -429,7 +429,7 @@ export default function BOMDetailPage() {
           </InfoCard>
 
           <InfoCard title="Journey">
-            <FlowRail result={chain} isLoading={loadingWO} />
+            <FlowRail result={chain} currentDocName={name} sourceDoctype="BOM" isLoading={loadingWO} />
           </InfoCard>
 
           <WhatsNext actions={whatsNext} />

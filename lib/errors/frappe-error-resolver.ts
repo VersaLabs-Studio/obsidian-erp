@@ -10,6 +10,8 @@ export interface ResolutionAction {
   label: string;
   kind: "navigate" | "prefill" | "mutate" | "dismiss";
   variant?: "default" | "secondary" | "ghost";
+  /** G5: Optional deep-link href for notification panel navigation */
+  href?: string;
   run: () => void | Promise<void>;
 }
 
@@ -182,6 +184,7 @@ const strategies: ErrorStrategy[] = [
         "PUR-SQTN": "buying/supplier-quotation",
         "MFG-BOM": "manufacturing/bom",
         "MFG-WO": "manufacturing/work-order",
+        "MAT-RECO": "stock/stock-reconciliation",
       };
 
       let route = "";
@@ -198,16 +201,19 @@ const strategies: ErrorStrategy[] = [
         label: string;
         kind: "navigate" | "dismiss";
         variant: "default" | "ghost";
+        href?: string;
         run: () => void;
       }> = [];
 
       if (nameMatch && route) {
+        const href = `/${route}/${encodeURIComponent(existing)}`;
         actions.push({
           label: `Open ${existing}`,
           kind: "navigate",
           variant: "default",
+          href, // G5: populate href for notification deep-link
           run: () => {
-            window.location.href = `/${route}/${encodeURIComponent(existing)}`;
+            window.location.href = href;
           },
         });
       }
@@ -260,6 +266,7 @@ const strategies: ErrorStrategy[] = [
         "Journal Entry": "accounting/journal-entry",
         "BOM": "manufacturing/bom",
         "Quotation": "sales/quotation",
+        "Stock Reconciliation": "stock/stock-reconciliation",
       };
       const route = routeMap[linkedDoctype] ?? linkedDoctype.toLowerCase().replace(/\s+/g, "-");
 
@@ -273,6 +280,7 @@ const strategies: ErrorStrategy[] = [
             label: `Open ${linkedDoctype} ${linkedName}`,
             kind: "navigate" as const,
             variant: "default" as const,
+            href: `/${route}/${encodeURIComponent(linkedName)}`, // G5: populate href
             run: () => {
               window.location.href = `/${route}/${encodeURIComponent(linkedName)}`;
             },

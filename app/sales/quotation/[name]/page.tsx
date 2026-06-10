@@ -270,7 +270,7 @@ export default function QuotationDetailPage() {
 
       {/* Flow Tracker */}
       <InfoCard title="Lead-to-Cash Flow" className="overflow-hidden">
-        <FlowRail result={chain} isLoading={loadingSO} />
+        <FlowRail result={chain} currentDocName={name} sourceDoctype="Quotation" isLoading={loadingSO} />
       </InfoCard>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

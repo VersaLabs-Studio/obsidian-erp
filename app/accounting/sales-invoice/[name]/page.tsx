@@ -345,7 +345,7 @@ export default function SalesInvoiceDetailPage() {
           </InfoCard>
 
           <InfoCard title="Flow Rail">
-            <FlowRail result={chain} isLoading={loadingPE} />
+            <FlowRail result={chain} currentDocName={name} sourceDoctype="Sales Invoice" isLoading={loadingPE} />
           </InfoCard>
 
           <WhatsNext actions={whatsNext} />

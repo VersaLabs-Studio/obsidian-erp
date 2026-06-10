@@ -61,7 +61,6 @@ function EditBOMForm() {
     resolver: zodResolver(BOMUpdateSchema),
     defaultValues: {
       item: "",
-      company: "",
       quantity: 1,
       uom: "Nos",
       currency: "ETB",
@@ -273,13 +272,6 @@ function EditBOMForm() {
                   label="Product to Manufacture"
                   doctype="Item"
                   placeholder="Select finished good..."
-                  required
-                />
-                <FormFrappeSelect
-                  control={form.control}
-                  name="company"
-                  label="Company"
-                  doctype="Company"
                   required
                 />
               </div>

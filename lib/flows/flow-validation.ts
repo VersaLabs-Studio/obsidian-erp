@@ -462,6 +462,27 @@ export const workOrderStepSchemas = {
 };
 
 /**
+ * Stock Reconciliation step schemas
+ */
+export const stockReconciliationStepSchemas = {
+  step1: z.object({
+    purpose: z.string().min(1, "Purpose is required"),
+    posting_date: z.string().min(1, "Posting date is required"),
+  }),
+  step2: z.object({
+    items: z.array(z.object({
+      item_code: z.string().min(1, "Item is required"),
+      warehouse: z.string().min(1, "Warehouse is required"),
+      qty: z.number(), // 0 is valid for reconciliation
+      valuation_rate: z.number().min(0).optional(),
+    })).min(1, "Add at least one item"),
+  }),
+  step3: z.object({
+    confirmed: z.boolean().optional(),
+  }),
+};
+
+/**
  * All step schemas indexed by doctype
  */
 export const WIZARD_STEP_SCHEMAS: Record<string, Record<string, z.ZodType>> = {
@@ -482,6 +503,7 @@ export const WIZARD_STEP_SCHEMAS: Record<string, Record<string, z.ZodType>> = {
   "Lead": leadStepSchemas,
   "Opportunity": opportunityStepSchemas,
   "Purchase Receipt": purchaseReceiptStepSchemas,
+  "Stock Reconciliation": stockReconciliationStepSchemas,
 };
 
 /**

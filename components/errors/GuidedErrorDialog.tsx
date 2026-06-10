@@ -34,11 +34,13 @@ export function useGuidedError() {
 
   const showError = useCallback((r: Resolution) => {
     setResolution(r);
-    // B9: Capture to notification store
+    // B9 + G5: Capture to notification store with href from navigate action
+    const navigateAction = r.actions.find((a) => a.kind === "navigate" && a.href);
     addNotification({
       kind: "guided",
       title: r.title,
       message: r.explanation,
+      href: navigateAction?.href, // G5: deep-link to the relevant doc
     });
   }, []);
 

@@ -2742,6 +2742,19 @@ export type StockEntrySchemaType = z.infer<typeof StockEntrySchema>;
 export type StockEntryFormData = z.infer<typeof StockEntryCreateSchema>;
 
 /**
+ * Bin Zod Schema (read-only, for Stock Balance)
+ */
+export const BinSchema = z.object({
+  item_code: z.string(),
+  warehouse: z.string(),
+  actual_qty: z.number().optional(),
+  projected_qty: z.number().optional(),
+  reserved_qty: z.number().optional(),
+  ordered_qty: z.number().optional(),
+  valuation_rate: z.number().optional(),
+});
+
+/**
  * Delivery Note Zod Schema
  * @doctype Delivery Note
  * @generated 2026-01-14T18:05:48.299Z

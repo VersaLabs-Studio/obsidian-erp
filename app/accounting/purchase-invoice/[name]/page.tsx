@@ -252,7 +252,7 @@ export default function PurchaseInvoiceDetailPage() {
 
       {/* Flow Tracker */}
       <InfoCard title="Procure-to-Pay Flow" className="overflow-hidden">
-        <FlowRail result={chain} isLoading={loadingPE} />
+        <FlowRail result={chain} currentDocName={name} sourceDoctype="Purchase Invoice" isLoading={loadingPE} />
       </InfoCard>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

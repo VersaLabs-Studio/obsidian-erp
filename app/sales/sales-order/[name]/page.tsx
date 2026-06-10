@@ -360,7 +360,7 @@ export default function SalesOrderDetailPage() {
 
       {/* Flow Tracker — clickable upstream, resolved downstream */}
       <InfoCard title="Lead-to-Cash Flow" className="overflow-hidden">
-        <FlowRail result={chain} isLoading={loadingWO} />
+        <FlowRail result={chain} currentDocName={name} sourceDoctype="Sales Order" isLoading={loadingWO} />
       </InfoCard>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

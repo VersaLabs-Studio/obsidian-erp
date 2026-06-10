@@ -120,7 +120,6 @@ export default function NewBOMPage() {
   const form = useForm<BOMForm>({
     defaultValues: {
       item: prefillItem || "",
-      company: "",
       quantity: 1,
       uom: "Nos",
       currency: "ETB",
@@ -290,15 +289,6 @@ export default function NewBOMPage() {
                           setValue("uom", doc.stock_uom || "Nos");
                         }
                       }}
-                    />
-                    <FormFrappeSelect
-                      control={control}
-                      name="company"
-                      label="Company"
-                      required
-                      doctype="Company"
-                      labelField="company_name"
-                      placeholder="Select company..."
                     />
                     <FormInput
                       control={control}

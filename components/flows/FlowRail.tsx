@@ -24,12 +24,17 @@ import type {
   FlowStageStatus,
 } from "@/types/flow-types";
 import { isModuleBuilt } from "@/lib/flows/module-availability";
+import { buildCreateUrl } from "@/lib/flows/flow-chain-resolver";
 
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
 interface FlowRailProps {
   result: FlowChainResult;
+  /** G2: Current document name — used to build real create URLs */
+  currentDocName?: string;
+  /** G2: Current document's doctype — used to build real create URLs */
+  sourceDoctype?: string;
   isLoading?: boolean;
   error?: Error | null;
   className?: string;
@@ -226,6 +231,8 @@ function FlowRailSkeleton({ className }: { className?: string }) {
 // ---------------------------------------------------------------------------
 export function FlowRail({
   result,
+  currentDocName,
+  sourceDoctype,
   isLoading,
   error,
   className,
@@ -293,9 +300,12 @@ export function FlowRail({
   });
   const nextBuildable =
     nextBuildableIndex >= 0 ? stages[nextBuildableIndex] : null;
-  const nextBuildableAction =
-    nextBuildable?.createAction && isModuleBuilt(nextBuildable.doctype)
-      ? nextBuildable.createAction
+
+  // G2: Build a real URL for the "Create" button instead of using the symbolic createAction id.
+  // Uses the same URL pattern as WhatsNext: /<route>/new?<source_doctype_lower>=<doc_name>
+  const createHref =
+    nextBuildable && currentDocName && sourceDoctype
+      ? buildCreateUrl(sourceDoctype, currentDocName, nextBuildable.doctype)
       : null;
 
   return (
@@ -397,8 +407,8 @@ export function FlowRail({
         </ol>
       </div>
 
-      {/* Action zone */}
-      {!isComplete && nextBuildable && nextBuildableAction && (
+      {/* Action zone — G2: use real URL, gate on createHref (not symbolic id) */}
+      {!isComplete && nextBuildable && createHref && (
         <motion.div
           initial={prefersReducedMotion ? {} : { opacity: 0, y: 4 }}
           animate={prefersReducedMotion ? {} : { opacity: 1, y: 0 }}
@@ -412,7 +422,7 @@ export function FlowRail({
           <span className="text-xs text-muted-foreground">
             Up next · {nextBuildable.label}
           </span>
-          <Link href={nextBuildableAction}>
+          <Link href={createHref}>
             <Button size="sm" className="gap-1.5">
               Create <ArrowRight className="h-3 w-3" />
             </Button>

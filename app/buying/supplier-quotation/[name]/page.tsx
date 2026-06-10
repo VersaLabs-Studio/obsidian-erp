@@ -172,7 +172,7 @@ export default function SupplierQuotationDetailPage() {
 
       {/* Flow Tracker */}
       <InfoCard title="Procurement Flow" className="overflow-hidden">
-        <FlowRail result={chain} />
+        <FlowRail result={chain} currentDocName={name} sourceDoctype="Supplier Quotation" />
       </InfoCard>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

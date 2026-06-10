@@ -127,7 +127,6 @@ function CreatePaymentEntryForm() {
       paid_amount: 0,
       received_amount: 0,
       mode_of_payment: "Cash",
-      company: "",
       posting_date: new Date().toISOString().split("T")[0],
       reference_no: "",
       reference_date: "",
@@ -315,15 +314,6 @@ function CreatePaymentEntryForm() {
                       description="Set the payment type, party, and amount."
                     />
                     <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                      <FormFrappeSelect
-                        control={control}
-                        name="company"
-                        label="Company"
-                        required
-                        doctype="Company"
-                        labelField="company_name"
-                        placeholder="Select company..."
-                      />
                       <FormSelect
                         control={control}
                         name="payment_type"

@@ -356,7 +356,7 @@ export default function PaymentEntryDetailPage() {
           </InfoCard>
 
           <InfoCard title="Flow Rail">
-            <FlowRail result={chain} isLoading={loadingInvoice} />
+            <FlowRail result={chain} currentDocName={name} sourceDoctype="Payment Entry" isLoading={loadingInvoice} />
           </InfoCard>
 
           <InfoCard title="What's Next">

@@ -100,7 +100,7 @@ const WIZARD_STEPS: WizardStep[] = [
     label: "Supplier & Dates",
     description: "Confirm the supplier and set the delivery timeline",
     schema: null,
-    fields: ["supplier", "company", "transaction_date", "schedule_date"],
+    fields: ["supplier", "transaction_date", "schedule_date"],
     icon: "UserRound",
   },
   {
@@ -142,7 +142,6 @@ export default function NewPurchaseOrderPage() {
     defaultValues: {
       naming_series: "PUR-ORD-.YYYY.-",
       supplier: "",
-      company: "",
       transaction_date: new Date().toISOString().split("T")[0],
       schedule_date: "",
       currency: "ETB",
@@ -342,21 +341,6 @@ export default function NewPurchaseOrderPage() {
                           labelField="supplier_name"
                           placeholder="Search supplier..."
                           disabled={isAuto("supplier")}
-                        />
-                      </FieldWrap>
-                      <FieldWrap
-                        auto={isAuto("company")}
-                        error={triedNextSteps.has(step) ? validationResults?.step1?.errors?.company : undefined}
-                      >
-                        <FormFrappeSelect
-                          control={control}
-                          name="company"
-                          label="Company"
-                          required
-                          doctype="Company"
-                          labelField="company_name"
-                          placeholder="Select company..."
-                          disabled={isAuto("company")}
                         />
                       </FieldWrap>
                       <FormDatePicker

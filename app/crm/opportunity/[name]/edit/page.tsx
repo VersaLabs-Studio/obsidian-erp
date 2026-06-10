@@ -60,7 +60,7 @@ const WIZARD_STEPS: WizardStep[] = [
     label: "Source & Contact",
     description: "Where this opportunity comes from",
     schema: null,
-    fields: ["opportunity_from", "party_name", "company", "transaction_date"],
+    fields: ["opportunity_from", "party_name", "transaction_date"],
     icon: "Target",
   },
   {
@@ -94,7 +94,6 @@ export default function EditOpportunityPage() {
     defaultValues: {
       opportunity_from: "Lead",
       party_name: "",
-      company: "",
       transaction_date: "",
       opportunity_type: "",
       sales_stage: "",
@@ -249,14 +248,6 @@ export default function EditOpportunityPage() {
                             ? "lead_name"
                             : "customer_name"
                         }
-                      />
-                      <FormFrappeSelect
-                        control={control}
-                        name="company"
-                        label="Company"
-                        required
-                        doctype="Company"
-                        labelField="company_name"
                       />
                       <FormDatePicker
                         control={control}
