@@ -15,6 +15,7 @@ import { StatusBadge } from "@/components/smart/status-badge";
 import { FrappeSelect } from "@/components/smart/frappe-select";
 import { KPICard } from "@/components/dashboard/KPICard";
 import { cn } from "@/lib/utils";
+import { computeStockKPIs } from "@/lib/kpi/compute-stock-kpis";
 
 interface Bin {
   name: string;
@@ -26,25 +27,6 @@ interface Bin {
   valuation_rate?: number;
   projected_qty?: number;
   stock_value?: number;
-}
-
-export function computeStockKPIs(
-  bins: Array<{
-    item_code: string;
-    warehouse: string;
-    actual_qty: number;
-    valuation_rate?: number;
-    reserved_qty?: number;
-  }>
-) {
-  const totalSKUs = new Set(bins.map((b) => b.item_code)).size;
-  const totalValue = bins.reduce(
-    (sum, b) => sum + b.actual_qty * (b.valuation_rate ?? 0),
-    0
-  );
-  const warehouses = new Set(bins.map((b) => b.warehouse)).size;
-  const outOfStock = bins.filter((b) => b.actual_qty <= 0).length;
-  return { totalSKUs, totalValue, warehouses, outOfStock };
 }
 
 function formatNumber(n: number): string {

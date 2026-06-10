@@ -628,3 +628,82 @@ describe("Regression — FlowRail downstream filter child-doctype (F1 fix)", () 
     expect(typeof filter[2]).toBe("string"); // operator
   });
 });
+
+// ---------------------------------------------------------------------------
+// flow-auto-fill guard test (Phase 2J Part 3)
+// ---------------------------------------------------------------------------
+describe("flow-auto-fill — guard", () => {
+  it("Customer→Quotation maps name → party_name", async () => {
+    const { getAutoFillMapping } = await import("@/lib/flows/flow-auto-fill");
+    const mapping = getAutoFillMapping("Customer", "Quotation");
+    expect(mapping).toBeDefined();
+    if (!mapping) return;
+    const partyNameMapping = mapping.headerMappings.find(
+      (m) => m.targetField === "party_name",
+    );
+    expect(partyNameMapping).toBeDefined();
+    expect(partyNameMapping?.sourceField).toBe("name");
+  });
+
+  it("Quotation→SO maps party_name → customer (G1 fix)", async () => {
+    const { getAutoFillMapping } = await import("@/lib/flows/flow-auto-fill");
+    const mapping = getAutoFillMapping("Quotation", "Sales Order");
+    expect(mapping).toBeDefined();
+    if (!mapping) return;
+    const customerMapping = mapping.headerMappings.find(
+      (m) => m.targetField === "customer",
+    );
+    expect(customerMapping).toBeDefined();
+    expect(customerMapping?.sourceField).toBe("party_name");
+    // G1: autoFillGuard should exist and reject Lead quotations
+    expect(mapping.autoFillGuard).toBeDefined();
+    if (mapping.autoFillGuard) {
+      expect(mapping.autoFillGuard({ quotation_to: "Customer" } as any)).toBe(true);
+      expect(mapping.autoFillGuard({ quotation_to: "Lead" } as any)).toBe(false);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// computeStockKPIs aggregation test (Phase 2J Part 3)
+// ---------------------------------------------------------------------------
+describe("computeStockKPIs — aggregation", () => {
+  it("computes totals, warehouses, and outOfStock correctly", async () => {
+    const { computeStockKPIs } = await import("@/lib/kpi/compute-stock-kpis");
+    const bins = [
+      { item_code: "A", warehouse: "WH1", actual_qty: 10, valuation_rate: 100 },
+      { item_code: "A", warehouse: "WH2", actual_qty: 5, valuation_rate: 100 },
+      { item_code: "B", warehouse: "WH1", actual_qty: 0, valuation_rate: 50 },
+      { item_code: "C", warehouse: "WH3", actual_qty: -2, valuation_rate: 200 },
+    ];
+    const result = computeStockKPIs(bins);
+    expect(result.totalSKUs).toBe(3); // A, B, C
+    expect(result.totalValue).toBe(1100); // 10*100 + 5*100 + 0*50 + (-2)*200 = 1100
+    expect(result.warehouses).toBe(3); // WH1, WH2, WH3
+    expect(result.outOfStock).toBe(2); // B (qty=0), C (qty<0)
+  });
+
+  it("returns zeros for empty bins", async () => {
+    const { computeStockKPIs } = await import("@/lib/kpi/compute-stock-kpis");
+    const result = computeStockKPIs([]);
+    expect(result.totalSKUs).toBe(0);
+    expect(result.totalValue).toBe(0);
+    expect(result.warehouses).toBe(0);
+    expect(result.outOfStock).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// extractFrappeMessage object-message test (Phase 2J Part 3)
+// ---------------------------------------------------------------------------
+describe("extractFrappeMessage — object-message (F1 guard)", () => {
+  it("extracts field/code from object message, never [object Object]", async () => {
+    const { extractFrappeMessage, KNOWN_FRAPPE_ERROR_FIXTURES } = await import("@/lib/errors/extract-frappe-message");
+    const result = extractFrappeMessage(KNOWN_FRAPPE_ERROR_FIXTURES.serverMessagesObjectMessage);
+    // The fixture has { message: { code: "ERR_MANDATORY", field: "company" } }
+    expect(result).not.toContain("[object Object]");
+    expect(result).not.toBe("An unexpected error occurred");
+    // Should contain the field or code
+    expect(result).toContain("company");
+  });
+});
