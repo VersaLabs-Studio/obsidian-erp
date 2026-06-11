@@ -25,6 +25,7 @@ import {
   FormFrappeSelect,
   FormSelect,
 } from "@/components/form";
+import { QuickAddField } from "@/components/quick-add/QuickAddField";
 import { FieldWrap } from "@/components/form/field-wrap";
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
 import { FlowWizard } from "@/components/flows/FlowWizard";
@@ -283,7 +284,8 @@ export default function NewStockReconciliationPage() {
                                         : undefined
                                     }
                                   >
-                                    <FormFrappeSelect
+                                    {/* 2L 1A: Quick-Add enabled per-row Item */}
+                                    <QuickAddField
                                       control={control}
                                       name={`items.${index}.item_code`}
                                       doctype="Item"
@@ -309,7 +311,8 @@ export default function NewStockReconciliationPage() {
                                         : undefined
                                     }
                                   >
-                                    <FormFrappeSelect
+                                    {/* 2L 1A: Quick-Add enabled per-row Warehouse */}
+                                    <QuickAddField
                                       control={control}
                                       name={`items.${index}.warehouse`}
                                       doctype="Warehouse"

@@ -29,6 +29,7 @@ import {
   FormDatePicker,
   FormSelect,
 } from "@/components/form";
+import { QuickAddField } from "@/components/quick-add/QuickAddField";
 import { FieldWrap } from "@/components/form/field-wrap";
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
 import { FlowWizard } from "@/components/flows/FlowWizard";
@@ -310,7 +311,8 @@ export default function NewQuotationPage() {
                       </FieldWrap>
 
                       <FieldWrap error={showErr ? stepErrors.party_name : undefined}>
-                        <FormFrappeSelect
+                        {/* 2L 1A: Quick-Add enabled party (Customer/Lead) */}
+                        <QuickAddField
                           control={control}
                           name="party_name"
                           label={selectedPartyType}
@@ -429,7 +431,8 @@ export default function NewQuotationPage() {
                             return (
                               <tr key={field.id} className="group">
                                 <td className="px-3 py-2 align-top">
-                                  <FormFrappeSelect
+                                  {/* 2L 1A: Quick-Add enabled per-row Item */}
+                                  <QuickAddField
                                     control={control}
                                     name={`items.${index}.item_code`}
                                     doctype="Item"

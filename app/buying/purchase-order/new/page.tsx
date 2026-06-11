@@ -33,6 +33,7 @@ import {
   FormFrappeSelect,
   FormDatePicker,
 } from "@/components/form";
+import { QuickAddField } from "@/components/quick-add/QuickAddField";
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
 import { FlowWizard } from "@/components/flows/FlowWizard";
 import { useFrappeCreate, useFrappeDoc } from "@/hooks/generic";
@@ -273,11 +274,18 @@ export default function NewPurchaseOrderPage() {
       setStep(1);
       return;
     }
+    // 2L P0-A: propagate the header `set_warehouse` to every item that
+    // lacks a per-row warehouse. Frappe's Purchase Order Item requires
+    // `warehouse` per row; the wizard exposes a single header "Receipt
+    // Warehouse" (`set_warehouse`). When the user only fills the header,
+    // each item is given the header value here.
+    const headerWarehouse = values.set_warehouse || "";
     createMutation.mutate({
       ...values,
       company: getActiveCompany(),
       items: items.map((it) => ({
         ...it,
+        warehouse: it.warehouse || headerWarehouse,
         amount: (Number(it.qty) || 0) * (Number(it.rate) || 0),
       })),
       conversion_rate: 1,
@@ -332,7 +340,8 @@ export default function NewPurchaseOrderPage() {
                         loading={isLoadingSource}
                         error={triedNextSteps.has(step) ? validationResults?.step1?.errors?.supplier : undefined}
                       >
-                        <FormFrappeSelect
+                        {/* 2L 1A: Quick-Add enabled Supplier */}
+                        <QuickAddField
                           control={control}
                           name="supplier"
                           label="Supplier"
@@ -359,7 +368,8 @@ export default function NewPurchaseOrderPage() {
                         auto={isAuto("set_warehouse")}
                         error={triedNextSteps.has(step) ? validationResults?.step1?.errors?.set_warehouse : undefined}
                       >
-                        <FormFrappeSelect
+                        {/* 2L 1A: Quick-Add enabled Warehouse */}
+                        <QuickAddField
                           control={control}
                           name="set_warehouse"
                           label="Receipt Warehouse"
@@ -416,7 +426,8 @@ export default function NewPurchaseOrderPage() {
                             return (
                               <tr key={field.id} className="group">
                                 <td className="px-3 py-2 align-top">
-                                  <FormFrappeSelect
+                                  {/* 2L 1A: Quick-Add enabled per-row Item */}
+                                  <QuickAddField
                                     control={control}
                                     name={`items.${index}.item_code`}
                                     doctype="Item"
