@@ -133,6 +133,9 @@ export default function NewSalesOrderPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const quotationId = searchParams.get("quotation");
+  // R5: Customer-360 quick-action passes ?customer=<name>. Prefill + lock
+  // the customer field so the resulting SO is for the source customer.
+  const customerId = searchParams.get("customer");
 
   const [step, setStep] = useState(0);
   const [autoFilledFields, setAutoFilledFields] = useState<Set<string>>(
@@ -143,7 +146,7 @@ export default function NewSalesOrderPage() {
   const form = useForm<SOForm>({
     defaultValues: {
       naming_series: "SAL-ORD-.YYYY.-",
-      customer: "",
+      customer: customerId ?? "",
       transaction_date: new Date().toISOString().split("T")[0],
       delivery_date: "",
       order_type: "Sales",
@@ -159,6 +162,16 @@ export default function NewSalesOrderPage() {
 
   const { control, getValues, reset, setValue } = form;
   const { fields, append, remove } = useFieldArray({ control, name: "items" });
+
+  // R5: when Customer-360 hands us ?customer=<name>, lock the field.
+  useEffect(() => {
+    if (!customerId) return;
+    setAutoFilledFields((prev) => {
+      const next = new Set(prev);
+      next.add("customer");
+      return next;
+    });
+  }, [customerId]);
 
   // Watch the entire form reactively — drives validation gate + FlowWizard formData
   const watchedAll = useWatch({ control });
@@ -284,7 +297,9 @@ export default function NewSalesOrderPage() {
         subtitle={
           quotationId
             ? `From Quotation ${quotationId}`
-            : "Create a sales order in three steps"
+            : customerId
+              ? `From Customer ${customerId}`
+              : "Create a sales order in three steps"
         }
         backHref="/sales/sales-order"
       />
@@ -349,9 +364,12 @@ export default function NewSalesOrderPage() {
                         doctype="Address"
                         labelField="address_title"
                         disabled={!watchedCustomer}
+                        // R6: filter on the Dynamic Link child table
+                        // (`link_doctype` + `link_name`).
                         filters={
                           watchedCustomer
                             ? ([
+                                ["Dynamic Link", "link_doctype", "=", "Customer"],
                                 ["Dynamic Link", "link_name", "=", watchedCustomer],
                               ] as unknown as [string, string, unknown][])
                             : []

@@ -13,6 +13,7 @@ import {
   Calculator,
   PieChart,
   Network,
+  Tag,
 } from "lucide-react";
 import { PageHeader } from "@/components/smart";
 import { cn } from "@/lib/utils";
@@ -74,6 +75,15 @@ const SETUP_MODULES = [
     color: "text-violet-600",
     bg: "bg-violet-100 dark:bg-violet-900/40",
     borderColor: "border-violet-200 dark:border-violet-800",
+  },
+  {
+    title: "Price Lists",
+    description: "Manage selling/buying price lists and currency rules",
+    href: "/accounting/settings/price-list",
+    icon: Tag,
+    color: "text-cyan-600",
+    bg: "bg-cyan-100 dark:bg-cyan-900/40",
+    borderColor: "border-cyan-200 dark:border-cyan-800",
   },
 ];
 

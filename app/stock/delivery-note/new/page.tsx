@@ -368,13 +368,14 @@ export default function NewDeliveryNotePage() {
                           disabled={
                             isAuto("shipping_address_name") || !watchedCustomer
                           }
-                          filters={
-                            watchedCustomer
-                              ? ([
-                                  ["Dynamic Link", "link_name", "=", watchedCustomer],
-                                ] as unknown as [string, string, unknown][])
-                              : []
-                          }
+                                  filters={
+                                    watchedCustomer
+                                      ? ([
+                                          ["Dynamic Link", "link_doctype", "=", "Customer"],
+                                          ["Dynamic Link", "link_name", "=", watchedCustomer],
+                                        ] as unknown as [string, string, unknown][])
+                                      : []
+                                  }
                           placeholder={
                             watchedCustomer
                               ? "Select address..."

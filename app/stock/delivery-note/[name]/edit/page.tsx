@@ -236,11 +236,14 @@ export default function EditDeliveryNotePage() {
                       doctype="Address"
                       labelField="address_title"
                       disabled={!watchedCustomer}
-                      filters={
-                        watchedCustomer
-                          ? ([["Dynamic Link", "link_name", "=", watchedCustomer]] as unknown as [string, string, unknown][])
-                          : []
-                      }
+                          filters={
+                            watchedCustomer
+                              ? ([
+                                  ["Dynamic Link", "link_doctype", "=", "Customer"],
+                                  ["Dynamic Link", "link_name", "=", watchedCustomer],
+                                ] as unknown as [string, string, unknown][])
+                              : []
+                          }
                     />
                     <FormInput control={control} name="po_no" label="Customer PO No" />
                   </div>

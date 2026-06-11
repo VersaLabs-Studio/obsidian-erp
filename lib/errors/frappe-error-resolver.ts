@@ -154,6 +154,65 @@ const strategies: ErrorStrategy[] = [
     },
   },
 
+  // R2: FIELD_VALIDATION — formatted as "field: Required · field: msg"
+  {
+    code: "FIELD_VALIDATION",
+    match: (m) => {
+      // Match a single "field: message" pair OR a multi-segment summary
+      // separated by · or ,. Exclude phrases owned by other strategies so
+      // they take precedence (is mandatory → MANDATORY_MISSING, etc.).
+      if (!/[A-Za-z_][A-Za-z0-9_]*\s*:\s*\S/.test(m)) return false;
+      if (/is mandatory/i.test(m)) return false;
+      if (/already exists/i.test(m)) return false;
+      if (/Could not find/i.test(m)) return false;
+      return true;
+    },
+    resolve: (msg) => {
+      // Split on · (or commas) and re-parse "field: message" pairs
+      const parts = msg.split(/\s+·\s+|\s*,\s+/).map((p) => p.trim()).filter(Boolean);
+      const fields: { field: string; message: string }[] = [];
+      for (const p of parts) {
+        const m = p.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.+)$/);
+        if (m) fields.push({ field: m[1], message: m[2] });
+      }
+      if (fields.length === 0) {
+        // Fallback: treat the whole message as a single error
+        return {
+          title: "Validation failed",
+          explanation: msg,
+          details: [msg],
+          severity: "error",
+          actions: [
+            {
+              label: "Dismiss",
+              kind: "dismiss",
+              variant: "ghost",
+              run: () => {},
+            },
+          ],
+        };
+      }
+      const first = fields[0];
+      return {
+        title: `Missing or invalid: ${first.field}`,
+        explanation:
+          fields.length === 1
+            ? `${first.field} — ${first.message}. Please fix this field and try again.`
+            : `${fields.length} fields need attention. The first is ${first.field} — ${first.message}. See all fields below.`,
+        details: fields.map((f) => `${f.field}: ${f.message}`),
+        severity: "error",
+        actions: [
+          {
+            label: "Dismiss",
+            kind: "dismiss",
+            variant: "ghost",
+            run: () => {},
+          },
+        ],
+      };
+    },
+  },
+
   // DUPLICATE
   {
     code: "DUPLICATE",

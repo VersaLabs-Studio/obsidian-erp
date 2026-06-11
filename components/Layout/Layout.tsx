@@ -46,6 +46,7 @@ import {
   Cpu,
   Cog,
   BookOpen,
+  Tag,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useNotifications } from "@/lib/stores/use-notifications";
@@ -125,6 +126,7 @@ const navigation = [
         href: "/stock/stock-reconciliation",
         icon: ClipboardList,
       },
+      { title: "Item Price", href: "/stock/settings/item-price", icon: Tag },
       { title: "Settings", href: "/stock/settings", icon: Settings },
     ],
   },
@@ -193,6 +195,7 @@ const navigation = [
         href: "/accounting/journal-entry",
         icon: BookOpen,
       },
+      { title: "Price Lists", href: "/accounting/settings/price-list", icon: Tag },
       { title: "Setup", href: "/accounting/setup", icon: Settings },
     ],
   },

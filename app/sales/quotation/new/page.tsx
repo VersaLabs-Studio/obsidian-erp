@@ -375,7 +375,17 @@ export default function NewQuotationPage() {
                         label="Billing Address"
                         doctype="Address"
                         disabled={!selectedPartyName}
-                        filters={[["Address Linked Document", "link_name", "=", selectedPartyName]]}
+                        // R6: filter on the Dynamic Link child table
+                        // (`link_doctype` + `link_name`) — "Address Linked
+                        // Document" is not a real ERPNext doctype.
+                        filters={
+                          selectedPartyName
+                            ? ([
+                                ["Dynamic Link", "link_doctype", "=", "Customer"],
+                                ["Dynamic Link", "link_name", "=", selectedPartyName],
+                              ] as unknown as [string, string, unknown][])
+                            : []
+                        }
                         placeholder="Select address..."
                       />
                     </div>

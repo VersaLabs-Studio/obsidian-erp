@@ -34,12 +34,24 @@ export function useGuidedError() {
 
   const showError = useCallback((r: Resolution) => {
     setResolution(r);
-    // B9 + G5: Capture to notification store with href from navigate action
+    // B9 + G5 + R7: Capture to notification store WITH detail + actions so
+    // clicking the bell item opens the full guided-error panel with working
+    // redirects (Reporting Contract: detail+redirect must reach the user).
     const navigateAction = r.actions.find((a) => a.kind === "navigate" && a.href);
     addNotification({
       kind: "guided",
       title: r.title,
       message: r.explanation,
+      detail:
+        [r.explanation, ...(r.details ?? [])].filter(Boolean).join(" — ") ||
+        undefined,
+      actions: r.actions
+        .filter((a) => a.href || a.run)
+        .map((a) => ({
+          label: a.label,
+          href: a.href,
+          run: a.run,
+        })),
       href: navigateAction?.href, // G5: deep-link to the relevant doc
     });
   }, []);

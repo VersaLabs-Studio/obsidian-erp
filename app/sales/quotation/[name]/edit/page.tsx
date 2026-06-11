@@ -386,7 +386,15 @@ export default function EditQuotationPage() {
                         label="Billing Address"
                         doctype="Address"
                         disabled={!selectedPartyName}
-                        filters={[["Address Linked Document", "link_name", "=", selectedPartyName]]}
+                        // R6: filter on the Dynamic Link child table
+                        filters={
+                          selectedPartyName
+                            ? ([
+                                ["Dynamic Link", "link_doctype", "=", "Customer"],
+                                ["Dynamic Link", "link_name", "=", selectedPartyName],
+                              ] as unknown as [string, string, unknown][])
+                            : []
+                        }
                         placeholder="Select address..."
                       />
                     </div>

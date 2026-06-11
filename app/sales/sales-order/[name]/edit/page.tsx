@@ -202,19 +202,24 @@ export default function EditSalesOrderPage() {
                     <FormFrappeSelect control={control} name="customer" label="Customer" required doctype="Customer" labelField="customer_name" />
                     <FormDatePicker control={control} name="transaction_date" label="Order Date" required />
                     <FormDatePicker control={control} name="delivery_date" label="Delivery Date" required />
-                    <FormFrappeSelect
-                      control={control}
-                      name="customer_address"
-                      label="Shipping Address"
-                      doctype="Address"
-                      labelField="address_title"
-                      disabled={!watchedCustomer}
-                      filters={
-                        watchedCustomer
-                          ? ([["Dynamic Link", "link_name", "=", watchedCustomer]] as unknown as [string, string, unknown][])
-                          : []
-                      }
-                    />
+                      <FormFrappeSelect
+                        control={control}
+                        name="customer_address"
+                        label="Shipping Address"
+                        doctype="Address"
+                        labelField="address_title"
+                        disabled={!watchedCustomer}
+                        // R6: filter on Dynamic Link child table
+                        filters={
+                          watchedCustomer
+                            ? ([
+                                ["Dynamic Link", "link_doctype", "=", "Customer"],
+                                ["Dynamic Link", "link_name", "=", watchedCustomer],
+                              ] as unknown as [string, string, unknown][])
+                            : []
+                        }
+                        placeholder="Select address..."
+                      />
                     <FormInput control={control} name="po_no" label="Customer PO No" />
                   </div>
                 );
