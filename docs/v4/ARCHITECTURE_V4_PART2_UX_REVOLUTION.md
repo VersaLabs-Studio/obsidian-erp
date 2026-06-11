@@ -842,6 +842,120 @@ V4 prepares for localization but does not implement it in the first release:
 
 ---
 
+## 11. Inline Quick-Add (Create-in-Context)
+
+> **Canonical feature, added 2026-06-11.** Never make the user leave a flow to create a
+> dependency it requires.
+
+### 11.1 The Problem
+
+Today, if a wizard's link field (e.g. *Customer* on a Quotation) has no matching record,
+the user must abandon the wizard, navigate to the master list, create the record, and start
+the wizard over — losing all in-progress input. This breaks the 3-Click Rule (§1.3) and the
+flow promise of §1.
+
+### 11.2 The Principle
+
+**Any link/select field can spawn a minimal create modal inline and return the new record
+into the field, with the host wizard's state fully preserved (no navigation, no remount).**
+
+### 11.3 Architecture
+
+- `<QuickAddField>` wraps the existing `FormFrappeSelect`. The dropdown's empty-state and
+  footer render a **`＋ Create new <Doctype>`** affordance.
+- Clicking opens **`<QuickAddModal doctype=...>`** — a true overlay (Radix Dialog), **not a
+  route change**. The host wizard's `react-hook-form` state is never unmounted.
+- The modal renders a **registry-driven minimal form** (the curated required-field subset for
+  that doctype), POSTs via the **existing create handler**, and on success resolves a Promise
+  with `{ name }`. The caller writes that name into the field and invalidates the select's
+  query so the record appears immediately.
+- **`lib/flows/quick-add-registry.ts`** — `QUICK_ADD_REGISTRY[doctype] = { fields, schema,
+  route }`. It **reuses the existing `*CreateSchema`** so a quick-add and a full create
+  validate identically (this is why the over-strict-schema fix in §F1–F3 of Phase 2K is a
+  prerequisite — a quick-add must not hit the same false 400).
+
+### 11.4 Initial Doctype Coverage
+
+Customer, Supplier, Item, Contact, Address, Lead, Warehouse, UOM, Item Group — the common
+"missing master while transacting" cases.
+
+### 11.5 Guardrails
+
+- Overlay only — ESC / backdrop cancels and resolves `null`; the field keeps its prior value.
+- Must compose **nested** (quick-add an Address from inside a quick-add Customer).
+- No new flow engine, no invented abstraction layer — it reuses `FormFrappeSelect`, the
+  `useFrappe*` hooks, and the existing create routes.
+
+---
+
+## 12. Universal Cross-Flow Actions
+
+> **Canonical feature, added 2026-06-11.** Generalize the Customer-360 "Quick Actions" menu
+> to **every** transactional doctype.
+
+### 12.1 The Principle
+
+From **any** record, the user can create any **valid adjacent** document — forward *or*
+backward along the flow — with the party and shared fields **prefilled and locked**. If an
+adjacent record **already exists**, the UI **indicates it and redirects** to it instead of
+offering to create a duplicate.
+
+### 12.2 This Is a UI Surface, Not a New Engine
+
+It is driven entirely by two libraries that already exist:
+- **`AUTO_FILL_REGISTRY`** (`lib/flows/flow-auto-fill.ts`) — source→target field copies +
+  `autoFillGuard` + `isReadOnly` locking.
+- **`resolveFlowChain`** (`lib/flows/flow-chain-resolver.ts`) — already resolves the chain and
+  detects existing upstream/downstream records via back-link queries.
+
+### 12.3 Two Surfaces, One Data Source
+
+- **FlowRail** (horizontal ribbon, §6): each adjacent stage renders `Create →` when buildable,
+  or **✓ + "View <DN-001>"** deep-link when a record already exists.
+- **Detail sidebar "Actions" menu**: the same adjacency list as explicit buttons — the
+  Customer-360 menu, generalized to SO, Quotation, DN, SI, PO, etc.
+
+### 12.4 The Existing-Record Short-Circuit (headline behavior)
+
+Before offering **Create**, `resolveFlowChain` runs the back-link query (e.g. "does any Sales
+Invoice reference this Sales Order?"). If found → show **"View SI-001"** (redirect) instead of
+**Create**. This is what prevents the duplicate-document problem the user called out.
+
+### 12.5 Prefill Contract (and why F5a happened)
+
+Target wizard opens via `buildCreateUrl(sourceDoctype, sourceName, targetDoctype)`; the target
+**must read its auto-fill param** and apply `AUTO_FILL_REGISTRY` with `isReadOnly` on locked
+fields. The Phase 2I/2J bug where **Customer→Sales Order did not prefill** is exactly this
+contract being half-wired: the SO wizard read only `?quotation=`, never `?customer=`. The
+universal feature requires **every** target wizard to read **every** param a registered source
+can send. A param the link emits that the target ignores is a silent half-fix (Reporting
+Contract rule 5).
+
+### 12.6 Adjacency Definition
+
+A new `FLOW_ADJACENCY` derived from the Lead-to-Cash and Procure-to-Pay graphs lists, per
+doctype, its valid **forward** and **backward** targets (e.g. `Sales Order → { Quotation
+(back), Work Order, Delivery Note, Sales Invoice, Payment Entry }`). **Only edges that exist
+in ERPNext** — no invented edges (Reporting Contract rule 4). Standalone doctypes (Stock
+Reconciliation, Stock Ledger, all masters) have **no adjacency and no rail**.
+
+---
+
+## 13. Flow Tracker Redesign Mandate (2026-06)
+
+The current FlowRail is **visually rejected** ("four phases in a row, hideous"). It is slated
+for a **hands-on redesign by the architecture owner**, not the mesh.
+
+- The mesh must **NOT** restyle or replace FlowRail in Phase 2K — it only consumes FlowRail's
+  **logic props** (`createHref`, existing-record links per §12.4). The component's visual
+  layer is off-limits to the mesh (Reporting Contract rule 4).
+- Redesign goals: compress the 8-stage ribbon into a **legible, premium, responsive**
+  component — collapse distant stages, emphasize `current ± 1`, render existing-vs-creatable
+  state per §12, and on mobile use a scroll-snap ribbon or vertical stepper.
+- Final visual spec + implementation delivered separately by the Brain.
+
+---
+
 ## Summary
 
 Part 2 establishes:
@@ -856,6 +970,9 @@ Part 2 establishes:
 8. ✅ **V4 Golden Template** — Sales Order module as reference
 9. ✅ **Responsive strategy** — mobile-first with touch targets
 10. ✅ **Accessibility** — WCAG AA compliance plan
+11. ✅ **Inline Quick-Add** — create-in-context modal, never leave the flow *(2026-06)*
+12. ✅ **Universal Cross-Flow Actions** — adjacency-driven create/redirect on every doctype *(2026-06)*
+13. ✅ **Flow Tracker Redesign Mandate** — premium ribbon, Brain-owned *(2026-06)*
 
 **Next:** Part 3 covers the AI Integration — model selection, tool calling, action execution, and the NL→System Operations pipeline.
 
