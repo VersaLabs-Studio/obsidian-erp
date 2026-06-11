@@ -112,7 +112,7 @@ function AdjacencyRow({
     [edge.backLink, sourceDocName],
   );
 
-  const { data: existing, isLoading } = useFrappeList<{ name: string }>(
+  const { data: existing, isLoading } = useFrappeList<{ name: string; parent?: string }>(
     edge.backLink?.doctype ?? "",
     {
       filters: filled,
@@ -125,6 +125,10 @@ function AdjacencyRow({
   );
 
   const existingRecord = existing && existing.length > 0 ? existing[0] : null;
+  // 2L 1C: child-table back-link queries return rows with a `parent` field
+  // (the child row's name is in `name`, the parent's name is in `parent`).
+  // Use the parent when present so the View link points to the parent doc.
+  const existingParentName = existingRecord?.parent ?? existingRecord?.name ?? null;
 
   // Backward edge with no existing source record → render nothing.
   if (edge.direction === "backward" && !existingRecord) {
@@ -134,7 +138,7 @@ function AdjacencyRow({
   // Determine the affordance
   const isView = !!existingRecord;
   const href = isView
-    ? buildAdjacencyViewHref(edge, existingRecord!.name)
+    ? buildAdjacencyViewHref(edge, existingParentName ?? existingRecord!.name)
     : edge.direction === "forward"
       ? buildAdjacencyCreateHref(edge, sourceDocName)
       : null;
@@ -149,7 +153,7 @@ function AdjacencyRow({
       : "text-muted-foreground";
 
   const buttonText = isView
-    ? `View ${existingRecord!.name}`
+    ? `View ${existingParentName ?? existingRecord!.name}`
     : edge.label;
 
   return (
@@ -222,23 +226,24 @@ function AdjacencyChip({
     [edge.backLink, sourceDocName],
   );
 
-  const { data: existing, isLoading } = useFrappeList<{ name: string }>(
+  const { data: existing, isLoading } = useFrappeList<{ name: string; parent?: string }>(
     edge.backLink?.doctype ?? "",
     {
       filters: filled,
-      fields: ["name"],
+      fields: edge.backLink?.selectFields ?? ["name"],
       limit: 1,
     },
     { enabled: !!edge.backLink },
   );
 
   const existingRecord = existing && existing.length > 0 ? existing[0] : null;
+  const existingParentName = existingRecord?.parent ?? existingRecord?.name ?? null;
 
   if (edge.direction === "backward" && !existingRecord) return null;
 
   const isView = !!existingRecord;
   const href = isView
-    ? buildAdjacencyViewHref(edge, existingRecord!.name)
+    ? buildAdjacencyViewHref(edge, existingParentName ?? existingRecord!.name)
     : edge.direction === "forward"
       ? buildAdjacencyCreateHref(edge, sourceDocName)
       : null;
@@ -254,7 +259,7 @@ function AdjacencyChip({
     >
       <Link href={href} className="flex items-center gap-1.5">
         {isView ? <Eye className="h-3 w-3" /> : edge.direction === "forward" ? <Plus className="h-3 w-3" /> : <Link2 className="h-3 w-3" />}
-        {isView ? `View ${existingRecord!.name}` : edge.label}
+        {isView ? `View ${existingParentName ?? existingRecord!.name}` : edge.label}
       </Link>
     </Button>
   );

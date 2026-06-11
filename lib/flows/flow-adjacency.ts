@@ -154,26 +154,57 @@ const EDGES: FlowAdjacency[] = [
     targetDoctype: "Delivery Note",
     direction: "forward",
     label: "Create Delivery Note",
-    // DN's only top-level link to SO is via the child table — child-table
-    // filters live in FlowRail already; for the sidebar Actions menu we
-    // leave the short-circuit null and always offer Create.
-    backLink: null,
+    // 2L 1C: child-table back-link — DN's link to SO lives on
+    // `Delivery Note Item.against_sales_order`. Frappe requires the filter
+    // doctype to match the queried parent's child table, so we query the
+    // child table directly with a `parent` filter to discover the parent DN.
+    backLink: {
+      doctype: "Delivery Note",
+      filters: [
+        // ["Delivery Note Item", "against_sales_order", "=", "<name>"]
+        // We then map the child rows to their parent Delivery Note below.
+        ["Delivery Note Item", "against_sales_order", "=", "<name>"],
+      ],
+      selectFields: ["name", "parent"],
+    },
   },
   {
     sourceDoctype: "Delivery Note",
     targetDoctype: "Sales Invoice",
     direction: "forward",
     label: "Create Sales Invoice",
-    // SI has no top-level `delivery_note`; back-link is via child table.
-    backLink: null,
+    // 2L 1C: child-table back-link — SI's link to DN lives on
+    // `Sales Invoice Item.delivery_note`. Query the child table to find the
+    // parent SI that references the current DN.
+    backLink: {
+      doctype: "Sales Invoice",
+      filters: [
+        ["Sales Invoice Item", "delivery_note", "=", "<name>"],
+      ],
+      selectFields: ["name", "parent"],
+    },
   },
   {
     sourceDoctype: "Sales Invoice",
     targetDoctype: "Payment Entry",
     direction: "forward",
     label: "Receive Payment",
-    // PE has `references[].reference_name` (child table) — not top-level.
-    backLink: null,
+    // 2L 1C: child-table back-link — PE's link to SI lives on
+    // `Payment Entry Reference.reference_name` (parent is PE). Query the
+    // child table to find the parent PE that allocates against this SI.
+    backLink: {
+      doctype: "Payment Entry",
+      filters: [
+        [
+          "Payment Entry Reference",
+          "reference_name",
+          "=",
+          "<name>",
+        ],
+        ["Payment Entry Reference", "reference_doctype", "=", "Sales Invoice"],
+      ],
+      selectFields: ["name", "parent"],
+    },
   },
 
   // ===== PROCURE-TO-PAY =====
@@ -203,8 +234,22 @@ const EDGES: FlowAdjacency[] = [
     targetDoctype: "Supplier Quotation",
     direction: "forward",
     label: "Create Supplier Quotation",
-    // SQTN has `for_rfq` at top level in some versions; not reliable across.
-    backLink: null,
+    // 2L 1C: child-table back-link — SQ links to RFQ via
+    // `Supplier Quotation Item.request_for_quotation` (parent is SQ).
+    // Some Frappe versions also store the link top-level on SQ; we use the
+    // child-table filter as the reliable cross-version path.
+    backLink: {
+      doctype: "Supplier Quotation",
+      filters: [
+        [
+          "Supplier Quotation Item",
+          "request_for_quotation",
+          "=",
+          "<name>",
+        ],
+      ],
+      selectFields: ["name", "parent"],
+    },
   },
   {
     sourceDoctype: "Supplier Quotation",
