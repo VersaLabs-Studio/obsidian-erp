@@ -295,14 +295,18 @@ const strategies: ErrorStrategy[] = [
   },
 
   // LINK_EXISTS — 2L P2: deleting a Price List that's referenced by Item Prices
+  // Listed BEFORE LINKED_DOC_EXISTS so the more specific "is referenced by"
+  // / "is linked with N Item Price" patterns fire on the delete path;
+  // LINKED_DOC_EXISTS handles the cancel path.
   {
     code: "LINK_EXISTS",
     match: (m) =>
-      // ERPNext raises: "Cannot delete or cancel because Item Price <name> is
-      // linked with Price List <name>" (or similar variants)
-      /is linked with/i.test(m) ||
-      /is referenced/i.test(m) ||
-      /cannot be deleted/i.test(m) && /linked/i.test(m),
+      // The most specific delete pattern: "is referenced by"
+      /is referenced by/i.test(m) ||
+      // Or "is linked with N Item Price" (count) — distinct from cancel
+      /is linked with \d+ Item Price/i.test(m) ||
+      // Or the general "cannot be deleted ... linked with" shape
+      (/cannot be deleted/i.test(m) && /linked/i.test(m) && !/submitted/i.test(m)),
     resolve: (msg) => {
       // Try to extract the count or the linked doctype
       const linkedDoctypeMatch = msg.match(/linked with\s+([A-Z][A-Za-z\s]+?)(?:\s+<|\s+\d|\.|$)/);
@@ -335,13 +339,21 @@ const strategies: ErrorStrategy[] = [
     },
   },
 
-  // LINKED_DOC_EXISTS
+  // LINKED_DOC_EXISTS — 2L P2: refined regex to not steal from LINK_EXISTS.
+  // The cancel path is "Cannot cancel because <linked> exists" (the literal
+  // phrase "cancel because ... exists"). The delete path is "Cannot delete
+  // or cancel because <linked> is referenced by ..." (handled by LINK_EXISTS).
   {
     code: "LINKED_DOC_EXISTS",
     match: (m) =>
-      /cannot cancel because.*exists/i.test(m) ||
+      // Strict cancel path: must start with "cannot cancel" (not "cannot delete")
+      // AND contain "exists" (the cancel-time error shape)
+      (/^Cannot\s+cancel\b/i.test(m) && /exists/i.test(m)) ||
       /linked with submitted/i.test(m) ||
-      /is linked with/i.test(m),
+      // "is linked with <submitted-doc>" — the cancel path. If the link
+      // message does NOT mention "referenced by" and does NOT include
+      // "cannot be deleted", it's a cancel-time link, not a delete-time one.
+      (/is linked with/i.test(m) && !/is referenced by/i.test(m) && !/cannot be deleted/i.test(m)),
     resolve: (msg) => {
       const linkedNameMatch = msg.match(/([A-Z]{2,}-[\w-]+-\d+(?:-\d+)?)/i);
       const linkedName = linkedNameMatch?.[1]?.trim() ?? "the linked record";
