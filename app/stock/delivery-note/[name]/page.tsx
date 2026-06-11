@@ -30,6 +30,7 @@ import { FlowRail } from "@/components/flows/FlowRail";
 import { isModuleBuilt } from "@/lib/flows/module-availability";
 import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
+import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
 import { resolveFlowChain } from "@/lib/flows/flow-chain-resolver";
 import { useFrappeDoc, useFrappeList, useFrappeUpdate, useFrappeDelete } from "@/hooks/generic";
 import type { DeliveryNote } from "@/types/doctype-types";
@@ -314,6 +315,9 @@ export default function DeliveryNoteDetailPage() {
           <InfoCard title="What's Next">
             <WhatsNext actions={whatsNext} />
           </InfoCard>
+
+          {/* 2L 1B: Universal cross-flow actions menu */}
+          <CrossFlowActionsMenu doctype="Delivery Note" name={name} />
 
           <InfoCard title="Activity">
             <ActivityTimeline

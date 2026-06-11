@@ -28,6 +28,7 @@ import { FlowRail } from "@/components/flows/FlowRail";
 import { isModuleBuilt } from "@/lib/flows/module-availability";
 import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
+import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
 import { resolveFlowChain } from "@/lib/flows/flow-chain-resolver";
 import { useFrappeDoc, useFrappeList, useFrappeUpdate } from "@/hooks/generic";
 import type { PurchaseOrder } from "@/types/doctype-types";
@@ -457,6 +458,9 @@ export default function PurchaseOrderDetailPage() {
           <InfoCard title="Journey">
             <FlowRail result={chain} currentDocName={name} sourceDoctype="Purchase Order" isLoading={loadingPR} />
           </InfoCard>
+
+          {/* 2L 1B: Universal cross-flow actions menu */}
+          <CrossFlowActionsMenu doctype="Purchase Order" name={name} />
 
           <WhatsNext actions={whatsNext} />
 

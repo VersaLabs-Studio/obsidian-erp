@@ -35,6 +35,7 @@ import { FlowRail } from "@/components/flows/FlowRail";
 import { isModuleBuilt } from "@/lib/flows/module-availability";
 import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
+import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
 import { resolveFlowChain } from "@/lib/flows/flow-chain-resolver";
 import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
 import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
@@ -588,6 +589,9 @@ export default function WorkOrderDetailPage() {
           <InfoCard title="Journey">
             <FlowRail result={chain} currentDocName={name} sourceDoctype="Work Order" isLoading={loadingSE} />
           </InfoCard>
+
+          {/* 2L 1B: Universal cross-flow actions menu */}
+          <CrossFlowActionsMenu doctype="Work Order" name={name} />
 
           <WhatsNext actions={whatsNext} />
 

@@ -62,6 +62,7 @@ import {
   EmptyState,
 } from "@/components/smart";
 import { InfoCard, DataPoint, StatCard } from "@/components/ui/info-card";
+import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
 import { getApiPath } from "@/lib/doctype-config";
 import { getActiveCompany } from "@/lib/settings/company";
 import type {
@@ -987,6 +988,10 @@ export default function CustomerMasterHub() {
                   />
                 </div>
               </InfoCard>
+
+              {/* 2L 1B: Universal cross-flow actions menu (sits alongside
+                  the existing quick actions) */}
+              <CrossFlowActionsMenu doctype="Customer" name={name} />
 
               {/* Credit & Billing Info */}
               <InfoCard title="Credit & Billing">

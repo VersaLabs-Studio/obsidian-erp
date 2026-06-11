@@ -26,6 +26,7 @@ import { StatusBadge } from "@/components/smart/status-badge";
 import { InfoCard, DataPoint } from "@/components/ui/info-card";
 import { Button } from "@/components/ui/button";
 import { FlowRail } from "@/components/flows/FlowRail";
+import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
 import { isModuleBuilt } from "@/lib/flows/module-availability";
 import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
@@ -426,6 +427,10 @@ export default function SalesOrderDetailPage() {
 
         {/* Sidebar */}
         <div className="space-y-6">
+          {/* 2L 1B: Universal cross-flow actions menu — adjacents from
+              flow-adjacency.ts. Renders "View X" when a linked record
+              already exists, else "Create X" prefilled. */}
+          <CrossFlowActionsMenu doctype="Sales Order" name={name} />
           <WhatsNext actions={whatsNext} />
           <ActivityTimeline
             items={[

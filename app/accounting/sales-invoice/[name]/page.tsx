@@ -23,6 +23,7 @@ import { FlowRail } from "@/components/flows/FlowRail";
 import { isModuleBuilt } from "@/lib/flows/module-availability";
 import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
+import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
 import { resolveFlowChain } from "@/lib/flows/flow-chain-resolver";
 import { useFrappeDoc, useFrappeList, useFrappeUpdate } from "@/hooks/generic";
 import type { SalesInvoice } from "@/types/doctype-types";
@@ -347,6 +348,9 @@ export default function SalesInvoiceDetailPage() {
           <InfoCard title="Flow Rail">
             <FlowRail result={chain} currentDocName={name} sourceDoctype="Sales Invoice" isLoading={loadingPE} />
           </InfoCard>
+
+          {/* 2L 1B: Universal cross-flow actions menu */}
+          <CrossFlowActionsMenu doctype="Sales Invoice" name={name} />
 
           <WhatsNext actions={whatsNext} />
 

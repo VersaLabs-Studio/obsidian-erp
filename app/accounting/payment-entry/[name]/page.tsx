@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { FlowRail } from "@/components/flows/FlowRail";
 import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
+import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
 import { resolveFlowChain } from "@/lib/flows/flow-chain-resolver";
 import { useFrappeDoc, useFrappeList, useFrappeUpdate } from "@/hooks/generic";
 import type { PaymentEntry, SalesInvoice, PurchaseInvoice } from "@/types/doctype-types";
@@ -362,6 +363,9 @@ export default function PaymentEntryDetailPage() {
           <InfoCard title="What's Next">
             <WhatsNext actions={whatsNext} />
           </InfoCard>
+
+          {/* 2L 1B: Universal cross-flow actions menu */}
+          <CrossFlowActionsMenu doctype="Payment Entry" name={name} />
 
           <InfoCard title="Activity">
             <ActivityTimeline
