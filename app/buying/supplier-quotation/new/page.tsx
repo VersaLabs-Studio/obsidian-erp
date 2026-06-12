@@ -27,6 +27,7 @@ import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FormInput, FormFrappeSelect, FormDatePicker } from "@/components/form";
+import { QuickAddField } from "@/components/quick-add/QuickAddField";
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
 import { FlowWizard } from "@/components/flows/FlowWizard";
 import { useFrappeCreate, useFrappeDoc } from "@/hooks/generic";
@@ -308,7 +309,7 @@ export default function NewSupplierQuotationPage() {
                         loading={loadingRFQ}
                         error={triedNextSteps.has(step) ? validationResults?.step1?.errors?.supplier : undefined}
                       >
-                        <FormFrappeSelect
+                        <QuickAddField
                           control={control}
                           name="supplier"
                           label="Supplier"
@@ -381,7 +382,7 @@ export default function NewSupplierQuotationPage() {
                             return (
                               <tr key={field.id} className="group">
                                 <td className="px-3 py-2 align-top">
-                                  <FormFrappeSelect
+                                  <QuickAddField
                                     control={control}
                                     name={`items.${index}.item_code`}
                                     doctype="Item"

@@ -28,6 +28,7 @@ import {
   FormFrappeSelect,
   FormDatePicker,
 } from "@/components/form";
+import { QuickAddField } from "@/components/quick-add/QuickAddField";
 import { FieldWrap } from "@/components/form/field-wrap";
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
 import { FlowWizard } from "@/components/flows/FlowWizard";
@@ -302,7 +303,7 @@ export default function NewPurchaseReceiptPage() {
                         loading={loadingPO}
                         error={triedNextSteps.has(step) ? validationResults?.step1?.errors?.supplier : undefined}
                       >
-                        <FormFrappeSelect
+                        <QuickAddField
                           control={control}
                           name="supplier"
                           label="Supplier"
@@ -390,7 +391,7 @@ export default function NewPurchaseReceiptPage() {
                             return (
                               <tr key={field.id} className="group">
                                 <td className="px-3 py-2 align-top">
-                                  <FormFrappeSelect
+                                  <QuickAddField
                                     control={control}
                                     name={`items.${index}.item_code`}
                                     doctype="Item"
@@ -439,7 +440,7 @@ export default function NewPurchaseReceiptPage() {
                                   <FieldWrap
                                     error={triedNextSteps.has(step) ? validationResults?.step2?.errors?.[`items.${index}.warehouse`] : undefined}
                                   >
-                                    <FormFrappeSelect
+                                    <QuickAddField
                                       control={control}
                                       name={`items.${index}.warehouse`}
                                       doctype="Warehouse"

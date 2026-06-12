@@ -33,6 +33,7 @@ import {
   FormFrappeSelect,
   FormSwitch,
 } from "@/components/form";
+import { QuickAddField } from "@/components/quick-add/QuickAddField";
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
 import { FlowWizard } from "@/components/flows/FlowWizard";
 import { useFrappeCreate, useFrappeDoc } from "@/hooks/generic";
@@ -276,7 +277,7 @@ export default function NewBOMPage() {
                     description="Select the item to manufacture and set the batch quantity."
                   />
                   <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                    <FormFrappeSelect
+                    <QuickAddField
                       control={control}
                       name="item"
                       label="Item to Manufacture"
@@ -349,7 +350,7 @@ export default function NewBOMPage() {
                           return (
                             <tr key={field.id} className="group">
                               <td className="px-3 py-2 align-top">
-                                <FormFrappeSelect
+                                <QuickAddField
                                   control={control}
                                   name={`items.${index}.item_code`}
                                   doctype="Item"

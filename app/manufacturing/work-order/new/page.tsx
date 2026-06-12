@@ -28,6 +28,7 @@ import {
   FormFrappeSelect,
   FormDatePicker,
 } from "@/components/form";
+import { QuickAddField } from "@/components/quick-add/QuickAddField";
 import { Form } from "@/components/ui/form";
 import { FlowWizard } from "@/components/flows/FlowWizard";
 import { useFrappeCreate, useFrappeDoc } from "@/hooks/generic";
@@ -269,7 +270,7 @@ function CreateWorkOrderForm() {
                     description="Select the item, BOM, and quantity to manufacture."
                   />
                   <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                    <FormFrappeSelect
+                    <QuickAddField
                       control={control}
                       name="production_item"
                       label="Item to Manufacture"
@@ -338,7 +339,7 @@ function CreateWorkOrderForm() {
                   description="Set warehouses and production timeline."
                 />
                 <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                  <FormFrappeSelect
+                  <QuickAddField
                     control={control}
                     name="source_warehouse"
                     label="Source Warehouse (Raw Materials)"
@@ -347,7 +348,7 @@ function CreateWorkOrderForm() {
                     filters={[["is_group", "=", 0]]}
                     disabled={isAuto("source_warehouse")}
                   />
-                  <FormFrappeSelect
+                  <QuickAddField
                     control={control}
                     name="wip_warehouse"
                     label="WIP Warehouse"
@@ -356,7 +357,7 @@ function CreateWorkOrderForm() {
                     filters={[["is_group", "=", 0]]}
                     disabled={isAuto("wip_warehouse")}
                   />
-                  <FormFrappeSelect
+                  <QuickAddField
                     control={control}
                     name="fg_warehouse"
                     label="Target Warehouse (Finished Goods)"

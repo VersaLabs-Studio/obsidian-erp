@@ -3,6 +3,11 @@
 // components/notifications/notifications-panel.tsx
 // B9: Notification history panel — B1 surface, dual-theme, accessible.
 // F7: Detail view — clicking an item with detail/actions shows explanation + steps.
+// 2M Part 3C: action buttons restyled to the premium token system (no
+// black borders, theme-aware, glass card chrome). De-duped: the explicit
+// "Dismiss" button is hidden when the action list already contains a
+// dismiss-kind action (resolutions always add a Dismiss, so the
+// notification detail would otherwise show TWO).
 
 import { useEffect, useRef, useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -262,23 +267,40 @@ export function NotificationsPanel({
                       <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                         Actions
                       </p>
-                      {detailItem.actions.map((action, i) => (
-                        <Button
-                          key={i}
-                          variant="outline"
-                          className="w-full justify-between rounded-xl h-auto py-3 px-4"
-                          onClick={() => handleAction(action)}
-                        >
-                          <span className="text-sm">{action.label}</span>
-                          <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
-                        </Button>
-                      ))}
+                      {detailItem.actions
+                        // 2M Part 3C: a "dismiss" action with no href and a
+                        // no-op run is purely cosmetic — the explicit
+                        // Dismiss button below handles it. Filter it out
+                        // so we don't show "Dismiss" twice.
+                        .filter(
+                          (a) =>
+                            !(
+                              a.label.toLowerCase() === "dismiss" &&
+                              !a.href &&
+                              (!a.run || a.run.toString().length < 30)
+                            ),
+                        )
+                        .map((action, i) => (
+                          <Button
+                            key={i}
+                            // 2M Part 3C: premium token chrome. The plain
+                            // `variant="outline"` was using a hard
+                            // 1px black border in dark mode; replace with
+                            // the B1 sidebar surface tokens.
+                            className="w-full justify-between rounded-2xl h-auto py-3 px-4 bg-card/40 hover:bg-card/60 border border-border/40 shadow-sm shadow-black/5"
+                            onClick={() => handleAction(action)}
+                          >
+                            <span className="text-sm font-medium">{action.label}</span>
+                            <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
+                          </Button>
+                        ))}
                     </div>
                   )}
 
                   {detailItem.href && (
                     <Button
-                      className="w-full rounded-xl"
+                      // 2M Part 3C: premium token chrome.
+                      className="w-full rounded-2xl bg-primary text-primary-foreground hover:bg-primary/90"
                       onClick={() => handleOpenHref(detailItem.href!, detailItem.id)}
                     >
                       {/* 2L P1: "Open <doc>" — label reflects the deep link target */}
@@ -286,15 +308,25 @@ export function NotificationsPanel({
                     </Button>
                   )}
 
-                  {/* 2L P1: working Dismiss button — removes the notification */}
-                  <Button
-                    variant="ghost"
-                    className="w-full rounded-xl text-muted-foreground"
-                    onClick={() => handleDismiss(detailItem.id)}
-                  >
-                    <X className="h-3.5 w-3.5 mr-1.5" />
-                    Dismiss
-                  </Button>
+                  {/* 2M Part 3C: only show the explicit Dismiss button when
+                      the notification does NOT already expose a dismiss-
+                      kind action (de-dupe the duplicate). */}
+                  {(() => {
+                    const hasDismissAction = (detailItem.actions ?? []).some(
+                      (a) => a.label.toLowerCase() === "dismiss",
+                    );
+                    if (hasDismissAction) return null;
+                    return (
+                      <Button
+                        variant="ghost"
+                        className="w-full rounded-2xl text-muted-foreground hover:bg-muted/40"
+                        onClick={() => handleDismiss(detailItem.id)}
+                      >
+                        <X className="h-3.5 w-3.5 mr-1.5" />
+                        Dismiss
+                      </Button>
+                    );
+                  })()}
                 </div>
               ) : notifications.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center">

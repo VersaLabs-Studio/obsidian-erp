@@ -8,7 +8,7 @@ import { extractFrappeMessage } from "./extract-frappe-message";
 
 export interface ResolutionAction {
   label: string;
-  kind: "navigate" | "prefill" | "mutate" | "dismiss";
+  kind: "navigate" | "prefill" | "mutate" | "dismiss" | "info";
   variant?: "default" | "secondary" | "ghost";
   /** G5: Optional deep-link href for notification panel navigation */
   href?: string;
@@ -20,7 +20,13 @@ export interface Resolution {
   title: string;
   explanation: string;
   details?: string[];
-  severity: "warning" | "error";
+  /**
+   * 2M Part 2B: severity may now be "info" for green/blue `_server_messages`
+   * (ERPNext info msgprint, raise_exception falsy). The GuidedErrorDialog
+   * does not render an info-severity resolution as a dialog; it surfaces
+   * the message as a toast.
+   */
+  severity: "info" | "warning" | "error";
   actions: ResolutionAction[];
 }
 
@@ -412,10 +418,98 @@ const strategies: ErrorStrategy[] = [
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
+
+/**
+ * 2M Part 2B: Inspect a (possibly) Frappe error and decide if the only
+ * `_server_messages` present are info (`indicator: "green"` / `"blue"`, or
+ * `raise_exception` falsy). Returns the list of info messages, or null if
+ * any message is an error.
+ *
+ * ERPNext emits info `msgprint` calls (e.g. "Item Price added for X in
+ * Price List Standard Buying") inside `_server_messages` even when the
+ * create POST returns a 4xx. Previously those messages were flattened
+ * into the error string and surfaced as a GuidedErrorDialog rejection,
+ * masking the real reason the POST failed.
+ */
+export function extractInfoMessages(err: unknown): string[] | null {
+  const candidates: unknown[] = [];
+  if (err && typeof err === "object") {
+    const e = err as { _originalError?: unknown; _server_messages?: unknown };
+    if (e._originalError) candidates.push(e._originalError);
+    if (e._server_messages) candidates.push(e._originalError ?? err);
+  }
+  if (candidates.length === 0 && err && typeof err === "object") {
+    candidates.push(err);
+  }
+  for (const c of candidates) {
+    if (!c || typeof c !== "object") continue;
+    const sm = (c as { _server_messages?: unknown })._server_messages;
+    if (typeof sm !== "string") continue;
+    let entries: unknown[];
+    try {
+      const parsed = JSON.parse(sm);
+      if (!Array.isArray(parsed)) continue;
+      entries = parsed;
+    } catch {
+      continue;
+    }
+    const infoTexts: string[] = [];
+    for (const entry of entries) {
+      let parsed: { message?: unknown; indicator?: unknown; raise_exception?: unknown } | null = null;
+      if (typeof entry === "string") {
+        try { parsed = JSON.parse(entry); } catch { continue; }
+      } else if (entry && typeof entry === "object") {
+        parsed = entry as { message?: unknown; indicator?: unknown; raise_exception?: unknown };
+      }
+      if (!parsed) continue;
+      const indicator = typeof parsed.indicator === "string" ? parsed.indicator.toLowerCase() : "";
+      // Frappe's `raise_exception` defaults to truthy when absent (errors
+      // raise by default; only an explicit `raise_exception: 0` opts out).
+      // So treat an explicit `0` / `false` / `null` as info, and any other
+      // case (including the field being absent) as an error.
+      const hasRaiseField = Object.prototype.hasOwnProperty.call(parsed, "raise_exception");
+      const raiseFalsy = parsed.raise_exception === 0 || parsed.raise_exception === false || parsed.raise_exception === null;
+      const isInfo =
+        indicator === "green" ||
+        indicator === "blue" ||
+        (hasRaiseField && raiseFalsy);
+      if (isInfo) {
+        if (typeof parsed.message === "string") infoTexts.push(parsed.message);
+      } else {
+        return null; // A real error is mixed in — not info-only.
+      }
+    }
+    if (infoTexts.length > 0) return infoTexts;
+  }
+  return null;
+}
+
 export function resolveFrappeError(
   err: unknown,
   ctx: { doctype: string; values?: unknown },
 ): Resolution {
+  // 2M Part 2B: short-circuit info-only payloads. The user has not been
+  // rejected — Frappe emitted a soft info msgprint alongside a different
+  // real error, or just an info message. Either way we surface a
+  // non-dialog INFO resolution (toast) rather than a GuidedErrorDialog.
+  const infoMessages = extractInfoMessages(err);
+  if (infoMessages) {
+    return {
+      code: "INFO_MESSAGE",
+      title: "Heads up",
+      explanation: infoMessages.join(" · "),
+      severity: "info",
+      actions: [
+        {
+          label: "Dismiss",
+          kind: "dismiss",
+          variant: "ghost",
+          run: () => {},
+        },
+      ],
+    };
+  }
+
   const rawMessage = extractFrappeMessage(err);
 
   // Try each strategy in order

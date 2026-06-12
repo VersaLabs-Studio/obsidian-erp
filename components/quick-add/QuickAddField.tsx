@@ -9,7 +9,7 @@
 // the new record's `name` is written back to the field, the select query is
 // invalidated, and the host wizard's state is preserved.
 
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { Control, FieldPath, FieldValues } from "react-hook-form";
 import { Plus } from "lucide-react";
 import { FrappeSelect } from "@/components/smart/frappe-select";
@@ -116,16 +116,17 @@ export function QuickAddField<T extends FieldValues>({
           if (onValueChange) onValueChange(val, doc);
         };
 
-        // QuickAdd success — write the new name into the controlled field
-        // directly (the footer click bypasses FrappeSelect's onChange).
-        const handleQuickAddSuccess = useCallback(
-          (result: { name: string; doctype: string } | undefined) => {
-            if (!result) return;
-            field.onChange(result.name);
-            if (onValueChange) onValueChange(result.name, { name: result.name });
-          },
-          [field, onValueChange],
-        );
+        // 2M Part 0B: Rules-of-Hooks fix. The previous code wrapped this in
+        // `useCallback` *inside* the render prop — a render prop is an
+        // unstable hook site. The success handler does not need memoization;
+        // define it as a plain inline function. A new function ref per render
+        // is harmless here (QuickAddModal does not put `onSuccess` in an
+        // unstable effect dep after Part 0A).
+        const handleQuickAddSuccess = (result: { name: string; doctype: string } | undefined) => {
+          if (!result) return;
+          field.onChange(result.name);
+          if (onValueChange) onValueChange(result.name, { name: result.name });
+        };
 
         return (
           <FormItem>

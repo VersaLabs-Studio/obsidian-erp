@@ -12,7 +12,7 @@
 // `<QuickAddModal>` keyed by a separate context id. The host's open/close
 // is owned by the parent `QuickAddField` or any other caller.
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -75,21 +75,40 @@ export function QuickAddModal({
   const queryClient = useQueryClient();
   const { resolution, showError, dismiss } = useGuidedError();
 
-  const defaultValues = Object.fromEntries(
-    entry.fields.map((f) => [f.name, ""]),
-  ) as Record<string, string>;
+  // 2M Part 0A: memoize `defaultValues` against the entry's *field-name list*
+  // (not the array identity — every parent render rebuilds the fields array).
+  // The field set per doctype is static in the registry, so keying on
+  // `entry.doctype` is the safest stable signal.
+  const defaultValues = useMemo(() => {
+    return Object.fromEntries(
+      entry.fields.map((f) => [f.name, ""]),
+    ) as Record<string, string>;
+  }, [entry.doctype, entry.fields]);
+
+  // 2M Part 0A: serialize `seed` to a stable string for the dep array
+  // (seeds are tiny flat string maps in practice).
+  const seedKey = useMemo(
+    () => (seed ? JSON.stringify(seed) : ""),
+    [seed],
+  );
 
   const form = useForm<Record<string, string>>({
     defaultValues: { ...defaultValues, ...(seed as Record<string, string>) },
   });
   const { control, handleSubmit, reset } = form;
 
-  // Reset form when modal reopens
+  // 2M Part 0A: reset only on the false→true open transition (not every
+  // render). Track the previous `open` with a ref so the effect's dep array
+  // is just `[open]` and the body can reference `reset`/`merged` without
+  // re-firing on a new `merged` ref.
+  const prevOpenRef = useRef(false);
   useEffect(() => {
-    if (open) {
+    const wasOpen = prevOpenRef.current;
+    prevOpenRef.current = open;
+    if (open && !wasOpen) {
       reset({ ...defaultValues, ...(seed as Record<string, string>) });
     }
-  }, [open, reset, seed, defaultValues]);
+  }, [open, reset, defaultValues, seed]);
 
   // POST via the existing create handler — same path the master "new" page uses
   const createMutation = useFrappeCreate<

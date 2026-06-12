@@ -27,6 +27,7 @@ import {
   FormFrappeSelect,
   FormDatePicker,
 } from "@/components/form";
+import { QuickAddField } from "@/components/quick-add/QuickAddField";
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
 import { FlowWizard } from "@/components/flows/FlowWizard";
 import { useFrappeCreate } from "@/hooks/generic";
@@ -238,7 +239,7 @@ export default function NewPurchaseInvoicePage() {
                       description="Set the supplier and billing details for this invoice."
                     />
                     <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                      <FormFrappeSelect
+                      <QuickAddField
                         control={control}
                         name="supplier"
                         label="Supplier"
@@ -312,7 +313,7 @@ export default function NewPurchaseInvoicePage() {
                             return (
                               <tr key={field.id} className="group">
                                 <td className="px-3 py-2 align-top">
-                                  <FormFrappeSelect
+                                  <QuickAddField
                                     control={control}
                                     name={`items.${index}.item_code`}
                                     doctype="Item"

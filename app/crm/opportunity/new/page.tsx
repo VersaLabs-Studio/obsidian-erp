@@ -26,6 +26,7 @@ import {
   FormDatePicker,
   FormSelect,
 } from "@/components/form";
+import { QuickAddField } from "@/components/quick-add/QuickAddField";
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
 import { FlowWizard } from "@/components/flows/FlowWizard";
 import { useFrappeCreate } from "@/hooks/generic";
@@ -196,7 +197,7 @@ export default function NewOpportunityPage() {
                         required
                         options={OPPORTUNITY_FROM_OPTIONS}
                       />
-                      <FormFrappeSelect
+                      <QuickAddField
                         control={control}
                         name="party_name"
                         label={watchedOppFrom === "Lead" ? "Lead" : "Customer"}
@@ -292,7 +293,7 @@ export default function NewOpportunityPage() {
                           {fields.map((field, index) => (
                             <tr key={field.id} className="group">
                               <td className="px-3 py-2 align-top">
-                                <FormFrappeSelect
+                                <QuickAddField
                                   control={control}
                                   name={`items.${index}.item_code`}
                                   doctype="Item"

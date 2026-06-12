@@ -7,6 +7,7 @@
 
 import { useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { toast } from "sonner";
 import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
 import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
@@ -18,6 +19,7 @@ import {
   Wallet,
   ArrowDownLeft,
   ArrowUpRight,
+  Edit3,
 } from "lucide-react";
 
 import { PageHeader, LoadingState, ConfirmDialog } from "@/components/smart";
@@ -196,6 +198,17 @@ export default function PaymentEntryDetailPage() {
         }}
         actions={
           <div className="flex items-center gap-2">
+            {/* 2M Part 3A: draft-only Edit affordance. The PE detail page was
+                the only transactional sibling missing the Edit button that
+                SO/SI/Quotation/DN/SE/SR/PI/PR/Lead/Opp all have. Draft only
+                (docstatus === 0); submitted PEs are immutable. */}
+            {isDraft && (
+              <Button variant="outline" size="sm" asChild>
+                <Link href={`/accounting/payment-entry/${encodeURIComponent(name)}/edit`}>
+                  <Edit3 className="mr-1.5 h-4 w-4" /> Edit
+                </Link>
+              </Button>
+            )}
             {isDraft && (
               <Button
                 size="sm"

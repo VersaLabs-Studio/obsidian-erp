@@ -123,6 +123,13 @@ export function useFrappeMutation<TData = unknown, TVariables = unknown>(
         if (error && typeof error === "object") {
           (err as Error & { details?: unknown }).details = error.details;
           (err as Error & { error?: string }).error = error.error;
+          // 2M Part 2B: preserve the original Frappe error (with
+          // `_server_messages` JSON) so the resolver can check each entry's
+          // `indicator` field and route green/blue (info) messages as a
+          // non-error INFO resolution rather than a GuidedErrorDialog
+          // rejection. The previous flatten step lost this metadata.
+          (err as Error & { _originalError?: unknown })._originalError =
+            (error as { frappeError?: unknown }).frappeError ?? error;
         }
         throw err;
       }

@@ -130,6 +130,48 @@ export const AUTO_FILL_REGISTRY: Record<string, AutoFillRegistryEntry> = {
   },
 
   // =========================================================================
+  // SALES ORDER → SALES INVOICE  (2M Part 1A)
+  // ERPNext carries `sales_order` as a top-level field on Sales Invoice;
+  // cross-flow / WhatsNext passes ?sales_order=SO-… so the SI wizard can
+  // prefill customer, currency, price list, and the items. Add to the
+  // registry so the new SO→SI prefill effect can resolve the mapping.
+  // =========================================================================
+  "Sales Order->Sales Invoice": {
+    sourceDoctype: "Sales Order",
+    targetDoctype: "Sales Invoice",
+    headerMappings: [
+      { sourceField: "name", targetField: "sales_order", isReadOnly: true, sourceLabel: "Sales Order" },
+      { sourceField: "customer", targetField: "customer", isReadOnly: true, sourceLabel: "Customer" },
+      { sourceField: "customer_name", targetField: "customer_name", isReadOnly: true, sourceLabel: "Customer Name" },
+      { sourceField: "company", targetField: "company", isReadOnly: true, sourceLabel: "Company" },
+      { sourceField: "currency", targetField: "currency", isReadOnly: true, sourceLabel: "Currency" },
+      { sourceField: "conversion_rate", targetField: "conversion_rate", isReadOnly: true, sourceLabel: "Exchange Rate" },
+      { sourceField: "selling_price_list", targetField: "selling_price_list", isReadOnly: true, sourceLabel: "Price List" },
+      { sourceField: "customer_address", targetField: "customer_address", isReadOnly: true, sourceLabel: "Customer Address" },
+      { sourceField: "shipping_address_name", targetField: "shipping_address_name", isReadOnly: true, sourceLabel: "Shipping Address" },
+      { sourceField: "contact_person", targetField: "contact_person", isReadOnly: true, sourceLabel: "Contact Person" },
+      { sourceField: "taxes_and_charges", targetField: "taxes_and_charges", isReadOnly: false, sourceLabel: "Tax Template" },
+      { sourceField: "tc_name", targetField: "tc_name", isReadOnly: false, sourceLabel: "Terms & Conditions" },
+    ],
+    itemMappings: [
+      { sourceField: "item_code", targetField: "item_code", isReadOnly: true, sourceLabel: "Item Code" },
+      { sourceField: "item_name", targetField: "item_name", isReadOnly: true, sourceLabel: "Item Name" },
+      { sourceField: "description", targetField: "description", isReadOnly: true, sourceLabel: "Description" },
+      { sourceField: "qty", targetField: "qty", isReadOnly: false, sourceLabel: "Quantity" },
+      { sourceField: "rate", targetField: "rate", isReadOnly: false, sourceLabel: "Rate" },
+      { sourceField: "amount", targetField: "amount", isReadOnly: true, sourceLabel: "Amount" },
+      { sourceField: "uom", targetField: "uom", isReadOnly: true, sourceLabel: "UOM" },
+      { sourceField: "warehouse", targetField: "warehouse", isReadOnly: false, sourceLabel: "Warehouse" },
+    ],
+    userMustFill: ["due_date", "set_posting_time"],
+    defaults: {
+      naming_series: "ACC-SINV-.YYYY.-",
+      status: "Draft",
+      is_pos: 0,
+    },
+  },
+
+  // =========================================================================
   // DELIVERY NOTE → SALES INVOICE
   // Per Workflow Part 3 §1.4
   // =========================================================================

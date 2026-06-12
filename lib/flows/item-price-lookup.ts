@@ -227,6 +227,11 @@ export function ItemRateAutoFill<TFieldValues extends Record<string, any>>({
   const setValue = (setValueProp ?? formCtx?.setValue) as
     | UseFormSetValue<TFieldValues>
     | undefined;
+  // Resolve `getValues` from the same source — pulled outside the effect so
+  // it isn't an unstable dep.
+  const getValues = (setValueProp
+    ? undefined
+    : (formCtx?.getValues as ReturnType<typeof useFormContext<TFieldValues>>["getValues"] | undefined));
 
   // Watch the item_code reactively. When it changes, the lookup fires.
   const itemCode = useWatch({ name: itemCodePath as any }) as string | undefined;
@@ -237,15 +242,30 @@ export function ItemRateAutoFill<TFieldValues extends Record<string, any>>({
       : null,
   );
 
+  // 2M Part 0C: idempotency guard. The previous effect wrote `setValue(...)`
+  // with no value-equality guard, so once it wrote, the resulting re-render
+  // re-evaluated the effect and wrote again — `Maximum update depth exceeded`.
+  // The `current === rate` guard makes the effect idempotent: after the first
+  // correct write it no-ops, so no further re-render is triggered. The
+  // `formCtx`/`getValues` refs are intentionally NOT in the dep array (they
+  // are stable from useFormContext).
   useEffect(() => {
     if (rate === undefined || !setValue) return;
-    if (!overwrite) {
+    let current: number = 0;
+    if (overwrite) {
+      // For overwrite mode, use the form's getValues — re-read each time
+      // so we compare against the latest user-typed value, not a stale closure.
+      const getter = (setValueProp ? undefined : getValues) ?? (formCtx as any)?.getValues;
+      current = Number(getter?.(ratePath as any) ?? 0) || 0;
+      if (current === rate) return; // ← STOP: value already correct
+    } else {
       // Only fill if the current rate is empty/zero.
-      const current = (formCtx?.getValues?.(ratePath as any) as number | undefined) ?? 0;
+      const getter = (setValueProp ? undefined : getValues) ?? (formCtx as any)?.getValues;
+      current = Number(getter?.(ratePath as any) ?? 0) || 0;
       if (current && current > 0) return;
     }
     setValue(ratePath as any, rate as any, { shouldDirty: true });
-  }, [rate, ratePath, setValue, overwrite, formCtx]);
+  }, [rate, ratePath, setValue, overwrite]); // ← formCtx/getValues intentionally omitted (stable)
 
   // Headless component — renders nothing.
   return null;

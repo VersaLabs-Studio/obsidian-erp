@@ -9,6 +9,9 @@
 // short-circuit — if an adjacent record already exists, the button
 // reads "View <name>" (redirect) and never "Create" (no duplicate).
 //
+// 2M Part 1C: the menu now groups backward edges (source links — "Created
+// from") ABOVE the forward edges ("Up next") so linked docs are clearly
+// stated in both directions on every doctype that has a known source edge.
 // Reuses:
 //   - `AUTO_FILL_REGISTRY` + `resolveFlowChain` (logic, not visual) via
 //     flow-adjacency.ts (derived from AUTO_FILL_REGISTRY keys)
@@ -52,6 +55,10 @@ interface CrossFlowActionsMenuProps {
   className?: string;
   /** Title for the menu (default: "Cross-flow actions") */
   title?: string;
+  /** 2M Part 3D: while true, render the loading skeleton (overrides the
+   *  per-row isLoading from useFrappeList). Use this when the page is
+   *  not yet ready to render cross-flow affordances. */
+  isLoading?: boolean;
 }
 
 export function CrossFlowActionsMenu({
@@ -59,12 +66,42 @@ export function CrossFlowActionsMenu({
   name,
   className,
   title = "Cross-flow actions",
+  isLoading = false,
 }: CrossFlowActionsMenuProps) {
   const edges = useMemo(() => getAdjacencies(doctype), [doctype]);
 
   if (edges.length === 0) {
     return null; // Standalone doctype — no rail
   }
+
+  // 2M Part 3D: skeleton for the whole menu. Same B1 chrome as
+  // FlowRailSkeleton / WhatsNext.
+  if (isLoading) {
+    return (
+      <div
+        className={cn(
+          "bg-card rounded-2xl shadow-sm shadow-black/5 border border-border/40 p-5 sm:p-6",
+          className,
+        )}
+        aria-busy="true"
+        data-testid="crossflow-skeleton"
+      >
+        <div className="mb-4 flex items-center gap-2">
+          <SkeletonLine className="h-7 w-7 rounded-lg" />
+          <SkeletonLine className="h-4 w-32" />
+        </div>
+        <div className="space-y-2">
+          <SkeletonLine className="h-11 w-full rounded-xl" />
+          <SkeletonLine className="h-11 w-full rounded-xl" />
+        </div>
+      </div>
+    );
+  }
+
+  // 2M Part 1C: split into "Created from" (backward) and "Up next" (forward)
+  // groups so linked docs are clearly stated in both directions.
+  const backward = edges.filter((e) => e.direction === "backward");
+  const forward = edges.filter((e) => e.direction === "forward");
 
   return (
     <div
@@ -80,15 +117,39 @@ export function CrossFlowActionsMenu({
         <h3 className="text-sm font-semibold text-foreground">{title}</h3>
       </div>
 
-      <ul className="space-y-2">
-        {edges.map((edge) => (
-          <AdjacencyRow
-            key={`${edge.direction}-${edge.targetDoctype}`}
-            edge={edge}
-            sourceDocName={name}
-          />
-        ))}
-      </ul>
+      {backward.length > 0 && (
+        <div className="mb-4" data-testid="crossflow-source-group">
+          <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Created from
+          </p>
+          <ul className="space-y-2">
+            {backward.map((edge) => (
+              <AdjacencyRow
+                key={`${edge.direction}-${edge.targetDoctype}`}
+                edge={edge}
+                sourceDocName={name}
+              />
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {forward.length > 0 && (
+        <div data-testid="crossflow-forward-group">
+          <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Up next
+          </p>
+          <ul className="space-y-2">
+            {forward.map((edge) => (
+              <AdjacencyRow
+                key={`${edge.direction}-${edge.targetDoctype}`}
+                edge={edge}
+                sourceDocName={name}
+              />
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

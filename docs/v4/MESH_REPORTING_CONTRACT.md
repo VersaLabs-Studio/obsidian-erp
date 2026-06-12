@@ -1,4 +1,4 @@
-# MESH REPORTING CONTRACT — v1.0
+# MESH REPORTING CONTRACT — v1.1
 
 > **Every Obsidian ERP v4 handoff references this file in one line. Read it before you
 > write code and again before you write your completion report.** It exists because four
@@ -38,14 +38,23 @@ file is **off-limits**, respect it exactly. Inventing a flow edge that does not 
 ERPNext (e.g. "Purchase Order → Stock Reconciliation") is an architectural reject, not a
 feature.
 
-### 5. Static gates are necessary, not sufficient
+### 5. Static gates are necessary, not sufficient — and you ALWAYS ship a manual checklist
 `tsc --noEmit = 0` and `vitest` green **do not prove the UI works** — every prior failure
-passed them. They are table stakes, not evidence. Before you report done:
-- **Run the dev server and click the live retest paths** in the handoff.
-- Report **what you actually observed** ("clicked Create on the SO detail, the Delivery Note
-  wizard opened with customer = CUST-001 prefilled"), not a checkmark.
-- A "real" URL that 404-frees but does not prefill is a **silent half-fix** — verify the
-  target wizard actually reads the param you send (`searchParams.get(...)` must match).
+passed them. They are table stakes, not evidence.
+
+**Kidus runs the dev server and performs the live retest himself, manually.** You (the mesh)
+do **not** start a dev server, and you must **never** report live results you did not produce
+(a fabricated "✅ PO create works" costs the whole phase a re-cycle). Instead:
+- **ALWAYS end your report with a complete MANUAL LIVE-RETEST CHECKLIST** so Kidus can click
+  through it. This is mandatory on every handoff, every time — a report without it is
+  incomplete. Each step = **exact route/URL → action → expected result → the specific failure
+  string to watch for**.
+- Make the checklist cover everything you changed (not a generic list): if you touched the SO
+  wizard, step it through end to end with the field values to enter and the doc that should
+  result.
+- Trace silent half-fixes yourself statically: a "real" URL that 404-frees but does not prefill
+  is still broken — verify the target wizard actually reads the param you send
+  (`searchParams.get(...)` must match) and say so in the checklist's expected-result.
 
 ### 6. Tests assert against real code, not literals
 A test that asserts a hardcoded literal (`expect(filter[0]).toBe("Sales Invoice Item")`) or
@@ -67,8 +76,8 @@ STATIC GATES (observed, not asserted):
 PER-ITEM (one row per fix/feature):
   <id> | <file:line> | before -> after (1 line) | live observation
 
-LIVE RETEST (ran dev server):
-  <step> -> <what I actually saw>
+MANUAL LIVE-RETEST CHECKLIST (for Kidus — you do NOT run this; always include it):
+  <n>. <route/URL> -> <action + field values> -> <expected result> -> <failure string to watch>
 
 GUARDRAILS:
   standalone respected? off-limits files untouched? no orphan modules? no __init__.ts?

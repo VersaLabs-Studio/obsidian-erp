@@ -114,6 +114,7 @@ export default function NewSalesInvoicePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const deliveryNoteId = searchParams.get("delivery_note");
+  const salesOrderId = searchParams.get("sales_order"); // 2M Part 1A
   const customerId = searchParams.get("customer");
 
   const [step, setStep] = useState(0);
@@ -150,6 +151,16 @@ export default function NewSalesInvoicePage() {
       enabled: !!deliveryNoteId,
     });
 
+  // 2M Part 1A: SO→SI prefill. ERPNext carries `sales_order` as a top-level
+  // field on Sales Invoice; the cross-flow / WhatsNext href is
+  // `?sales_order=SO-…`. Mirror the DN→SI effect below for that path so the
+  // SO-driven cross-flow actually fills customer + currency + items.
+  const { data: salesOrder, isLoading: loadingSO } = useFrappeDoc<Record<string, unknown>>(
+    "Sales Order",
+    salesOrderId ?? "",
+    { enabled: !!salesOrderId },
+  );
+
   useEffect(() => {
     if (!deliveryNote) return;
     const mapping = getAutoFillMapping("Delivery Note", "Sales Invoice");
@@ -183,6 +194,41 @@ export default function NewSalesInvoicePage() {
       description: "Set the due date to continue.",
     });
   }, [deliveryNote, deliveryNoteId, reset, getValues]);
+
+  // 2M Part 1A: SO→SI prefill effect — mirrors the DN→SI effect.
+  useEffect(() => {
+    if (!salesOrder) return;
+    const mapping = getAutoFillMapping("Sales Order", "Sales Invoice");
+    if (!mapping) return;
+
+    const header = applyAutoFill(
+      salesOrder as Record<string, unknown>,
+      mapping,
+    );
+    const items = applyItemAutoFill(
+      (salesOrder as { items?: Record<string, unknown>[] }).items ?? [],
+      mapping,
+    ) as unknown as SIItem[];
+
+    reset({
+      ...getValues(),
+      ...(header as Partial<SIForm>),
+      items: items.length ? items : [{ ...EMPTY_ITEM }],
+      due_date: "",
+    });
+
+    const filled = new Set<string>([
+      ...mapping.headerMappings
+        .filter((m) => m.isReadOnly)
+        .map((m) => m.targetField),
+      "items",
+    ]);
+    setAutoFilledFields(filled);
+
+    toast.success(`Loaded from Sales Order ${salesOrderId}`, {
+      description: "Set the due date to continue.",
+    });
+  }, [salesOrder, salesOrderId, reset, getValues]);
 
   const isAuto = useCallback(
     (field: string) => autoFilledFields.has(field),
@@ -252,9 +298,11 @@ export default function NewSalesInvoicePage() {
       <PageHeader
         title="New Sales Invoice"
         subtitle={
-          deliveryNoteId
-            ? `From Delivery Note ${deliveryNoteId}`
-            : "Create a sales invoice in three steps"
+          salesOrderId
+            ? `From Sales Order ${salesOrderId}`
+            : deliveryNoteId
+              ? `From Delivery Note ${deliveryNoteId}`
+              : "Create a sales invoice in three steps"
         }
         backHref="/accounting/sales-invoice"
       />
@@ -285,7 +333,7 @@ export default function NewSalesInvoicePage() {
                     <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                       <FieldWrap
                         auto={isAuto("customer")}
-                        loading={loadingDN}
+                        loading={loadingDN || loadingSO}
                         error={triedNextSteps.has(step) ? validationResults?.step1?.errors?.customer : undefined}
                       >
                         {/* 2L 1A: Quick-Add enabled Customer */}

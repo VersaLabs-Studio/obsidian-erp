@@ -3,9 +3,17 @@
 > **Branch:** `feat/v4-phase-2m-stabilize-crossflow` (cut off `develop` after the 2L merge)
 > **Base:** `develop` @ the 2L merge commit
 > **Reporting:** Read `docs/v4/MESH_REPORTING_CONTRACT.md` FIRST and LAST. Every claim is audited
-> against the working tree **and a running dev server**. Rule 5 (live click-through) is mandatory
-> this phase — 2L shipped green static gates but the flagship features crashed at runtime. Static
-> green is necessary, not sufficient. **Run the dev server and exercise every path.**
+> against the working tree. Static gates (tsc + vitest) are your responsibility and are necessary
+> but NOT sufficient — 2L shipped green static gates while both flagship features crashed at runtime.
+>
+> **Who runs the dev server:** Kidus runs the dev server and performs the live click-through retest
+> **manually himself** — you (the mesh) do NOT start a dev server and must NOT claim live results you
+> did not produce. **Your obligation instead: ALWAYS end your final report with a complete, ordered
+> MANUAL LIVE-RETEST CHECKLIST** — numbered steps, exact routes/URLs, the action to take, and the
+> expected result + the specific failure string to watch for — so Kidus can execute it directly. This
+> is a STANDING requirement for every handoff from now on (see Reporting Contract). The 12-step
+> checklist at the bottom of this doc is the template; keep it current with whatever you actually
+> changed.
 
 ---
 
@@ -272,7 +280,69 @@ completed nodes are clickable, and there's a single surfaced action.
 
 ---
 
-## Acceptance gate — live retest (dev server running, click each path)
+## PART 7 — NEW UNIT: Item-360 + Supplier-360 (the large-feature half)
+
+> This is the new module/unit for the phase (per the sizing policy: a large progressive feature
+> rides alongside the fold-forward fixes). User-picked. Master spec: §4.1 Item (Master Module
+> Extension) and §5.1 Supplier. **Golden pattern to clone:** the existing Customer-360 at
+> `app/crm/customer/[name]/page.tsx` (1,479 lines) — tabbed detail, KPI StatCards, outstanding
+> rollup, per-relationship `useFrappeList` blocks, Quick Actions `InfoCard`. Item (379 lines) and
+> Supplier (330 lines) detail pages are thin; bring both to the Customer-360 standard. **Standalone
+> masters — no FlowRail / no flow-chain / no auto-fill edges** (same guardrail as Stock
+> Reconciliation). Low overlap with Parts 0-4; land it as its own commit(s).
+
+### 7A. Item-360 (`app/stock/item/[name]/page.tsx`) — master spec §4.1
+Bring to the Customer-360 tabbed standard. Tabs + data (all read-only via `useFrappeList`, scoped to
+`item_code`):
+- **Overview** — Item Information InfoCard (code, name, group, stock_uom, type switches,
+  valuation_method, default_warehouse/BOM) + a KPI StatCard row.
+- **Prices** — all `Item Price` rows for this item across price lists (the §4.1 "Item Price tab";
+  reuses the Item Price master just built — link each row to its price-list detail).
+- **Stock Levels** — qty per warehouse from Frappe `Bin` (mirror the Stock Balance read already in
+  `lib/kpi/compute-stock-kpis.ts`).
+- **BOMs** — linked `BOM` where `item = this`.
+- **Transactions** — recent `Sales Order Item` / `Purchase Order Item` / `Delivery Note Item`
+  involving this item (child-table filter; reuse the 4-tuple pattern from 2L 1C).
+- **Activity** — reuse `ActivityTimeline`.
+- **KPIs (detail header StatCards):** on-hand qty, valuation value, # price lists, # open
+  transactions. **List-page KPIs (§4.1):** Total Items / Stock Items / Service Items / Low Stock⚠ /
+  New This Month.
+- **Quick Actions InfoCard:** Create Item Price, Create BOM, Adjust Stock (→ Stock Reconciliation).
+- "Export" button may be a disabled "Phase 3" affordance (don't fake it) — match how other
+  not-yet-built actions are stubbed in the codebase.
+
+### 7B. Supplier-360 (`app/buying/supplier/[name]/page.tsx`) — master spec §5.1, 360 per §2.2 mirror
+Master spec lists Supplier as "UX Overhaul," but the user chose the **360** treatment — mirror
+Customer-360 for the **buying** side:
+- **Overview** — Supplier Information (name, group, type, country, default_currency, payment_terms) +
+  KPI StatCards.
+- **Purchases** — linked `Purchase Order` + `Purchase Receipt` for this supplier.
+- **Invoices** — linked `Purchase Invoice`, with **total outstanding payable** rollup (mirror the
+  Customer outstanding-receivable reduce at `customer/[name]:532`).
+- **Payments** — linked `Payment Entry` (party_type=Supplier).
+- **Addresses / Contacts** — via Dynamic Link (same pattern Customer uses; reuse the 2K address
+  Dynamic-Link fix — do NOT reintroduce the fake "Address Linked Document" doctype).
+- **Activity** — `ActivityTimeline`.
+- **Quick Actions InfoCard:** Create Purchase Order, Create Purchase Invoice, Record Payment
+  (→ Payment Entry, party_type=Supplier, prefilled — reuse the Part 1 cross-flow prefill).
+- **List-page KPIs:** Total Suppliers / Active This Month / Top Supplier by Spend / Total Payable.
+
+### 7C. Consistency requirements (both)
+- Premium-UI: OKLCH tokens only, `StatusBadge`, the B1 sidebar chrome
+  (`bg-card rounded-2xl shadow-sm shadow-black/5 border-border/40`), no black borders, no `@ts-nocheck`.
+- Loading: `SkeletonDetail` while the doc loads; each tab's list shows a skeleton while its
+  `useFrappeList` is in flight (same standard as Part 3D).
+- Dual-theme + 375px + reduced-motion clean.
+- Wire Quick-Add (Part 4A) on the Supplier/Item **new** wizards too, so this dovetails with the
+  wiring-completion work.
+
+---
+
+## Acceptance gate — MANUAL live-retest checklist (Kidus runs this himself)
+
+> You (the mesh) do NOT run these — **reproduce this list verbatim in your final report** (updated
+> for whatever you actually changed) so Kidus can click through it on his own dev server. Each step =
+> route + action + expected result + the failure string to watch for.
 
 1. **Quick-Add opens without crashing** in SO, Quotation, SR, DN (Part 0A/0B) — modal opens, create
    writes back, host state intact, **zero console errors**.
@@ -290,6 +360,12 @@ completed nodes are clickable, and there's a single surfaced action.
 10. **WhatsNext + CrossFlow show skeletons** while loading (Part 3D).
 11. **Remaining wizards** (BOM/WO/RFQ/SQ/PI/PR/Opp/Lead/Customer/Supplier) expose Quick-Add (Part 4A).
 12. **Dual-theme + 375px + reduced-motion** regression on every touched surface (P4).
+13. **Item-360** (`/stock/item/<code>`) — tabs (Overview/Prices/Stock Levels/BOMs/Transactions/
+    Activity) all render with real linked data + skeletons; KPI StatCards populate; Quick Actions
+    navigate (Part 7A).
+14. **Supplier-360** (`/buying/supplier/<name>`) — tabs (Overview/Purchases/Invoices/Payments/
+    Addresses/Contacts/Activity) render; **Total Payable** rollup correct; Record Payment prefills a
+    Supplier Payment Entry (Part 7B).
 
 > FlowRail (Part 5) is **excluded** from the mesh acceptance — it is the Brain's deliverable and
 > will be verified separately.
@@ -301,4 +377,5 @@ completed nodes are clickable, and there's a single surfaced action.
   fold-forward.
 - If any Part 0 fix cannot be made without a deeper refactor of `useFrappeList` query-key stability,
   STOP and report — do not paper over a loop with `eslint-disable`.
-- Report file:line + before→after for every item, per the Reporting Contract. Run the dev server.
+- Report file:line + before→after for every item, per the Reporting Contract. Do NOT run a dev
+  server or claim live results — end the report with the manual live-retest checklist for Kidus.

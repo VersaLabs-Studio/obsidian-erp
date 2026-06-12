@@ -2,10 +2,13 @@
 // Obsidian ERP v4.0 — Guided Error Dialog
 // Renders a Resolution from frappe-error-resolver as a glass-panel dialog.
 // Never shows raw technical text — always human explanation + actions.
+// 2M Part 2B: info-severity resolutions are surfaced as a toast, never as
+// a dialog. The dialog only renders for warning/error severities.
 
 "use client";
 
 import { useState, useCallback } from "react";
+import { toast } from "sonner";
 import { addNotification } from "@/lib/stores/notification-store";
 import {
   Dialog,
@@ -33,6 +36,19 @@ export function useGuidedError() {
   const [resolution, setResolution] = useState<Resolution | null>(null);
 
   const showError = useCallback((r: Resolution) => {
+    // 2M Part 2B: info-severity resolutions are surfaced as a toast, never
+    // as a GuidedErrorDialog. The caller is informed of an informational
+    // server message; it is not a rejection. We still record it as a
+    // notification so the user can re-read it from the bell.
+    if (r.severity === "info") {
+      toast.info(r.explanation, { description: r.title });
+      addNotification({
+        kind: "info",
+        title: r.title,
+        message: r.explanation,
+      });
+      return;
+    }
     setResolution(r);
     // B9 + G5 + R7: Capture to notification store WITH detail + actions so
     // clicking the bell item opens the full guided-error panel with working
@@ -75,7 +91,10 @@ export function GuidedErrorDialog({
   resolution,
   onDismiss,
 }: GuidedErrorDialogProps) {
-  if (!resolution) return null;
+  // 2M Part 2B: info-severity resolutions are handled via toast in
+  // useGuidedError (showError) and never set the resolution state, but
+  // guard the dialog as well in case a future caller sets one.
+  if (!resolution || resolution.severity === "info") return null;
 
   const handleAction = async (action: ResolutionAction) => {
     await action.run();
