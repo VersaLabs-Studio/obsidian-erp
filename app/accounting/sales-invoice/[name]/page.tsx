@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -24,10 +24,9 @@ import { isModuleBuilt } from "@/lib/flows/module-availability";
 import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
 import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
-import { resolveFlowChain } from "@/lib/flows/flow-chain-resolver";
+import { useFlowChain } from "@/hooks/flows/use-flow-chain";
 import { useFrappeDoc, useFrappeList, useFrappeUpdate } from "@/hooks/generic";
 import type { SalesInvoice } from "@/types/doctype-types";
-import type { FlowStageStatus } from "@/types/flow-types";
 import { cn } from "@/lib/utils";
 
 const ETB = new Intl.NumberFormat("en-ET", {
@@ -71,44 +70,8 @@ export default function SalesInvoiceDetailPage() {
     { enabled: !isLoading && !!invoice },
   );
 
-  const chain = useMemo(() => {
-    const items = (invoice?.items ?? []) as Array<{
-      delivery_note?: string;
-      sales_order?: string;
-    }>;
-    const dnName = items.find((i) => i?.delivery_note)?.delivery_note;
-    const soName = items.find((i) => i?.sales_order)?.sales_order;
-    const peName = paymentEntries?.[0]?.name;
-
-    const stageStatuses: Record<
-      string,
-      { status: FlowStageStatus; documentName?: string; documentUrl?: string }
-    > = {};
-
-    if (soName) {
-      stageStatuses["Sales Order"] = {
-        status: "completed",
-        documentName: soName,
-        documentUrl: `/sales/sales-order/${encodeURIComponent(soName)}`,
-      };
-    }
-    if (dnName) {
-      stageStatuses["Delivery Note"] = {
-        status: "completed",
-        documentName: dnName,
-        documentUrl: `/stock/delivery-note/${encodeURIComponent(dnName)}`,
-      };
-    }
-    if (peName) {
-      stageStatuses["Payment Entry"] = {
-        status: "completed",
-        documentName: peName,
-        documentUrl: `/accounting/payment-entry/${encodeURIComponent(peName)}`,
-      };
-    }
-
-    return resolveFlowChain("Sales Invoice", name, stageStatuses);
-  }, [invoice, paymentEntries, name]);
+  // 2N Part 1.1: unified flow resolution.
+  const { result: chain, isLoading: chainLoading } = useFlowChain("Sales Invoice", name);
 
   const updateMutation = useFrappeUpdate<SalesInvoice>("Sales Invoice", {
     showToast: false,
@@ -346,7 +309,7 @@ export default function SalesInvoiceDetailPage() {
           </InfoCard>
 
           <InfoCard title="Flow Rail">
-            <FlowRail result={chain} currentDocName={name} sourceDoctype="Sales Invoice" isLoading={loadingPE} />
+            <FlowRail result={chain} currentDocName={name} sourceDoctype="Sales Invoice" isLoading={chainLoading} />
           </InfoCard>
 
           {/* 2L 1B: Universal cross-flow actions menu */}

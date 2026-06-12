@@ -30,10 +30,9 @@ import { isModuleBuilt } from "@/lib/flows/module-availability";
 import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
 import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
-import { resolveFlowChain } from "@/lib/flows/flow-chain-resolver";
+import { useFlowChain } from "@/hooks/flows/use-flow-chain";
 import { useFrappeDoc, useFrappeList, useFrappeUpdate, useFrappeDelete } from "@/hooks/generic";
 import type { PurchaseReceipt } from "@/types/doctype-types";
-import type { FlowStageStatus } from "@/types/flow-types";
 
 const ETB = new Intl.NumberFormat("en-ET", { style: "currency", currency: "ETB" });
 
@@ -76,32 +75,8 @@ export default function PurchaseReceiptDetailPage() {
     { enabled: !isLoading && !!pr },
   );
 
-  // -- Build the flow chain from real linked documents -----------------------
-  const chain = useMemo(() => {
-    const piName = invoices?.[0]?.name;
-
-    const stageStatuses: Record<
-      string,
-      { status: FlowStageStatus; documentName?: string; documentUrl?: string }
-    > = {};
-
-    if (poName) {
-      stageStatuses["Purchase Order"] = {
-        status: "completed",
-        documentName: poName,
-        documentUrl: `/buying/purchase-order/${encodeURIComponent(poName)}`,
-      };
-    }
-    if (piName) {
-      stageStatuses["Purchase Invoice"] = {
-        status: "completed",
-        documentName: piName,
-        documentUrl: `/accounting/purchase-invoice/${encodeURIComponent(piName)}`,
-      };
-    }
-
-    return resolveFlowChain("Purchase Receipt", name, stageStatuses);
-  }, [poName, invoices, name]);
+  // 2N Part 1.1: unified flow resolution.
+  const { result: chain, isLoading: chainLoading } = useFlowChain("Purchase Receipt", name);
 
   // -- Status actions (real mutations) ----------------------------------------
   const updateMutation = useFrappeUpdate<PurchaseReceipt>("Purchase Receipt", {
@@ -305,7 +280,7 @@ export default function PurchaseReceiptDetailPage() {
           </InfoCard>
 
           <InfoCard title="Flow Tracker">
-            <FlowRail result={chain} currentDocName={name} sourceDoctype="Purchase Receipt" isLoading={loadingInvoices} />
+            <FlowRail result={chain} currentDocName={name} sourceDoctype="Purchase Receipt" isLoading={chainLoading} />
           </InfoCard>
 
           <InfoCard title="What's Next">

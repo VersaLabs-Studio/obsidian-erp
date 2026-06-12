@@ -5,7 +5,7 @@
 // Action-oriented: FlowRail, WhatsNext, ActivityTimeline, ConfirmDialog.
 // OKLCH tokens only. No @ts-nocheck, no any.
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -29,10 +29,9 @@ import { isModuleBuilt } from "@/lib/flows/module-availability";
 import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
 import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
-import { resolveFlowChain } from "@/lib/flows/flow-chain-resolver";
-import { useFrappeDoc, useFrappeList, useFrappeUpdate } from "@/hooks/generic";
+import { useFlowChain } from "@/hooks/flows/use-flow-chain";
+import { useFrappeDoc, useFrappeUpdate } from "@/hooks/generic";
 import type { PurchaseOrder } from "@/types/doctype-types";
-import type { FlowStageStatus } from "@/types/flow-types";
 
 const ETB = new Intl.NumberFormat("en-ET", {
   style: "currency",
@@ -68,61 +67,8 @@ export default function PurchaseOrderDetailPage() {
     refetch,
   } = useFrappeDoc<PurchaseOrder>("Purchase Order", name);
 
-  // -- Upstream resolution: Material Request linked to this PO ----------------
-  const { data: materialRequests } = useFrappeList<{ name: string }>(
-    "Material Request",
-    {
-      filters: [["material_request", "=", name]] as [string, string, unknown][],
-      fields: ["name"],
-      limit: 1,
-    },
-    { enabled: !isLoading && !!order },
-  );
-
-  // -- Downstream resolution: Purchase Receipts linked to this PO -------------
-  const { data: purchaseReceipts, isLoading: loadingPR } = useFrappeList<{
-    name: string;
-  }>(
-    "Purchase Receipt",
-    {
-      filters: [["purchase_order", "=", name]] as [string, string, unknown][],
-      fields: ["name"],
-      limit: 5,
-    },
-    { enabled: !isLoading && !!order },
-  );
-
-  // -- Build the flow chain ---------------------------------------------------
-  const chain = useMemo(() => {
-    const stageStatuses: Record<
-      string,
-      {
-        status: FlowStageStatus;
-        documentName?: string;
-        documentUrl?: string;
-      }
-    > = {};
-
-    const mrName = materialRequests?.[0]?.name;
-    if (mrName) {
-      stageStatuses["Material Request"] = {
-        status: "completed",
-        documentName: mrName,
-        documentUrl: `/stock/material-request/${encodeURIComponent(mrName)}`,
-      };
-    }
-
-    const prName = purchaseReceipts?.[0]?.name;
-    if (prName) {
-      stageStatuses["Purchase Receipt"] = {
-        status: "completed",
-        documentName: prName,
-        documentUrl: `/stock/purchase-receipt/${encodeURIComponent(prName)}`,
-      };
-    }
-
-    return resolveFlowChain("Purchase Order", name, stageStatuses);
-  }, [materialRequests, purchaseReceipts, name]);
+  // 2N Part 1.1: unified flow resolution.
+  const { result: chain, isLoading: chainLoading } = useFlowChain("Purchase Order", name);
 
   // -- Status actions ---------------------------------------------------------
   const updateMutation = useFrappeUpdate<PurchaseOrder>("Purchase Order", {
@@ -342,7 +288,7 @@ export default function PurchaseOrderDetailPage() {
 
       {/* Flow Tracker */}
       <InfoCard title="Procurement Flow" className="overflow-hidden">
-        <FlowRail result={chain} currentDocName={name} sourceDoctype="Purchase Order" isLoading={loadingPR} />
+        <FlowRail result={chain} currentDocName={name} sourceDoctype="Purchase Order" isLoading={chainLoading} />
       </InfoCard>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
@@ -456,7 +402,7 @@ export default function PurchaseOrderDetailPage() {
           </InfoCard>
 
           <InfoCard title="Journey">
-            <FlowRail result={chain} currentDocName={name} sourceDoctype="Purchase Order" isLoading={loadingPR} />
+            <FlowRail result={chain} currentDocName={name} sourceDoctype="Purchase Order" isLoading={chainLoading} />
           </InfoCard>
 
           {/* 2L 1B: Universal cross-flow actions menu */}

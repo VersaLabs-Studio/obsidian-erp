@@ -4,7 +4,7 @@
 // Request for Quotation Detail — FlowRail, WhatsNext, ActivityTimeline, ConfirmDialog.
 // OKLCH semantic tokens only. Real persistence.
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
@@ -24,10 +24,9 @@ import { isModuleBuilt } from "@/lib/flows/module-availability";
 import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
 import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
-import { resolveFlowChain } from "@/lib/flows/flow-chain-resolver";
+import { useFlowChain } from "@/hooks/flows/use-flow-chain";
 import { useFrappeDoc, useFrappeUpdate } from "@/hooks/generic";
 import type { RequestForQuotation } from "@/types/doctype-types";
-import type { FlowStageStatus } from "@/types/flow-types";
 
 interface RFQItem {
   item_code: string;
@@ -56,26 +55,8 @@ export default function RequestForQuotationDetailPage() {
     error,
   } = useFrappeDoc<RequestForQuotation>("Request for Quotation", name);
 
-  // -- Build the flow chain from real linked documents -----------------------
-  const chain = useMemo(() => {
-    const stageStatuses: Record<
-      string,
-      {
-        status: FlowStageStatus;
-        documentName?: string;
-        documentUrl?: string;
-      }
-    > = {};
-
-    // Current document
-    stageStatuses["Request for Quotation"] = {
-      status: rfq?.docstatus === 1 ? "completed" : "current",
-      documentName: name,
-      documentUrl: `/buying/request-for-quotation/${encodeURIComponent(name)}`,
-    };
-
-    return resolveFlowChain("Request for Quotation", name, stageStatuses);
-  }, [rfq, name]);
+  // 2N Part 1.1: unified flow resolution.
+  const { result: chain, isLoading: chainLoading } = useFlowChain("Request for Quotation", name);
 
   // -- Status actions --------------------------------------------------------
   const updateMutation = useFrappeUpdate<RequestForQuotation>(
@@ -167,7 +148,7 @@ export default function RequestForQuotationDetailPage() {
 
       {/* Flow Tracker */}
       <InfoCard title="Procurement Flow" className="overflow-hidden">
-        <FlowRail result={chain} currentDocName={name} sourceDoctype="Request for Quotation" />
+        <FlowRail result={chain} currentDocName={name} sourceDoctype="Request for Quotation" isLoading={chainLoading} />
       </InfoCard>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

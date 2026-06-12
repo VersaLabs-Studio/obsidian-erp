@@ -4,7 +4,7 @@
 // BOM Detail — FlowRail, WhatsNext, ActivityTimeline, ConfirmDialog.
 // OKLCH tokens only. No @ts-nocheck, no any.
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -31,12 +31,11 @@ import { isModuleBuilt } from "@/lib/flows/module-availability";
 import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
 import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
-import { resolveFlowChain } from "@/lib/flows/flow-chain-resolver";
+import { useFlowChain } from "@/hooks/flows/use-flow-chain";
 import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
 import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
-import { useFrappeDoc, useFrappeList, useFrappeUpdate } from "@/hooks/generic";
+import { useFrappeDoc, useFrappeUpdate } from "@/hooks/generic";
 import type { Bom } from "@/types/doctype-types";
-import type { FlowStageStatus } from "@/types/flow-types";
 import { cn } from "@/lib/utils";
 
 const ETB = new Intl.NumberFormat("en-ET", {
@@ -60,35 +59,8 @@ export default function BOMDetailPage() {
     refetch,
   } = useFrappeDoc<Bom>("BOM", name);
 
-  // -- Downstream: Work Orders linked to this BOM ----------------------------
-  const { data: workOrders, isLoading: loadingWO } = useFrappeList<{ name: string }>(
-    "Work Order",
-    {
-      filters: [["bom_no", "=", name]] as [string, string, unknown][],
-      fields: ["name"],
-      limit: 1,
-    },
-    { enabled: !isLoading && !!bom },
-  );
-
-  // -- Build the flow chain ---------------------------------------------------
-  const chain = useMemo(() => {
-    const stageStatuses: Record<
-      string,
-      { status: FlowStageStatus; documentName?: string; documentUrl?: string }
-    > = {};
-
-    const woName = workOrders?.[0]?.name;
-    if (woName) {
-      stageStatuses["Work Order"] = {
-        status: "completed",
-        documentName: woName,
-        documentUrl: `/manufacturing/work-order/${encodeURIComponent(woName)}`,
-      };
-    }
-
-    return resolveFlowChain("BOM", name, stageStatuses);
-  }, [workOrders, name]);
+  // 2N Part 1.1: unified flow resolution.
+  const { result: chain, isLoading: chainLoading } = useFlowChain("BOM", name);
 
   // -- Status actions ---------------------------------------------------------
   const updateMutation = useFrappeUpdate<Bom>("BOM", {
@@ -430,7 +402,7 @@ export default function BOMDetailPage() {
           </InfoCard>
 
           <InfoCard title="Journey">
-            <FlowRail result={chain} currentDocName={name} sourceDoctype="BOM" isLoading={loadingWO} />
+            <FlowRail result={chain} currentDocName={name} sourceDoctype="BOM" isLoading={chainLoading} />
           </InfoCard>
 
           {/* 2L 1B: Universal cross-flow actions menu */}

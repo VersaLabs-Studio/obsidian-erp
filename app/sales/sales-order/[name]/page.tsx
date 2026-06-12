@@ -30,12 +30,14 @@ import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMe
 import { isModuleBuilt } from "@/lib/flows/module-availability";
 import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
-import { resolveFlowChain } from "@/lib/flows/flow-chain-resolver";
+// 2N Part 1.1: replaced the per-page `stageStatuses` block + `resolveFlowChain`
+// call with the unified `useFlowChain` hook. The hook walks outward through
+// the link map and returns the same shape the rail needs.
+import { useFlowChain } from "@/hooks/flows/use-flow-chain";
 import { getAutoFillMapping, applyAutoFill } from "@/lib/flows/flow-auto-fill";
 import { getActiveCompany } from "@/lib/settings/company";
 import { useFrappeDoc, useFrappeList, useFrappeUpdate, useFrappeCreate } from "@/hooks/generic";
 import type { SalesOrder } from "@/types/doctype-types";
-import type { FlowStageStatus } from "@/types/flow-types";
 
 const ETB = new Intl.NumberFormat("en-ET", { style: "currency", currency: "ETB" });
 
@@ -91,34 +93,17 @@ export default function SalesOrderDetailPage() {
     { enabled: soItemCodes.length > 0 },
   );
 
-  // -- Build the flow chain from real linked documents -----------------------
-  const chain = useMemo(() => {
-    const items = ((order?.items ?? []) as Array<{ prevdoc_docname?: string }>);
-    const quotationName = items.find((i) => i?.prevdoc_docname)?.prevdoc_docname;
-    const woName = workOrders?.[0]?.name;
-
-    const stageStatuses: Record<
-      string,
-      { status: FlowStageStatus; documentName?: string; documentUrl?: string }
-    > = {};
-
-    if (quotationName) {
-      stageStatuses["Quotation"] = {
-        status: "completed",
-        documentName: quotationName,
-        documentUrl: `/sales/quotation/${encodeURIComponent(quotationName)}`,
-      };
-    }
-    if (woName) {
-      stageStatuses["Work Order"] = {
-        status: "completed",
-        documentName: woName,
-        documentUrl: `/manufacturing/work-order/${encodeURIComponent(woName)}`,
-      };
-    }
-
-    return resolveFlowChain("Sales Order", name, stageStatuses);
-  }, [order, workOrders, name]);
+  // 2N Part 1.1: unified flow resolution. The hook walks outward through
+  // the canonical link map (Quotation ← Sales Order via header field
+  // `quotation`; Sales Order → Work Order via header `sales_order`;
+  // Sales Order → Delivery Note via DN Item.against_sales_order, etc.) and
+  // returns the full stageStatuses map. Replaces the per-page block that
+  // only resolved Quotation + Work Order and left the rail "disabled" past
+  // those two stages.
+  const { result: chain, isLoading: chainLoading } = useFlowChain(
+    "Sales Order",
+    name,
+  );
 
   // -- Status actions (real mutations, driven by the status machine) ---------
   const updateMutation = useFrappeUpdate<SalesOrder>("Sales Order", {
@@ -359,9 +344,9 @@ export default function SalesOrderDetailPage() {
         }
       />
 
-      {/* Flow Tracker — clickable upstream, resolved downstream */}
+      {/* Flow Tracker — unified resolution (2N Part 1.1) */}
       <InfoCard title="Lead-to-Cash Flow" className="overflow-hidden">
-        <FlowRail result={chain} currentDocName={name} sourceDoctype="Sales Order" isLoading={loadingWO} />
+        <FlowRail result={chain} currentDocName={name} sourceDoctype="Sales Order" isLoading={chainLoading} />
       </InfoCard>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

@@ -5,7 +5,7 @@
 
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -30,10 +30,9 @@ import { isModuleBuilt } from "@/lib/flows/module-availability";
 import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
 import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
-import { resolveFlowChain } from "@/lib/flows/flow-chain-resolver";
-import { useFrappeDoc, useFrappeList, useFrappeUpdate } from "@/hooks/generic";
+import { useFlowChain } from "@/hooks/flows/use-flow-chain";
+import { useFrappeDoc, useFrappeUpdate } from "@/hooks/generic";
 import type { Opportunity } from "@/types/doctype-types";
-import type { FlowStageStatus } from "@/types/flow-types";
 
 export default function OpportunityDetailPage() {
   const params = useParams();
@@ -49,46 +48,13 @@ export default function OpportunityDetailPage() {
     error,
   } = useFrappeDoc<Opportunity>("Opportunity", name);
 
-  // Resolve downstream quotation
-  const { data: quotations } = useFrappeList<{ name: string; status: string }>(
-    "Quotation",
-    {
-      filters: [["party_name", "=", name]],
-      fields: ["name", "status"],
-      limit: 5,
-    },
-    { enabled: !isLoading && !!opp },
-  );
-
-  // Resolve upstream lead
-  const upstreamLead = opp?.opportunity_from === "Lead" ? opp?.party_name : undefined;
-
-  // Build flow chain
-  const chain = useMemo(() => {
-    const stageStatuses: Record<
-      string,
-      { status: FlowStageStatus; documentName?: string; documentUrl?: string }
-    > = {};
-
-    if (upstreamLead) {
-      stageStatuses["Lead"] = {
-        status: "completed",
-        documentName: upstreamLead,
-        documentUrl: `/crm/lead/${encodeURIComponent(upstreamLead)}`,
-      };
-    }
-
-    if (quotations && quotations.length > 0) {
-      const q = quotations[0];
-      stageStatuses["Quotation"] = {
-        status: q.status === "Ordered" ? "completed" : "current",
-        documentName: q.name,
-        documentUrl: `/sales/quotation/${encodeURIComponent(q.name)}`,
-      };
-    }
-
-    return resolveFlowChain("Opportunity", name, stageStatuses);
-  }, [upstreamLead, quotations, name]);
+  // 2N Part 1.1: unified flow resolution.
+  // NOTE: the link map does not define an Opportunity→Lead backward edge
+  // (Lead is a stage in the chain, but the reverse lookup from Opportunity
+  // is not in the link map). The downstream Quotation edge is in the map
+  // and is auto-resolved. To restore the upstream Lead resolution, add the
+  // edge to `flow-link-map.ts` or thread an `extraResolutions` arg in.
+  const { result: chain, isLoading: chainLoading } = useFlowChain("Opportunity", name);
 
   // Status update mutation
   const updateMutation = useFrappeUpdate<Opportunity>("Opportunity", {
@@ -169,7 +135,7 @@ export default function OpportunityDetailPage() {
 
       {/* Flow Tracker */}
       <InfoCard title="Lead-to-Cash Flow" className="overflow-hidden">
-        <FlowRail result={chain} currentDocName={name} sourceDoctype="Opportunity" />
+        <FlowRail result={chain} currentDocName={name} sourceDoctype="Opportunity" isLoading={chainLoading} />
       </InfoCard>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

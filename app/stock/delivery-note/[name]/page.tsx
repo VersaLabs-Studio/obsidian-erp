@@ -6,7 +6,7 @@
 // Real flow-chain resolution: upstream SO via items.against_sales_order,
 // downstream Sales Invoice via useFrappeList. OKLCH tokens only.
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -31,10 +31,9 @@ import { isModuleBuilt } from "@/lib/flows/module-availability";
 import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
 import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
-import { resolveFlowChain } from "@/lib/flows/flow-chain-resolver";
+import { useFlowChain } from "@/hooks/flows/use-flow-chain";
 import { useFrappeDoc, useFrappeList, useFrappeUpdate, useFrappeDelete } from "@/hooks/generic";
 import type { DeliveryNote } from "@/types/doctype-types";
-import type { FlowStageStatus } from "@/types/flow-types";
 
 const ETB = new Intl.NumberFormat("en-ET", { style: "currency", currency: "ETB" });
 
@@ -64,12 +63,6 @@ export default function DeliveryNoteDetailPage() {
     name,
   );
 
-  // -- Upstream resolution: Sales Order from items.against_sales_order --------
-  const soName = useMemo(() => {
-    const items = ((dn?.items ?? []) as Array<{ against_sales_order?: string }>);
-    return items.find((i) => i?.against_sales_order)?.against_sales_order;
-  }, [dn]);
-
   // -- Downstream resolution: Sales Invoice filtered on this DN ---------------
   const { data: invoices, isLoading: loadingInvoices } = useFrappeList<{ name: string }>(
     "Sales Invoice",
@@ -77,32 +70,8 @@ export default function DeliveryNoteDetailPage() {
     { enabled: !isLoading && !!dn },
   );
 
-  // -- Build the flow chain from real linked documents -----------------------
-  const chain = useMemo(() => {
-    const siName = invoices?.[0]?.name;
-
-    const stageStatuses: Record<
-      string,
-      { status: FlowStageStatus; documentName?: string; documentUrl?: string }
-    > = {};
-
-    if (soName) {
-      stageStatuses["Sales Order"] = {
-        status: "completed",
-        documentName: soName,
-        documentUrl: `/sales/sales-order/${encodeURIComponent(soName)}`,
-      };
-    }
-    if (siName) {
-      stageStatuses["Sales Invoice"] = {
-        status: "completed",
-        documentName: siName,
-        documentUrl: `/accounting/sales-invoice/${encodeURIComponent(siName)}`,
-      };
-    }
-
-    return resolveFlowChain("Delivery Note", name, stageStatuses);
-  }, [soName, invoices, name]);
+  // 2N Part 1.1: unified flow resolution.
+  const { result: chain, isLoading: chainLoading } = useFlowChain("Delivery Note", name);
 
   // -- Status actions (real mutations) ----------------------------------------
   const updateMutation = useFrappeUpdate<DeliveryNote>("Delivery Note", {
@@ -309,7 +278,7 @@ export default function DeliveryNoteDetailPage() {
           </InfoCard>
 
           <InfoCard title="Flow Tracker">
-            <FlowRail result={chain} currentDocName={name} sourceDoctype="Delivery Note" isLoading={loadingInvoices} />
+            <FlowRail result={chain} currentDocName={name} sourceDoctype="Delivery Note" isLoading={chainLoading} />
           </InfoCard>
 
           <InfoCard title="What's Next">

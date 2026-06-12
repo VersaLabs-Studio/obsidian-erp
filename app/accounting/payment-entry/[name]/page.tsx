@@ -30,9 +30,9 @@ import { FlowRail } from "@/components/flows/FlowRail";
 import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
 import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
-import { resolveFlowChain } from "@/lib/flows/flow-chain-resolver";
-import { useFrappeDoc, useFrappeList, useFrappeUpdate } from "@/hooks/generic";
-import type { PaymentEntry, SalesInvoice, PurchaseInvoice } from "@/types/doctype-types";
+import { useFlowChain } from "@/hooks/flows/use-flow-chain";
+import { useFrappeDoc, useFrappeUpdate } from "@/hooks/generic";
+import type { PaymentEntry } from "@/types/doctype-types";
 import type { FlowStageStatus } from "@/types/flow-types";
 import { cn } from "@/lib/utils";
 
@@ -74,41 +74,31 @@ export default function PaymentEntryDetailPage() {
     );
   }, [entry]);
 
-  const { data: linkedInvoice, isLoading: loadingInvoice } =
-    useFrappeDoc<SalesInvoice>(
-      invoiceRef?.reference_doctype ?? "Sales Invoice",
-      invoiceRef?.reference_name ?? "",
-      { enabled: !!invoiceRef?.reference_name },
-    );
-
-  // -- Build the flow chain from real linked documents -----------------------
-  const chain = useMemo(() => {
-    const stageStatuses: Record<
-      string,
-      { status: FlowStageStatus; documentName?: string; documentUrl?: string }
-    > = {};
-
-    if (invoiceRef?.reference_name) {
-      const invDoctype = invoiceRef.reference_doctype;
-      stageStatuses[invDoctype] = {
+  // -- extraResolutions: 2N Part 1.1 — the link map doesn't see the PE's
+  //    references[] child rows, so we inject the source invoice manually.
+  const extraResolutions = useMemo<
+    Record<string, { status: FlowStageStatus; documentName?: string; documentUrl?: string }>
+  >(() => {
+    if (!invoiceRef?.reference_name) return {};
+    const invDoctype = invoiceRef.reference_doctype;
+    return {
+      [invDoctype]: {
         status: "completed",
         documentName: invoiceRef.reference_name,
         documentUrl:
           invDoctype === "Sales Invoice"
             ? `/accounting/sales-invoice/${encodeURIComponent(invoiceRef.reference_name)}`
             : `/accounting/purchase-invoice/${encodeURIComponent(invoiceRef.reference_name)}`,
-      };
-    }
-
-    // Payment Entry is the current stage
-    stageStatuses["Payment Entry"] = {
-      status: entry?.docstatus === 1 ? "completed" : "current",
-      documentName: name,
-      documentUrl: `/accounting/payment-entry/${encodeURIComponent(name)}`,
+      },
     };
+  }, [invoiceRef]);
 
-    return resolveFlowChain("Payment Entry", name, stageStatuses);
-  }, [entry, invoiceRef, name]);
+  // 2N Part 1.1: unified flow resolution.
+  const { result: chain, isLoading: chainLoading } = useFlowChain(
+    "Payment Entry",
+    name,
+    extraResolutions,
+  );
 
   // -- Status actions (real mutations) --------------------------------------
   const updateMutation = useFrappeUpdate<PaymentEntry>("Payment Entry", {
@@ -370,7 +360,7 @@ export default function PaymentEntryDetailPage() {
           </InfoCard>
 
           <InfoCard title="Flow Rail">
-            <FlowRail result={chain} currentDocName={name} sourceDoctype="Payment Entry" isLoading={loadingInvoice} />
+            <FlowRail result={chain} currentDocName={name} sourceDoctype="Payment Entry" isLoading={chainLoading} />
           </InfoCard>
 
           <InfoCard title="What's Next">

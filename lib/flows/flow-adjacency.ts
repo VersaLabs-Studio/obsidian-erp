@@ -7,12 +7,23 @@
 // Standalone doctypes (Stock Reconciliation, Stock Ledger, masters) have
 // NO adjacency and are NOT in the map.
 //
+// 2N Part 1.1: this module is now a *derivation* over `flow-link-map.ts`.
+// The link map is the single source of truth; the `FlowAdjacency` shape
+// below is the legacy wrapper that `CrossFlowActionsMenu` and its
+// `useFrappeList` back-link caller still depend on. We build it from the
+// link map on first use and cache the result.
+//
 // For each edge we also describe the BACK-LINK query: how to detect that an
 // adjacent record already exists for the current source. When the back-link
 // check resolves to a real record, the UI shows "View <name>" (redirect)
 // instead of "Create" (master §12.4 — existing-record short-circuit).
 
 import { getDocTypeRoute } from "./flow-chain-resolver";
+import {
+  findFlowLink,
+  getFlowLinksFrom,
+  type FlowLinkDef,
+} from "./flow-link-map";
 
 // ---------------------------------------------------------------------------
 // Shape
@@ -51,249 +62,117 @@ export interface FlowAdjacency {
 }
 
 // ---------------------------------------------------------------------------
-// Per-edge registry
+// Human labels for the menu — keep this mapping in this module (UI concern)
 // ---------------------------------------------------------------------------
+const EDGE_LABELS: Record<string, string> = {
+  "Lead>Customer": "Convert to Customer",
+  "Customer>Quotation": "New Quotation",
+  "Opportunity>Quotation": "New Quotation",
+  "Quotation>Sales Order": "Create Sales Order",
+  "Sales Order>Quotation": "Source Quotation",
+  "Sales Order>Work Order": "Create Work Order",
+  "Work Order>Stock Entry": "Create Stock Entry",
+  "BOM>Work Order": "Create Work Order",
+  "Sales Order>Delivery Note": "Create Delivery Note",
+  "Delivery Note>Sales Order": "Source Sales Order",
+  "Delivery Note>Sales Invoice": "Create Sales Invoice",
+  "Sales Order>Sales Invoice": "Create Sales Invoice",
+  "Sales Invoice>Payment Entry": "Receive Payment",
+  "Payment Entry>Sales Invoice": "Source Sales Invoice",
+  "Payment Entry>Purchase Invoice": "Source Purchase Invoice",
+  "Material Request>Purchase Order": "Create Purchase Order",
+  "Material Request>Request for Quotation": "Create RFQ",
+  "Request for Quotation>Supplier Quotation": "Create Supplier Quotation",
+  "Supplier Quotation>Purchase Order": "Create Purchase Order",
+  "Purchase Order>Purchase Receipt": "Create Purchase Receipt",
+  "Purchase Receipt>Purchase Invoice": "Create Purchase Invoice",
+  "Purchase Order>Purchase Invoice": "Create Purchase Invoice",
+};
 
-/**
- * Build a 4-tuple filter for a top-level field match.
- * Use `[doctype, field, operator, value]` form when Frappe needs the
- * explicit doctype prefix (child-table fields); use the 3-tuple shorthand
- * when the field is on the queried doctype.
- */
-function f(field: string, op: "=" | "!=", value: unknown): [string, string, string, unknown] {
-  return ["", field, op, value];
+function edgeKey(from: string, to: string): string {
+  return `${from}>${to}`;
 }
 
-const EDGES: FlowAdjacency[] = [
-  // ===== LEAD-TO-CASH =====
-  {
-    sourceDoctype: "Lead",
-    targetDoctype: "Customer",
-    direction: "forward",
-    label: "Convert to Customer",
-    backLink: {
-      doctype: "Customer",
-      filters: [f("lead_name", "=", "<name>")],
-    },
-  },
-  {
-    sourceDoctype: "Customer",
-    targetDoctype: "Quotation",
-    direction: "forward",
-    label: "New Quotation",
-    backLink: {
-      doctype: "Quotation",
-      filters: [
-        f("party_name", "=", "<name>"),
-        f("quotation_to", "=", "Customer"),
-      ],
-    },
-  },
-  {
-    sourceDoctype: "Opportunity",
-    targetDoctype: "Quotation",
-    direction: "forward",
-    label: "New Quotation",
-    backLink: {
-      doctype: "Quotation",
-      filters: [f("opportunity", "=", "<name>")],
-    },
-  },
-  {
-    sourceDoctype: "Quotation",
-    targetDoctype: "Sales Order",
-    direction: "forward",
-    label: "Create Sales Order",
-    backLink: {
-      doctype: "Sales Order",
-      filters: [f("quotation", "=", "<name>")],
-    },
-  },
-  {
-    sourceDoctype: "Sales Order",
-    targetDoctype: "Quotation",
-    direction: "backward",
-    label: "Source Quotation",
-    backLink: {
-      doctype: "Quotation",
-      filters: [f("name", "=", "<quotation>")],
-    },
-  },
-  {
-    sourceDoctype: "Sales Order",
-    targetDoctype: "Work Order",
-    direction: "forward",
-    label: "Create Work Order",
-    backLink: {
-      doctype: "Work Order",
-      filters: [f("sales_order", "=", "<name>")],
-    },
-  },
-  {
-    sourceDoctype: "Work Order",
-    targetDoctype: "Stock Entry",
-    direction: "forward",
-    label: "Create Stock Entry",
-    backLink: {
-      doctype: "Stock Entry",
-      filters: [f("work_order", "=", "<name>")],
-    },
-  },
-  {
-    sourceDoctype: "BOM",
-    targetDoctype: "Work Order",
-    direction: "forward",
-    label: "Create Work Order",
-    backLink: {
-      doctype: "Work Order",
-      filters: [f("bom_no", "=", "<name>")],
-    },
-  },
-  {
-    sourceDoctype: "Sales Order",
-    targetDoctype: "Delivery Note",
-    direction: "forward",
-    label: "Create Delivery Note",
-    // 2L 1C: child-table back-link — DN's link to SO lives on
-    // `Delivery Note Item.against_sales_order`. Frappe requires the filter
-    // doctype to match the queried parent's child table, so we query the
-    // child table directly with a `parent` filter to discover the parent DN.
-    backLink: {
-      doctype: "Delivery Note",
-      filters: [
-        // ["Delivery Note Item", "against_sales_order", "=", "<name>"]
-        // We then map the child rows to their parent Delivery Note below.
-        ["Delivery Note Item", "against_sales_order", "=", "<name>"],
-      ],
-      selectFields: ["name", "parent"],
-    },
-  },
-  {
-    sourceDoctype: "Delivery Note",
-    targetDoctype: "Sales Invoice",
-    direction: "forward",
-    label: "Create Sales Invoice",
-    // 2L 1C: child-table back-link — SI's link to DN lives on
-    // `Sales Invoice Item.delivery_note`. Query the child table to find the
-    // parent SI that references the current DN.
-    backLink: {
-      doctype: "Sales Invoice",
-      filters: [
-        ["Sales Invoice Item", "delivery_note", "=", "<name>"],
-      ],
-      selectFields: ["name", "parent"],
-    },
-  },
-  {
-    sourceDoctype: "Sales Invoice",
-    targetDoctype: "Payment Entry",
-    direction: "forward",
-    label: "Receive Payment",
-    // 2L 1C: child-table back-link — PE's link to SI lives on
-    // `Payment Entry Reference.reference_name` (parent is PE). Query the
-    // child table to find the parent PE that allocates against this SI.
-    backLink: {
-      doctype: "Payment Entry",
-      filters: [
-        [
-          "Payment Entry Reference",
-          "reference_name",
-          "=",
-          "<name>",
-        ],
-        ["Payment Entry Reference", "reference_doctype", "=", "Sales Invoice"],
-      ],
-      selectFields: ["name", "parent"],
-    },
-  },
+// ---------------------------------------------------------------------------
+// Backward-compat helpers for the (3-tuple) filter shorthand that
+// `flow-adjacency.ts` historically exposed. We translate from the link map.
+// ---------------------------------------------------------------------------
+function f3(field: string, op: "=" | "!=", value: unknown): [string, string, unknown] {
+  return [field, op, value];
+}
 
-  // ===== PROCURE-TO-PAY =====
-  {
-    sourceDoctype: "Material Request",
-    targetDoctype: "Purchase Order",
-    direction: "forward",
-    label: "Create Purchase Order",
-    // PO has `material_request` at top level.
-    backLink: {
-      doctype: "Purchase Order",
-      filters: [f("material_request", "=", "<name>")],
-    },
-  },
-  {
-    sourceDoctype: "Material Request",
-    targetDoctype: "Request for Quotation",
-    direction: "forward",
-    label: "Create RFQ",
-    backLink: {
-      doctype: "Request for Quotation",
-      filters: [f("material_request", "=", "<name>")],
-    },
-  },
-  {
-    sourceDoctype: "Request for Quotation",
-    targetDoctype: "Supplier Quotation",
-    direction: "forward",
-    label: "Create Supplier Quotation",
-    // 2L 1C: child-table back-link — SQ links to RFQ via
-    // `Supplier Quotation Item.request_for_quotation` (parent is SQ).
-    // Some Frappe versions also store the link top-level on SQ; we use the
-    // child-table filter as the reliable cross-version path.
-    backLink: {
-      doctype: "Supplier Quotation",
-      filters: [
-        [
-          "Supplier Quotation Item",
-          "request_for_quotation",
-          "=",
-          "<name>",
-        ],
-      ],
-      selectFields: ["name", "parent"],
-    },
-  },
-  {
-    sourceDoctype: "Supplier Quotation",
-    targetDoctype: "Purchase Order",
-    direction: "forward",
-    label: "Create Purchase Order",
-    backLink: {
-      doctype: "Purchase Order",
-      filters: [f("supplier_quotation", "=", "<name>")],
-    },
-  },
-  {
-    sourceDoctype: "Purchase Order",
-    targetDoctype: "Purchase Receipt",
-    direction: "forward",
-    label: "Create Purchase Receipt",
-    backLink: {
-      doctype: "Purchase Receipt",
-      filters: [f("purchase_order", "=", "<name>")],
-    },
-  },
-  {
-    sourceDoctype: "Purchase Receipt",
-    targetDoctype: "Purchase Invoice",
-    direction: "forward",
-    label: "Create Purchase Invoice",
-    backLink: {
-      doctype: "Purchase Invoice",
-      filters: [f("purchase_receipt", "=", "<name>")],
-    },
-  },
+/**
+ * Convert a FlowLinkDef to a BackLinkQuery. For back_link child-table
+ * patterns, the filter is the 4-tuple `[childDoctype, field, "=", anchor]`
+ * form. For header-link patterns, the back-link is null (the caller
+ * supplies the candidate from the current doc's header field).
+ */
+function toBackLinkQuery(def: FlowLinkDef): BackLinkQuery | null {
+  if (def.pattern === "header_link") return null;
 
-  // ===== BACKWARD EDGES (right-side of the canvas) =====
-  {
-    sourceDoctype: "Sales Order",
-    targetDoctype: "Sales Invoice",
-    direction: "forward",
-    label: "Create Sales Invoice",
-    backLink: {
-      doctype: "Sales Invoice",
-      filters: [f("sales_order", "=", "<name>")],
-    },
-  },
-];
+  const isChildTable = def.queryDoctype?.includes(" ") ?? false;
+  const filters: [string, string, string, unknown][] = [];
+
+  if (isChildTable) {
+    filters.push([def.queryDoctype!, def.field!, "=", "<name>"]);
+  } else {
+    // Header field on the queried parent
+    filters.push(["", def.field!, "=", "<name>"]);
+  }
+
+  if (def.extraFilters) {
+    for (const ef of def.extraFilters) filters.push(ef);
+  }
+
+  return {
+    doctype: def.queryDoctype!,
+    filters,
+    selectFields: def.selectFields ?? (def.returnParent ? ["name", "parent"] : ["name"]),
+  };
+}
+
+// Build the legacy `EDGES` array lazily from the link map. Memoized.
+let _CACHED_EDGES: FlowAdjacency[] | null = null;
+
+function buildEdges(): FlowAdjacency[] {
+  if (_CACHED_EDGES) return _CACHED_EDGES;
+  const out: FlowAdjacency[] = [];
+  // Source doctypes we care about — derived from the link map's `from` side.
+  // All 13+ doctypes that appear in flows.
+  const sources = new Set<string>();
+  for (const def of [
+    ...getFlowLinksFrom("Lead"),
+    ...getFlowLinksFrom("Customer"),
+    ...getFlowLinksFrom("Opportunity"),
+    ...getFlowLinksFrom("Quotation"),
+    ...getFlowLinksFrom("Sales Order"),
+    ...getFlowLinksFrom("Delivery Note"),
+    ...getFlowLinksFrom("Sales Invoice"),
+    ...getFlowLinksFrom("Payment Entry"),
+    ...getFlowLinksFrom("Work Order"),
+    ...getFlowLinksFrom("BOM"),
+    ...getFlowLinksFrom("Material Request"),
+    ...getFlowLinksFrom("Request for Quotation"),
+    ...getFlowLinksFrom("Supplier Quotation"),
+    ...getFlowLinksFrom("Purchase Order"),
+    ...getFlowLinksFrom("Purchase Receipt"),
+  ]) sources.add(def.from);
+
+  for (const source of sources) {
+    const links = getFlowLinksFrom(source);
+    for (const def of links) {
+      out.push({
+        sourceDoctype: def.from,
+        targetDoctype: def.to,
+        direction: def.direction,
+        label: EDGE_LABELS[edgeKey(def.from, def.to)] ?? `${def.direction === "forward" ? "Create" : "View"} ${def.to}`,
+        backLink: toBackLinkQuery(def),
+      });
+    }
+  }
+  _CACHED_EDGES = out;
+  return out;
+}
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -304,7 +183,7 @@ const EDGES: FlowAdjacency[] = [
  * (forward first, then backward).
  */
 export function getAdjacencies(doctype: string): FlowAdjacency[] {
-  return EDGES.filter((e) => e.sourceDoctype === doctype).sort((a, b) => {
+  return buildEdges().filter((e) => e.sourceDoctype === doctype).sort((a, b) => {
     if (a.direction === b.direction) return 0;
     return a.direction === "forward" ? -1 : 1;
   });
@@ -315,7 +194,7 @@ export function getAdjacencies(doctype: string): FlowAdjacency[] {
  * Reconciliation, Stock Ledger, masters) return false.
  */
 export function hasAdjacency(doctype: string): boolean {
-  return EDGES.some((e) => e.sourceDoctype === doctype);
+  return buildEdges().some((e) => e.sourceDoctype === doctype);
 }
 
 /**
@@ -365,5 +244,13 @@ export function fillBackLinkFilter(
 
 /** All doctypes with adjacency (test/UI use). */
 export const ADJACENT_DOCTYPES: string[] = Array.from(
-  new Set(EDGES.map((e) => e.sourceDoctype)),
+  new Set(buildEdges().map((e) => e.sourceDoctype)),
 );
+
+// Re-export the link-map findFlowLink for callers that want raw access.
+export { findFlowLink, getFlowLinksFrom };
+
+// Suppress unused-import warning for the helper used by `use-flow-chain.ts`
+// (it imports `f3` directly from `flow-link-map.ts`; this file just re-exports
+// the pattern for legacy callers). Not exported again here.
+void f3;

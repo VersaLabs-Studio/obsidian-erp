@@ -36,12 +36,11 @@ import { isModuleBuilt } from "@/lib/flows/module-availability";
 import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
 import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
-import { resolveFlowChain } from "@/lib/flows/flow-chain-resolver";
+import { useFlowChain } from "@/hooks/flows/use-flow-chain";
 import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
 import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
 import { useFrappeDoc, useFrappeList, useFrappeUpdate } from "@/hooks/generic";
 import type { WorkOrder, SalesOrder, Bom } from "@/types/doctype-types";
-import type { FlowStageStatus } from "@/types/flow-types";
 import { cn } from "@/lib/utils";
 
 const ETB = new Intl.NumberFormat("en-ET", {
@@ -91,34 +90,8 @@ export default function WorkOrderDetailPage() {
     { enabled: !isLoading && !!wo },
   );
 
-  // -- Build the flow chain ---------------------------------------------------
-  const chain = useMemo(() => {
-    const stageStatuses: Record<
-      string,
-      { status: FlowStageStatus; documentName?: string; documentUrl?: string }
-    > = {};
-
-    // Upstream: Sales Order
-    if (wo?.sales_order) {
-      stageStatuses["Sales Order"] = {
-        status: "completed",
-        documentName: wo.sales_order,
-        documentUrl: `/sales/sales-order/${encodeURIComponent(wo.sales_order)}`,
-      };
-    }
-
-    // Downstream: Stock Entry
-    const seName = stockEntries?.[0]?.name;
-    if (seName) {
-      stageStatuses["Stock Entry"] = {
-        status: "completed",
-        documentName: seName,
-        documentUrl: `/stock/stock-entry/${encodeURIComponent(seName)}`,
-      };
-    }
-
-    return resolveFlowChain("Work Order", name, stageStatuses);
-  }, [wo?.sales_order, stockEntries, name]);
+  // 2N Part 1.1: unified flow resolution.
+  const { result: chain, isLoading: chainLoading } = useFlowChain("Work Order", name);
 
   // -- Costing ----------------------------------------------------------------
   const costing = useMemo(() => {
@@ -587,7 +560,7 @@ export default function WorkOrderDetailPage() {
           </InfoCard>
 
           <InfoCard title="Journey">
-            <FlowRail result={chain} currentDocName={name} sourceDoctype="Work Order" isLoading={loadingSE} />
+            <FlowRail result={chain} currentDocName={name} sourceDoctype="Work Order" isLoading={chainLoading} />
           </InfoCard>
 
           {/* 2L 1B: Universal cross-flow actions menu */}

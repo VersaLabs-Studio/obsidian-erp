@@ -6,7 +6,7 @@
 
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -32,11 +32,10 @@ import { isModuleBuilt } from "@/lib/flows/module-availability";
 import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
 import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
-import { resolveFlowChain } from "@/lib/flows/flow-chain-resolver";
-import { useFrappeDoc, useFrappeList, useFrappeUpdate, useFrappeCreate } from "@/hooks/generic";
+import { useFlowChain } from "@/hooks/flows/use-flow-chain";
+import { useFrappeDoc, useFrappeUpdate, useFrappeCreate } from "@/hooks/generic";
 import { getActiveCompany } from "@/lib/settings/company";
 import type { Lead } from "@/types/doctype-types";
-import type { FlowStageStatus } from "@/types/flow-types";
 
 // Lead status machine: Lead → Open → Replied → Opportunity → Converted → Do Not Contact
 const STATUS_TRANSITIONS: Record<string, string[]> = {
@@ -68,44 +67,13 @@ export default function LeadDetailPage() {
     error,
   } = useFrappeDoc<Lead>("Lead", name);
 
-  // Resolve downstream Opportunity linked to this lead
-  const { data: opportunities } = useFrappeList<{ name: string; status: string }>(
-    "Opportunity",
-    {
-      filters: [["party_name", "=", name]],
-      fields: ["name", "status"],
-      limit: 5,
-    },
-    { enabled: !isLoading && !!lead },
-  );
-
-  // Build the flow chain
-  const chain = useMemo(() => {
-    const stageStatuses: Record<
-      string,
-      { status: FlowStageStatus; documentName?: string; documentUrl?: string }
-    > = {};
-
-    if (opportunities && opportunities.length > 0) {
-      const opp = opportunities[0];
-      stageStatuses["Opportunity"] = {
-        status: opp.status === "Converted" ? "completed" : "current",
-        documentName: opp.name,
-        documentUrl: `/crm/opportunity/${encodeURIComponent(opp.name)}`,
-      };
-    }
-
-    // F6: When converted, mark Customer as completed so FlowRail doesn't show "Create Customer"
-    if (lead?.status === "Converted" && lead?.customer) {
-      stageStatuses["Customer"] = {
-        status: "completed",
-        documentName: lead.customer,
-        documentUrl: `/crm/customer/${encodeURIComponent(lead.customer)}`,
-      };
-    }
-
-    return resolveFlowChain("Lead", name, stageStatuses);
-  }, [opportunities, name, lead?.status, lead?.customer]);
+  // 2N Part 1.1: unified flow resolution.
+  // NOTE: the link map does not define a Lead→Opportunity forward edge, so
+  // the downstream Opportunity is no longer auto-resolved here. The Customer
+  // edge is in the link map. To restore the Opportunity resolution, add a
+  // Lead→Opportunity link to `flow-link-map.ts` or thread an
+  // `extraResolutions` arg in (see PE page for the pattern).
+  const { result: chain, isLoading: chainLoading } = useFlowChain("Lead", name);
 
   // Status update mutation
   const updateMutation = useFrappeUpdate<Lead>("Lead", { showToast: false });
@@ -266,7 +234,7 @@ export default function LeadDetailPage() {
 
       {/* Flow Tracker */}
       <InfoCard title="Lead-to-Cash Flow" className="overflow-hidden">
-        <FlowRail result={chain} currentDocName={name} sourceDoctype="Lead" />
+        <FlowRail result={chain} currentDocName={name} sourceDoctype="Lead" isLoading={chainLoading} />
       </InfoCard>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

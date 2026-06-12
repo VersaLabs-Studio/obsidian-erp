@@ -38,12 +38,11 @@ import { isModuleBuilt } from "@/lib/flows/module-availability";
 import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
 import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
-import { resolveFlowChain } from "@/lib/flows/flow-chain-resolver";
+import { useFlowChain } from "@/hooks/flows/use-flow-chain";
 import { useFrappeDoc, useFrappeList, useFrappeUpdate, useFrappeDelete } from "@/hooks/generic";
 import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
 import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
 import type { Quotation } from "@/types/doctype-types";
-import type { FlowStageStatus } from "@/types/flow-types";
 
 const ETB = new Intl.NumberFormat("en-ET", { style: "currency", currency: "ETB" });
 
@@ -88,35 +87,14 @@ export default function QuotationDetailPage() {
     return linkedSalesOrderItems?.[0]?.parent;
   }, [linkedSalesOrderItems]);
 
-  // Build FlowRail stages
-  const chain = useMemo(() => {
-    const stageStatuses: Record<
-      string,
-      { status: FlowStageStatus; documentName?: string; documentUrl?: string }
-    > = {};
-
-    const partyName = quote?.party_name;
-    const partyType = quote?.quotation_to;
-
-    if (partyName && partyType) {
-      const route = partyType === "Customer" ? "crm/customer" : "crm/lead";
-      stageStatuses[partyType] = {
-        status: "completed",
-        documentName: partyName,
-        documentUrl: `/${route}/${encodeURIComponent(partyName)}`,
-      };
-    }
-
-    if (soName) {
-      stageStatuses["Sales Order"] = {
-        status: "completed",
-        documentName: soName,
-        documentUrl: `/sales/sales-order/${encodeURIComponent(soName)}`,
-      };
-    }
-
-    return resolveFlowChain("Quotation", name, stageStatuses);
-  }, [quote, soName, name]);
+  // 2N Part 1.1: unified flow resolution.
+  // NOTE: the link map does not define a Quotation→Lead/Customer backward
+  // edge, so the upstream party (Lead/Customer) is no longer auto-resolved
+  // here. The downstream Sales Order is resolved by the hook. To restore
+  // the upstream party resolution, add a Quotation→{Lead,Customer} link to
+  // `flow-link-map.ts` or thread an `extraResolutions` arg in (see PE page
+  // for the pattern).
+  const { result: chain, isLoading: chainLoading } = useFlowChain("Quotation", name);
 
   const updateMutation = useFrappeUpdate<Quotation>("Quotation", {
     showToast: false,
@@ -271,7 +249,7 @@ export default function QuotationDetailPage() {
 
       {/* Flow Tracker */}
       <InfoCard title="Lead-to-Cash Flow" className="overflow-hidden">
-        <FlowRail result={chain} currentDocName={name} sourceDoctype="Quotation" isLoading={loadingSO} />
+        <FlowRail result={chain} currentDocName={name} sourceDoctype="Quotation" isLoading={chainLoading} />
       </InfoCard>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

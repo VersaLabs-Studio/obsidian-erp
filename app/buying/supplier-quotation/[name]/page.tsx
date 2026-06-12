@@ -4,7 +4,7 @@
 // Supplier Quotation Detail — FlowRail, WhatsNext, ActivityTimeline, ConfirmDialog.
 // OKLCH semantic tokens only. Real persistence.
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
@@ -24,10 +24,9 @@ import { isModuleBuilt } from "@/lib/flows/module-availability";
 import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
 import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
-import { resolveFlowChain } from "@/lib/flows/flow-chain-resolver";
+import { useFlowChain } from "@/hooks/flows/use-flow-chain";
 import { useFrappeDoc, useFrappeUpdate } from "@/hooks/generic";
 import type { SupplierQuotation } from "@/types/doctype-types";
-import type { FlowStageStatus } from "@/types/flow-types";
 
 const ETB = new Intl.NumberFormat("en-ET", {
   style: "currency",
@@ -58,30 +57,8 @@ export default function SupplierQuotationDetailPage() {
     error,
   } = useFrappeDoc<SupplierQuotation>("Supplier Quotation", name);
 
-  // -- Build the flow chain --------------------------------------------------
-  const chain = useMemo(() => {
-    const stageStatuses: Record<
-      string,
-      {
-        status: FlowStageStatus;
-        documentName?: string;
-        documentUrl?: string;
-      }
-    > = {};
-
-    // Upstream: Request for Quotation
-    // SQ doesn't have a direct link field to RFQ in the standard schema,
-    // but we can check for a naming convention or linked field if available.
-
-    // Current document
-    stageStatuses["Supplier Quotation"] = {
-      status: sq?.docstatus === 1 ? "completed" : "current",
-      documentName: name,
-      documentUrl: `/buying/supplier-quotation/${encodeURIComponent(name)}`,
-    };
-
-    return resolveFlowChain("Supplier Quotation", name, stageStatuses);
-  }, [sq, name]);
+  // 2N Part 1.1: unified flow resolution.
+  const { result: chain, isLoading: chainLoading } = useFlowChain("Supplier Quotation", name);
 
   // -- Status actions --------------------------------------------------------
   const updateMutation = useFrappeUpdate<SupplierQuotation>(
@@ -173,7 +150,7 @@ export default function SupplierQuotationDetailPage() {
 
       {/* Flow Tracker */}
       <InfoCard title="Procurement Flow" className="overflow-hidden">
-        <FlowRail result={chain} currentDocName={name} sourceDoctype="Supplier Quotation" />
+        <FlowRail result={chain} currentDocName={name} sourceDoctype="Supplier Quotation" isLoading={chainLoading} />
       </InfoCard>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

@@ -3,8 +3,11 @@
 // Per Workflow Part 3 §4.2 — resolves the complete chain status for a document
 
 import type { FlowChainResult, FlowStage, FlowStageStatus } from "@/types/flow-types";
-import { getFlowForDocType } from "./flow-definitions";
+import { getFlowForDocType, getFlowDefinition } from "./flow-definitions";
 import { isModuleBuilt } from "./module-availability";
+
+// Re-export for the 2N Part 1.1 `useFlowChain` hook.
+export { getFlowForDocType, getFlowDefinition };
 
 /**
  * Resolve the complete flow chain for a document

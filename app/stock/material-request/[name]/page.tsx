@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
@@ -20,10 +20,9 @@ import { isModuleBuilt } from "@/lib/flows/module-availability";
 import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
 import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
-import { resolveFlowChain } from "@/lib/flows/flow-chain-resolver";
-import { useFrappeDoc, useFrappeList, useFrappeUpdate, useFrappeDelete } from "@/hooks/generic";
+import { useFlowChain } from "@/hooks/flows/use-flow-chain";
+import { useFrappeDoc, useFrappeUpdate, useFrappeDelete } from "@/hooks/generic";
 import type { MaterialRequest } from "@/types/doctype-types";
-import type { FlowStageStatus } from "@/types/flow-types";
 
 interface MRItem {
   item_code: string;
@@ -55,35 +54,8 @@ export default function MaterialRequestDetailPage() {
   const isDraft = mr?.docstatus === 0;
   const isSubmitted = mr?.docstatus === 1;
 
-  const { data: purchaseOrders, isLoading: loadingPO } = useFrappeList<{ name: string }>(
-    "Purchase Order",
-    { filters: [["material_request", "=", name]], fields: ["name"], limit: 5 },
-    { enabled: !isLoading && !!mr }
-  );
-
-  const chain = useMemo(() => {
-    const stageStatuses: Record<
-      string,
-      { status: FlowStageStatus; documentName?: string; documentUrl?: string }
-    > = {};
-
-    stageStatuses["Material Request"] = {
-      status: isSubmitted ? "completed" : "current",
-      documentName: name,
-      documentUrl: `/stock/material-request/${encodeURIComponent(name)}`,
-    };
-
-    const poName = purchaseOrders?.[0]?.name;
-    if (poName) {
-      stageStatuses["Purchase Order"] = {
-        status: "completed",
-        documentName: poName,
-        documentUrl: `/buying/purchase-order/${encodeURIComponent(poName)}`,
-      };
-    }
-
-    return resolveFlowChain("Material Request", name, stageStatuses);
-  }, [mr, purchaseOrders, name, isSubmitted]);
+  // 2N Part 1.1: unified flow resolution.
+  const { result: chain, isLoading: chainLoading } = useFlowChain("Material Request", name);
 
   const updateMutation = useFrappeUpdate<MaterialRequest>("Material Request", {
     showToast: false,
@@ -193,7 +165,7 @@ export default function MaterialRequestDetailPage() {
       />
 
       <InfoCard title="Procurement Flow" className="overflow-hidden">
-        <FlowRail result={chain} currentDocName={name} sourceDoctype="Material Request" isLoading={loadingPO} />
+        <FlowRail result={chain} currentDocName={name} sourceDoctype="Material Request" isLoading={chainLoading} />
       </InfoCard>
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">

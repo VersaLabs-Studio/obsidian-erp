@@ -6,7 +6,7 @@
 // Upstream: Purchase Order / Purchase Receipt. Downstream: Payment Entry.
 // OKLCH semantic tokens only. StatusBadge for status display.
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -31,10 +31,9 @@ import { isModuleBuilt } from "@/lib/flows/module-availability";
 import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
 import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
-import { resolveFlowChain } from "@/lib/flows/flow-chain-resolver";
+import { useFlowChain } from "@/hooks/flows/use-flow-chain";
 import { useFrappeDoc, useFrappeList, useFrappeUpdate } from "@/hooks/generic";
 import type { PurchaseInvoice } from "@/types/doctype-types";
-import type { FlowStageStatus } from "@/types/flow-types";
 
 const ETB = new Intl.NumberFormat("en-ET", {
   style: "currency",
@@ -92,41 +91,8 @@ export default function PurchaseInvoiceDetailPage() {
     { enabled: !isLoading && !!invoice },
   );
 
-  // -- Build the flow chain from real linked documents -----------------------
-  const chain = useMemo(() => {
-    const items = (invoice?.items ?? []) as Array<{
-      purchase_order?: string;
-      purchase_receipt?: string;
-    }>;
-    const poName = items.find((i) => i?.purchase_order)?.purchase_order;
-    const peName = paymentEntries?.[0]?.name;
-
-    const stageStatuses: Record<
-      string,
-      {
-        status: FlowStageStatus;
-        documentName?: string;
-        documentUrl?: string;
-      }
-    > = {};
-
-    if (poName) {
-      stageStatuses["Purchase Order"] = {
-        status: "completed",
-        documentName: poName,
-        documentUrl: `/buying/purchase-order/${encodeURIComponent(poName)}`,
-      };
-    }
-    if (peName) {
-      stageStatuses["Payment Entry"] = {
-        status: "completed",
-        documentName: peName,
-        documentUrl: `/accounting/payment-entry/${encodeURIComponent(peName)}`,
-      };
-    }
-
-    return resolveFlowChain("Purchase Invoice", name, stageStatuses);
-  }, [invoice, paymentEntries, name]);
+  // 2N Part 1.1: unified flow resolution.
+  const { result: chain, isLoading: chainLoading } = useFlowChain("Purchase Invoice", name);
 
   // -- Status actions --------------------------------------------------------
   const updateMutation = useFrappeUpdate<PurchaseInvoice>(
@@ -253,7 +219,7 @@ export default function PurchaseInvoiceDetailPage() {
 
       {/* Flow Tracker */}
       <InfoCard title="Procure-to-Pay Flow" className="overflow-hidden">
-        <FlowRail result={chain} currentDocName={name} sourceDoctype="Purchase Invoice" isLoading={loadingPE} />
+        <FlowRail result={chain} currentDocName={name} sourceDoctype="Purchase Invoice" isLoading={chainLoading} />
       </InfoCard>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
