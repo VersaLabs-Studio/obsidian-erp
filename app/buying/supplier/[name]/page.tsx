@@ -389,6 +389,13 @@ export default function SupplierMasterHub() {
     };
   }, [purchaseOrders, purchaseInvoices, purchaseReceipts, paymentEntries]);
 
+  // 2N Part 1.0: deleteMutation moved UP — Rules-of-Hooks. See ItemMasterHub
+  // for the full explanation. SupplierMasterHub had the same bug; React
+  // threw "change in the order of Hooks called by SupplierMasterHub."
+  const deleteMutation = useFrappeDelete("Supplier", {
+    onSuccess: () => router.push("/buying/supplier"),
+  });
+
   // -- Loading / error ------------------------------------------------------
   if (isLoading) return <SkeletonDetail />;
   if (error || !supplier) {
@@ -398,11 +405,6 @@ export default function SupplierMasterHub() {
       </div>
     );
   }
-
-  // -- Delete mutation ------------------------------------------------------
-  const deleteMutation = useFrappeDelete("Supplier", {
-    onSuccess: () => router.push("/buying/supplier"),
-  });
 
   const isDisabled = supplier.disabled === 1;
   const displayName = supplier.supplier_name;

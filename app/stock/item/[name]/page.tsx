@@ -286,6 +286,15 @@ export default function ItemMasterHub() {
     return { onHand, projected, valuationValue, warehouses, lowStock };
   }, [bins]);
 
+  // 2N Part 1.0: deleteMutation moved UP — Rules-of-Hooks. Hooks must run
+  // unconditionally on every render, before any branch that can `return`.
+  // Previously the hook sat below the isLoading / error early returns, so
+  // the first render returned before calling it and the next render called
+  // it — React threw "change in the order of Hooks called by ItemMasterHub".
+  const deleteMutation = useFrappeDelete("Item", {
+    onSuccess: () => router.push("/stock/item"),
+  });
+
   // -- Loading / error states ----------------------------------------------
   if (isLoading) return <SkeletonDetail />;
   if (error || !item) {
@@ -295,11 +304,6 @@ export default function ItemMasterHub() {
       </div>
     );
   }
-
-  // -- Delete mutation ------------------------------------------------------
-  const deleteMutation = useFrappeDelete("Item", {
-    onSuccess: () => router.push("/stock/item"),
-  });
 
   const displayName = item.item_name || item.item_code;
   const isStock = item.is_stock_item === 1;
