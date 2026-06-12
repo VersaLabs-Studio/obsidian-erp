@@ -413,6 +413,106 @@ const strategies: ErrorStrategy[] = [
       };
     },
   },
+
+  // 2N Part 1.6: LINKED_DOC_NOT_SUBMITTED — Frappe's submit-time guard. When
+  // the user creates a child doc (e.g. Payment Entry against a Sales Invoice,
+  // or a Sales Invoice from a Delivery Note) against a draft parent, Frappe
+  // returns "<DocType> <name> must be submitted" / "is not submitted" /
+  // "should be submitted". Previously the dialog showed only text + Dismiss,
+  // forcing the user to manually find the parent in the sidebar. The new
+  // resolver parses the parent doctype + name out of the message and
+  // surfaces a navigate action to the parent doc (same href + action
+  // pattern as LINKED_DOC_EXISTS so notification deep-linking works).
+  {
+    code: "LINKED_DOC_NOT_SUBMITTED",
+    match: (m) =>
+      // Match the three common Frappe phrasings. Each MUST be present
+      // verbatim — we don't want to steal from the cancel-time
+      // LINKED_DOC_EXISTS strategy.
+      /must be submitted/i.test(m) ||
+      /is not submitted/i.test(m) ||
+      /should be submitted/i.test(m),
+    resolve: (msg) => {
+      const linkedNameMatch = msg.match(/([A-Z]{2,}-[\w-]+-\d+(?:-\d+)?)/i);
+      const linkedName = linkedNameMatch?.[1]?.trim() ?? "the linked document";
+
+      // Parse the doctype: walk back from the name to the nearest
+      // capitalized noun phrase. Strip the "<DocType> <name>" pair and
+      // split the remainder on whitespace; the trailing 1-3 words are
+      // usually the doctype ("Sales Invoice", "Delivery Note", etc.).
+      const idIndex = linkedNameMatch?.index ?? -1;
+      let linkedDoctype = "Linked document";
+      if (idIndex > 0) {
+        const beforeId = msg.slice(0, idIndex);
+        // Strip a trailing "<DocType> <Name>" pair if the parser is
+        // matching the name (e.g. "Sales Invoice ACC-SINV-2026-00007").
+        // Take the last 3 words — robust to "the Sales Invoice",
+        // "linked Sales Invoice", and bare "Sales Invoice".
+        const words = beforeId.trim().split(/\s+/);
+        const last3 = words.slice(-3).join(" ");
+        // Try 2-word doctype, then 3-word, then 1-word.
+        for (const len of [2, 3, 1]) {
+          const candidate = words.slice(-len).join(" ");
+          if (
+            /^[A-Z][A-Za-z]*(\s[A-Z][A-Za-z]*){0,2}$/.test(candidate) &&
+            candidate.length > 3
+          ) {
+            linkedDoctype = candidate;
+            break;
+          }
+        }
+        // If we couldn't parse a sensible doctype, fall back to the
+        // whole `last3` string.
+        if (linkedDoctype === "Linked document" && last3) {
+          linkedDoctype = last3;
+        }
+      }
+
+      const routeMap: Record<string, string> = {
+        "Stock Entry": "stock/stock-entry",
+        "Sales Order": "sales/sales-order",
+        "Delivery Note": "stock/delivery-note",
+        "Sales Invoice": "accounting/sales-invoice",
+        "Purchase Order": "buying/purchase-order",
+        "Purchase Invoice": "accounting/purchase-invoice",
+        "Purchase Receipt": "stock/purchase-receipt",
+        "Work Order": "manufacturing/work-order",
+        "Material Request": "stock/material-request",
+        "Payment Entry": "accounting/payment-entry",
+        "Journal Entry": "accounting/journal-entry",
+        "BOM": "manufacturing/bom",
+        "Quotation": "sales/quotation",
+        "Stock Reconciliation": "stock/stock-reconciliation",
+        "Sales Invoice Item": "accounting/sales-invoice",
+        "Delivery Note Item": "stock/delivery-note",
+      };
+      const route = routeMap[linkedDoctype] ?? linkedDoctype.toLowerCase().replace(/\s+/g, "-");
+
+      return {
+        title: "Submit the linked document first",
+        explanation: `${linkedDoctype} ${linkedName} must be submitted before you can continue. Open it, submit it, then return here.`,
+        details: [`Linked: ${linkedDoctype} ${linkedName}`],
+        severity: "warning" as const,
+        actions: [
+          {
+            label: `Open ${linkedDoctype} ${linkedName} to submit it`,
+            kind: "navigate" as const,
+            variant: "default" as const,
+            href: `/${route}/${encodeURIComponent(linkedName)}`,
+            run: () => {
+              window.location.href = `/${route}/${encodeURIComponent(linkedName)}`;
+            },
+          },
+          {
+            label: "Dismiss",
+            kind: "dismiss" as const,
+            variant: "ghost" as const,
+            run: () => {},
+          },
+        ],
+      };
+    },
+  },
 ];
 
 // ---------------------------------------------------------------------------

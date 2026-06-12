@@ -79,6 +79,36 @@ const customerFields: QuickAddFieldSpec[] = [
       { value: "Individual", label: "Individual" },
     ],
   },
+  // 2N Part 1.3: richer field set. The Customer's customer_group and
+  // territory are real FK fields — surfaced as plain input fields (no
+  // Quick-Add on those tables, since they're not in the registry). All
+  // optional so the over-strict CreateSchema doesn't trip.
+  {
+    name: "customer_group",
+    label: "Customer group",
+    required: false,
+    placeholder: "e.g. Commercial",
+    helpText: "Optional. Defaults to All Customer Groups.",
+  },
+  {
+    name: "territory",
+    label: "Territory",
+    required: false,
+    placeholder: "e.g. Ethiopia",
+  },
+  {
+    name: "mobile_no",
+    label: "Mobile",
+    required: false,
+    placeholder: "+251 ...",
+  },
+  {
+    name: "email_id",
+    label: "Email",
+    required: false,
+    placeholder: "name@example.com",
+    type: "input",
+  },
 ];
 
 const supplierFields: QuickAddFieldSpec[] = [
@@ -97,6 +127,25 @@ const supplierFields: QuickAddFieldSpec[] = [
       { value: "Company", label: "Company" },
       { value: "Individual", label: "Individual" },
     ],
+  },
+  // 2N Part 1.3: richer field set for Supplier (mirrors Customer).
+  {
+    name: "supplier_group",
+    label: "Supplier group",
+    required: false,
+    placeholder: "e.g. Local",
+  },
+  {
+    name: "country",
+    label: "Country",
+    required: false,
+    placeholder: "e.g. Ethiopia",
+  },
+  {
+    name: "mobile_no",
+    label: "Mobile",
+    required: false,
+    placeholder: "+251 ...",
   },
 ];
 

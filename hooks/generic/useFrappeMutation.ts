@@ -138,10 +138,23 @@ export function useFrappeMutation<TData = unknown, TVariables = unknown>(
     },
 
     onSuccess: (data, variables) => {
-      // Invalidate queries
-      queryClient.invalidateQueries({ queryKey: [doctype] });
+      // 2N Part 1.5: invalidate the list query key for this doctype so a
+      // detail-page submit/cancel/delete immediately shows on the list page
+      // (previously the PE list still showed "Draft" after a submit because
+      // the mutation never invalidated the list cache). We match both the
+      // `[doctype]` prefix (used by `useFrappeList`'s queryKey) AND the
+      // `[getApiPath(doctype)]` key (used by QuickAdd and any other consumer
+      // that keys on the API path). `refetchType: "all"` forces active
+      // queries to refetch immediately, not just on next mount — so a list
+      // page already-mounted in the background (e.g. via tab keep-alive)
+      // picks up the new docstatus without a remount.
+      queryClient.invalidateQueries({ queryKey: [doctype], refetchType: "all" });
+      queryClient.invalidateQueries({
+        queryKey: [getApiPath(doctype)],
+        refetchType: "all",
+      });
       config?.invalidateKeys?.forEach((key) => {
-        queryClient.invalidateQueries({ queryKey: key });
+        queryClient.invalidateQueries({ queryKey: key, refetchType: "all" });
       });
 
       // Show success toast

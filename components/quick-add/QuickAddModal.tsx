@@ -220,6 +220,27 @@ function QuickAddFieldRow({
   field: QuickAddFieldSpec;
   control: ReturnType<typeof useForm<Record<string, string>>>["control"];
 }) {
+  // 2N Part 1.2: for `select` fields, render `FormSelect` standalone — it
+  // already supplies the label + required asterisk + message via the
+  // `DataField`/`FormItem` wrapper. The previous code wrapped every
+  // field in `FormField`+`FormItem` (rendering its own label) AND then
+  // for selects rendered `<FormSelect ... label={...} />` (which renders
+  // ANOTHER label via `DataField`). That produced two labels and two
+  // nested `FormField` registrations on the same `name` — a latent RHF
+  // bug. Branching here keeps the text branch unchanged.
+  if (field.type === "select" && field.options) {
+    return (
+      <FormSelect
+        control={control}
+        name={field.name}
+        label={field.label}
+        required={field.required}
+        placeholder={field.placeholder}
+        options={field.options}
+      />
+    );
+  }
+
   const labelEl = field.required ? (
     <FormLabel>
       {field.label} <span className="text-destructive">*</span>
@@ -236,24 +257,14 @@ function QuickAddFieldRow({
     <FormItem>
       {labelEl}
       <FormControl>
-        {field.type === "select" && field.options ? (
-          <FormSelect
-            control={control}
-            name={field.name}
-            label={field.label}
-            options={field.options}
-            placeholder={field.placeholder}
-          />
-        ) : (
-          <Input
-            {...f}
-            placeholder={field.placeholder}
-            className={cn(
-              "h-12 rounded-xl bg-secondary/30 border-0",
-            )}
-            value={f.value ?? ""}
-          />
-        )}
+        <Input
+          {...f}
+          placeholder={field.placeholder}
+          className={cn(
+            "h-12 rounded-xl bg-secondary/30 border-0",
+          )}
+          value={f.value ?? ""}
+        />
       </FormControl>
       {field.helpText && <FormDescription>{field.helpText}</FormDescription>}
       <FormMessage />
