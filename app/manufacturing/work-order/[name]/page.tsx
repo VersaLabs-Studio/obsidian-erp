@@ -39,6 +39,8 @@ import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMe
 import { useFlowChain } from "@/hooks/flows/use-flow-chain";
 import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
 import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
+import { StartProductionModal } from "@/components/manufacturing/StartProductionModal";
+import { FinishProductionModal } from "@/components/manufacturing/FinishProductionModal";
 import { useFrappeDoc, useFrappeList, useFrappeUpdate } from "@/hooks/generic";
 import type { WorkOrder, SalesOrder, Bom } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
@@ -57,6 +59,11 @@ export default function WorkOrderDetailPage() {
   const [confirmStop, setConfirmStop] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
+  // 2O Part 5.1/5.3 — one-click production modals. We replace the prior
+  // deep-link-into-SE-wizard with a single-modal action that creates +
+  // submits the Stock Entry atomically and shows a summary.
+  const [startOpen, setStartOpen] = useState(false);
+  const [finishOpen, setFinishOpen] = useState(false);
   const { resolution, showError, dismiss } = useGuidedError();
 
   const {
@@ -136,15 +143,16 @@ export default function WorkOrderDetailPage() {
   };
 
   const handleStartProduction = () => {
-    router.push(
-      `/stock/stock-entry/new?purpose=Material Transfer for Manufacture&work_order=${encodeURIComponent(name)}`,
-    );
+    // 2O Part 5.1: open the one-click start modal instead of deep-linking
+    // into the SE wizard. The modal computes the materials, surfaces a
+    // summary, and on confirm creates + submits the Material Transfer SE.
+    setStartOpen(true);
   };
 
   const handleFinishProduction = () => {
-    router.push(
-      `/stock/stock-entry/new?purpose=Manufacture&work_order=${encodeURIComponent(name)}`,
-    );
+    // 2O Part 5.3: same pattern for finish — open the one-click modal
+    // that auto-builds the Manufacture Stock Entry payload.
+    setFinishOpen(true);
   };
 
   const handleStop = () => {
@@ -636,6 +644,50 @@ export default function WorkOrderDetailPage() {
         variant="destructive"
         onConfirm={handleDelete}
       />
+
+      {/* 2O Part 5: one-click MFG modals. The modals own their own loading
+          state + idempotency check + shortfall guidance. */}
+      <StartProductionModal
+        open={startOpen}
+        onOpenChange={setStartOpen}
+        workOrderName={wo.name}
+        workOrderQty={Number(wo.qty) || 0}
+        productionItem={wo.production_item}
+        sourceWarehouse={wo.source_warehouse}
+        wipWarehouse={wo.wip_warehouse}
+        fgWarehouse={wo.fg_warehouse}
+        requiredItems={
+          (wo.required_items as Array<{
+            item_code: string;
+            item_name?: string;
+            required_qty: number;
+            transferred_qty?: number;
+            consumed_qty?: number;
+            source_warehouse?: string;
+          }>) ?? []
+        }
+      />
+      <FinishProductionModal
+        open={finishOpen}
+        onOpenChange={setFinishOpen}
+        workOrderName={wo.name}
+        workOrderQty={Number(wo.qty) || 0}
+        producedQty={Number(wo.produced_qty) || 0}
+        productionItem={wo.production_item}
+        wipWarehouse={wo.wip_warehouse}
+        fgWarehouse={wo.fg_warehouse}
+        requiredItems={
+          (wo.required_items as Array<{
+            item_code: string;
+            item_name?: string;
+            required_qty: number;
+            transferred_qty?: number;
+            consumed_qty?: number;
+            source_warehouse?: string;
+          }>) ?? []
+        }
+      />
+
       <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
     </div>
   );

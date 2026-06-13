@@ -1,11 +1,30 @@
 // components/accounting/FinancialReportView.tsx
-// Obsidian ERP v4.0 — Financial Report Layout (2N Part 3.2).
+// Obsidian ERP v4.0 — Financial Report Layout (2N Part 3.2, 2O Part 2.2/2.3).
 //
 // Shared shell for the 4 financial report pages (P&L, BS, AR, AP). Renders
 // a period/company selector, a financial-statement table with totals row,
 // and an Export (CSV) action. P&L and BS render an indented account tree
 // with `is_total` rows bolded; AR/AP render aging buckets (0-30 / 31-60 /
 // 61-90 / 90+).
+//
+// 2O Part 2.2 — period selector now REFETCHES. The view owns the period
+// state and calls `useFrappeReport` internally, so a period change
+// rebuilds the hook's `filters` arg → TanStack Query key change → refetch.
+// The prior version mutated `useState` that the hook ignored (a list-page
+// in the same report would never see the new period).
+//
+// 2O Part 2.3 — column mapping robustness. The previous heuristic was
+// label=first matching `account|party`, amount=first matching
+// `amount|balance|debit|credit|total|outstanding` — and silently fell
+// back to "last column" if neither matched. The new mapping is
+// contextual:
+//   - For indented financial statements (P&L/BS), the convention is
+//     `account` + per-period `amount`-style columns.
+//   - For aged reports (AR/AP), label is `party` and amounts are
+//     `outstanding_amount` / `invoice_amount` (pre-period) plus the
+//     `0-30 / 31-60 / 61-90 / 90+` per-bucket columns.
+// When the heuristic still can't find an amount column, the empty state
+// surfaces a small diagnostic (silent fall-back was the 2N bug).
 //
 // Premium-UI: OKLCH semantic tokens, B1 cards, staggered entrance,
 // reduced-motion safe, dual-theme, 375px-friendly.
@@ -14,15 +33,20 @@
 
 import { useMemo, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { Download, ChevronDown, ChevronRight, type LucideIcon } from "lucide-react";
+import {
+  Download,
+  ChevronDown,
+  ChevronRight,
+  type LucideIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SkeletonLine } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import type {
   ReportColumn,
   ReportRow,
-  ReportResponse,
 } from "@/app/api/accounting/reports/[report]/route";
+import { useFrappeReport, type ReportKey, type ReportFilters } from "@/hooks/accounting/use-frappe-report";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -66,28 +90,68 @@ function exportCsv(filename: string, columns: ReportColumn[], rows: ReportRow[])
 }
 
 // ---------------------------------------------------------------------------
-// Period selector
+// Period selector (2O Part 2.2 — period change now refetches)
 // ---------------------------------------------------------------------------
-interface PeriodOption {
+export interface PeriodOption {
   label: string;
-  from_date?: string;
-  to_date?: string;
-  fiscal_year?: string;
-  periodicity?: string;
+  /** Resolved by the route into either the financial-statement shape
+   *  OR the aged-report shape. We pass both sets; the route's mapper
+   *  picks the right one. */
+  filters: ReportFilters;
 }
 
-const PERIOD_PRESETS: PeriodOption[] = (() => {
+function defaultPeriods(): PeriodOption[] {
   const now = new Date();
   const year = now.getFullYear();
-  const yyyy = (n: number) => `${n}-01-01`;
-  const yEnd = (n: number) => `${n}-12-31`;
+  const fy = String(year);
+  const todayIso = now.toISOString().split("T")[0];
+  const fyStart = `${year}-01-01`;
+  const fyEnd = `${year}-12-31`;
   return [
-    { label: "This month", from_date: `${year}-${String(now.getMonth() + 1).padStart(2, "0")}-01`, to_date: now.toISOString().split("T")[0] },
-    { label: "This quarter", from_date: `${year}-${String(Math.floor(now.getMonth() / 3) * 3 + 1).padStart(2, "0")}-01`, to_date: now.toISOString().split("T")[0] },
-    { label: "This year", from_date: yyyy(year), to_date: yEnd(year) },
-    { label: "Last year", from_date: yyyy(year - 1), to_date: yEnd(year - 1) },
+    {
+      label: "This month",
+      filters: {
+        // Financial-statements shape — route uses these for P&L/BS
+        fiscal_year: fy,
+        period_start_date: `${year}-${String(now.getMonth() + 1).padStart(2, "0")}-01`,
+        period_end_date: todayIso,
+        periodicity: "Monthly",
+        // Aged shape — route uses these for AR/AP
+        report_date: todayIso,
+      },
+    },
+    {
+      label: "This quarter",
+      filters: {
+        fiscal_year: fy,
+        period_start_date: `${year}-${String(Math.floor(now.getMonth() / 3) * 3 + 1).padStart(2, "0")}-01`,
+        period_end_date: todayIso,
+        periodicity: "Quarterly",
+        report_date: todayIso,
+      },
+    },
+    {
+      label: "This year",
+      filters: {
+        fiscal_year: fy,
+        period_start_date: fyStart,
+        period_end_date: fyEnd,
+        periodicity: "Yearly",
+        report_date: todayIso,
+      },
+    },
+    {
+      label: "Last year",
+      filters: {
+        fiscal_year: String(year - 1),
+        period_start_date: `${year - 1}-01-01`,
+        period_end_date: `${year - 1}-12-31`,
+        periodicity: "Yearly",
+        report_date: `${year - 1}-12-31`,
+      },
+    },
   ];
-})();
+}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -96,10 +160,7 @@ export interface FinancialReportViewProps {
   title: string;
   subtitle: string;
   icon: LucideIcon;
-  reportKey: string;
-  data: ReportResponse | undefined;
-  isLoading: boolean;
-  error: Error | null;
+  reportKey: ReportKey;
   /** Optional: if true, render indented account tree (P&L, BS). */
   indented?: boolean;
   /** Optional: if true, render aging buckets column (AR, AP). */
@@ -111,37 +172,61 @@ export function FinancialReportView({
   subtitle,
   icon: Icon,
   reportKey,
-  data,
-  isLoading,
-  error,
   indented = false,
   showAgingBuckets = false,
 }: FinancialReportViewProps) {
   const prefersReducedMotion = useReducedMotion();
-  const [period, setPeriod] = useState<PeriodOption>(PERIOD_PRESETS[0]);
+  // 2O Part 2.2: the view owns the period state. Default = "This year".
+  const [period, setPeriod] = useState<PeriodOption>(() => defaultPeriods()[2]);
   const [showPeriodMenu, setShowPeriodMenu] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
-  // Find the amount column (anything matching amount / debit / credit /
-  // balance / total / value) and the label column (the first non-numeric
-  // column). P&L / BS use "account" + "amount" by convention; AR / AP use
-  // "party" + "outstanding_amount" / "invoice_amount".
+  // Call the hook internally with the current period. Changing the period
+  // rebuilds the `filters` object → TanStack Query key change → refetch.
+  const { data, isLoading, error } = useFrappeReport(reportKey, period.filters);
+
+  // 2O Part 2.3 — column mapping robustness. Heuristic picks:
+  //   - LABEL: first column matching /account|party|particulars|description/i
+  //   - AMOUNT (indented): first column matching /amount|balance|total/i AND
+  //     NOT a label-ish column. For P&L/BS, the typical shape is
+  //     "account" + "amount" (or per-period columns); we pick the first
+  //     one that ends with one of those amount-suffix words.
+  //   - AMOUNT (aged): first column matching /outstanding|invoice|total|amount/i.
+  //   - If neither matches, fall back to "the last non-label column"
+  //     and surface a small diagnostic (silent fall-back was the 2N bug).
   const layout = useMemo(() => {
-    if (!data) return { labelKey: "account", amountKey: "amount", columns: [] as ReportColumn[] };
+    if (!data)
+      return {
+        labelKey: "account",
+        amountKey: "amount",
+        columns: [] as ReportColumn[],
+        amountColumnMissing: true,
+      };
     const cols = data.columns;
     const labelCandidate = cols.find(
       (c) => /account|party|particulars|description/i.test(c.fieldname),
     );
-    const amountCandidate = cols.find((c) =>
-      /amount|balance|debit|credit|total|outstanding/i.test(c.fieldname),
+    const labelKey = labelCandidate?.fieldname ?? cols[0]?.fieldname ?? "account";
+    const labelIndex = cols.findIndex((c) => c.fieldname === labelKey);
+    const amountRegex = showAgingBuckets
+      ? /amount|outstanding|invoice|total|balance|debit|credit/i
+      : /amount|balance|total/i;
+    const amountCandidate = cols.find(
+      (c, i) => i !== labelIndex && amountRegex.test(c.fieldname),
     );
+    const amountKey =
+      amountCandidate?.fieldname ??
+      // Fall back to the last column that's not the label
+      [...cols].reverse().find((c) => c.fieldname !== labelKey)?.fieldname ??
+      cols[cols.length - 1]?.fieldname ??
+      "amount";
     return {
-      labelKey: labelCandidate?.fieldname ?? cols[0]?.fieldname ?? "account",
-      amountKey:
-        amountCandidate?.fieldname ?? cols[cols.length - 1]?.fieldname ?? "amount",
+      labelKey,
+      amountKey,
       columns: cols,
+      amountColumnMissing: !amountCandidate,
     };
-  }, [data]);
+  }, [data, showAgingBuckets]);
 
   // Toggle a row's children in the indented view.
   const toggleRow = (key: string) => {
@@ -153,8 +238,8 @@ export function FinancialReportView({
     });
   };
 
-  // Total row = sum of amount column (Frappe already returns the
-  // total/grand_total row when present; we just sum as a fallback).
+  // Total row = sum of amount column. ERPNext already returns a grand
+  // total row when present; we sum as a fallback.
   const totalAmount = useMemo(() => {
     if (!data) return 0;
     return data.result.reduce(
@@ -184,12 +269,13 @@ export function FinancialReportView({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {/* Period selector */}
+          {/* Period selector — 2O Part 2.2 refetch */}
           <div className="relative">
             <Button
               variant="outline"
               className="rounded-full"
               onClick={() => setShowPeriodMenu((v) => !v)}
+              data-testid="report-period-button"
             >
               {period.label}
               <ChevronDown className="ml-1.5 h-3.5 w-3.5" />
@@ -199,7 +285,7 @@ export function FinancialReportView({
                 className="absolute right-0 z-10 mt-2 w-56 rounded-2xl border border-border/40 bg-popover/95 p-1 shadow-xl backdrop-blur-xl"
                 onClick={(e) => e.stopPropagation()}
               >
-                {PERIOD_PRESETS.map((p) => (
+                {defaultPeriods().map((p) => (
                   <button
                     key={p.label}
                     type="button"
@@ -208,6 +294,7 @@ export function FinancialReportView({
                       setShowPeriodMenu(false);
                     }}
                     className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-foreground transition-colors hover:bg-secondary/60"
+                    data-testid={`report-period-${p.label}`}
                   >
                     {p.label}
                   </button>
@@ -221,7 +308,7 @@ export function FinancialReportView({
             onClick={() =>
               data &&
               exportCsv(
-                `${reportKey}-${period.from_date ?? "fy"}-${period.to_date ?? ""}.csv`,
+                `${reportKey}-${period.filters.period_start_date ?? period.filters.from_date ?? "fy"}-${period.filters.period_end_date ?? period.filters.to_date ?? ""}.csv`,
                 data.columns,
                 data.result,
               )
@@ -239,14 +326,29 @@ export function FinancialReportView({
           <span className="rounded-md border border-border/40 bg-secondary/20 px-2 py-0.5">
             Company: <strong className="text-foreground">{data.period.company}</strong>
           </span>
-          {data.period.from_date && (
+          {data.period.fiscal_year && (
             <span className="rounded-md border border-border/40 bg-secondary/20 px-2 py-0.5">
-              From: <strong className="text-foreground">{data.period.from_date}</strong>
+              Fiscal year: <strong className="text-foreground">{data.period.fiscal_year}</strong>
             </span>
           )}
-          {data.period.to_date && (
+          {data.period.periodicity && (
             <span className="rounded-md border border-border/40 bg-secondary/20 px-2 py-0.5">
-              To: <strong className="text-foreground">{data.period.to_date}</strong>
+              Periodicity: <strong className="text-foreground">{data.period.periodicity}</strong>
+            </span>
+          )}
+          {data.period.period_start_date && (
+            <span className="rounded-md border border-border/40 bg-secondary/20 px-2 py-0.5">
+              Start: <strong className="text-foreground">{data.period.period_start_date}</strong>
+            </span>
+          )}
+          {data.period.period_end_date && (
+            <span className="rounded-md border border-border/40 bg-secondary/20 px-2 py-0.5">
+              End: <strong className="text-foreground">{data.period.period_end_date}</strong>
+            </span>
+          )}
+          {data.period.report_date && !data.period.period_end_date && (
+            <span className="rounded-md border border-border/40 bg-secondary/20 px-2 py-0.5">
+              As of: <strong className="text-foreground">{data.period.report_date}</strong>
             </span>
           )}
         </div>
@@ -258,7 +360,7 @@ export function FinancialReportView({
         aria-label={title}
       >
         {isLoading ? (
-          <div className="space-y-3 p-6">
+          <div className="space-y-3 p-6" data-testid="report-loading">
             {Array.from({ length: 8 }).map((_, i) => (
               <SkeletonLine key={i} className="h-5 w-full" />
             ))}
@@ -275,6 +377,11 @@ export function FinancialReportView({
             <p className="text-sm text-muted-foreground">
               No data for the selected period.
             </p>
+            {layout.amountColumnMissing && (
+              <p className="text-xs text-warning">
+                Heuristic couldn&apos;t find an amount column — check the report schema.
+              </p>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">

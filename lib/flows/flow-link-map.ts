@@ -458,25 +458,59 @@ export function buildLinkFilter(
   // Note Item, Payment Entry Reference, …).
   const isChildTable = def.returnParent === true;
   if (isChildTable) {
-    // 4-tuple: [childDoctype, field, "=", value]
+    // 4-tuple: [childDoctype, field, "=", value]. This is a child-table
+    // filter; Frappe resolves it against the PARENT doctype list endpoint
+    // (the caller queries `def.to`, the parent, not the child table — see
+    // resolveQueryDoctype in use-flow-chain.ts).
     const base: [string, string, string, unknown] = [
       def.queryDoctype!,
       def.field!,
       "=",
       anchorName,
     ];
-    return def.extraFilters ? [base, ...def.extraFilters] : [base];
+    return def.extraFilters
+      ? [base, ...def.extraFilters.map((f) => fillChildExtraFilter(f, def.queryDoctype!))]
+      : [base];
   }
-  // header field on the queried parent (e.g. "Work Order", "Purchase Order")
-  // 4-tuple with empty doctype — the filter is on the queried parent's
-  // header field; Frappe scopes the filter to the queried parent.
-  const base: [string, string, string, unknown] = [
-    "",
-    def.field!,
-    "=",
-    anchorName,
-  ];
-  return def.extraFilters ? [base, ...def.extraFilters] : [base];
+  // Header field on the queried parent (e.g. "Work Order", "Purchase Order").
+  // The filter is on the parent's OWN field, so it is a 3-tuple
+  // `[field, "=", value]` — the queried doctype is implicit. A leading ""
+  // doctype is NOT valid Frappe filter syntax: it is parsed as a doctype
+  // name and raises "DocType not found" (this was the 2O blank-flow / 404
+  // regression on Work Order, Purchase Order, Sales Order, … header links).
+  const base: [string, string, unknown] = [def.field!, "=", anchorName];
+  return def.extraFilters
+    ? [base, ...def.extraFilters.map(normalizeParentFilter)]
+    : [base];
+}
+
+/**
+ * Resolve the registry's `""`-doctype placeholder in an extra filter for a
+ * HEADER / parent-field link. `["", field, op, value]` means "this field is
+ * on the queried PARENT doctype" → collapse to the 3-tuple `[field, op,
+ * value]` (a leading "" doctype is invalid Frappe syntax → DocTypeNotFound).
+ * Genuine child-table extra filters (non-empty doctype) pass through.
+ */
+function normalizeParentFilter(
+  f: [string, string, string, unknown],
+): [string, string, unknown] | [string, string, string, unknown] {
+  return f[0] === "" ? [f[1], f[2], f[3]] : f;
+}
+
+/**
+ * Resolve the registry's `""`-doctype placeholder in an extra filter for a
+ * CHILD-TABLE link. Here the extra field lives on the SAME child table as
+ * the main filter (e.g. `reference_doctype` on `Payment Entry Reference`),
+ * NOT on the queried parent — so `["", field, op, value]` must become the
+ * 4-tuple `[childDoctype, field, op, value]`. Collapsing it to a 3-tuple
+ * (the parent-field path) makes Frappe reject it: "Field not permitted in
+ * query: reference_doctype" (the 417 that left paid invoices prompting a PE).
+ */
+function fillChildExtraFilter(
+  f: [string, string, string, unknown],
+  childDoctype: string,
+): [string, string, string, unknown] {
+  return f[0] === "" ? [childDoctype, f[1], f[2], f[3]] : f;
 }
 
 /**

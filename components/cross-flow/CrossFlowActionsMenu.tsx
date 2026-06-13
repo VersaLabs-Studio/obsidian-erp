@@ -5,25 +5,30 @@
 //
 // Detail-sidebar "Actions" menu: the Customer-360 quick-actions menu,
 // generalized to every transactional doctype. Each adjacent doctype
-// (forward + backward) is offered as a button, gated by the back-link
-// short-circuit — if an adjacent record already exists, the button
-// reads "View <name>" (redirect) and never "Create" (no duplicate).
+// (forward + backward) is offered as a button.
 //
-// 2M Part 1C: the menu now groups backward edges (source links — "Created
+// 2O Part 1.4 — REWIRED to consume the same `useFlowChain` result the
+// FlowRail uses. The previous version did its own per-edge `useFrappeList`
+// back-link queries and could disagree with the rail (e.g. rail shows a
+// downstream as "completed" but menu still offers "Create …" for the same
+// stage). The new version reads the rail's stageStatuses: a resolved
+// downstream doc renders "View <name>" (never "Create" a second one), an
+// unresolved downstream renders the create affordance, and a backward
+// edge with no resolved source is hidden (consistent with the rail).
+//
+// 2M Part 1C: the menu groups backward edges (source links — "Created
 // from") ABOVE the forward edges ("Up next") so linked docs are clearly
 // stated in both directions on every doctype that has a known source edge.
+// 2M Part 3D: while `isLoading` (the chain's `isLoading`) is true, the menu
+// renders a skeleton so it never blanks on a hard-refresh.
 // Reuses:
-//   - `AUTO_FILL_REGISTRY` + `resolveFlowChain` (logic, not visual) via
-//     flow-adjacency.ts (derived from AUTO_FILL_REGISTRY keys)
-//   - `buildCreateUrl` (via buildAdjacencyCreateHref)
-//   - useFrappeList for back-link queries
+//   - useFlowChain (the rail's hook — single source of truth)
+//   - buildCreateUrl (via getAdjacencies / buildAdjacencyCreateHref)
 //   - existing Button / Skeleton components
-// FlowRail is NOT modified — this is a new sidebar surface, the same data
-// source FlowRail consumes (Reporting Contract rule 2 — no new engines).
+// FlowRail's visual chrome is brain-owned (commit cb7de20) and unchanged.
 
 import { useMemo } from "react";
 import Link from "next/link";
-import { useFrappeList } from "@/hooks/generic";
 import { Button } from "@/components/ui/button";
 import { SkeletonLine } from "@/components/ui/skeleton";
 import {
@@ -39,9 +44,9 @@ import {
   getAdjacencies,
   buildAdjacencyCreateHref,
   buildAdjacencyViewHref,
-  fillBackLinkFilter,
   type FlowAdjacency,
 } from "@/lib/flows/flow-adjacency";
+import { useFlowChain } from "@/hooks/flows/use-flow-chain";
 
 // ---------------------------------------------------------------------------
 // Public component
@@ -56,8 +61,8 @@ interface CrossFlowActionsMenuProps {
   /** Title for the menu (default: "Cross-flow actions") */
   title?: string;
   /** 2M Part 3D: while true, render the loading skeleton (overrides the
-   *  per-row isLoading from useFrappeList). Use this when the page is
-   *  not yet ready to render cross-flow affordances. */
+   *  chain's own isLoading). Use this when the page is not yet ready to
+   *  render cross-flow affordances. */
   isLoading?: boolean;
 }
 
@@ -68,7 +73,32 @@ export function CrossFlowActionsMenu({
   title = "Cross-flow actions",
   isLoading = false,
 }: CrossFlowActionsMenuProps) {
+  // 2O Part 1.4: consume the same useFlowChain result the FlowRail uses.
+  // This is the *single source of truth* for "is the downstream SI
+  // resolved? is the upstream Quotation resolved?". The menu's
+  // "View <name>" vs "Create" decision is now a direct read of the
+  // stageStatuses the rail consumed.
+  const { result: chain, isLoading: chainLoading } = useFlowChain(doctype, name);
+
   const edges = useMemo(() => getAdjacencies(doctype), [doctype]);
+
+  // Build a quick lookup: targetDoctype → stageStatus from the chain.
+  // (2O Part 1.4) This is the single source of truth — same data the rail
+  // renders. We never run our own per-edge back-link query.
+  // RULES OF HOOKS: this useMemo MUST run before any early return below.
+  // Previously it sat AFTER the `edges.length === 0` and `isLoading`
+  // returns, so the executed hook count changed when `chainLoading`
+  // flipped → "change in the order of Hooks" crash on every detail page.
+  const stageStatusByDoctype = useMemo(() => {
+    const out: Record<string, { resolvedName?: string; status: string }> = {};
+    for (const s of chain.stages) {
+      out[s.doctype] = {
+        resolvedName: s.documentName,
+        status: s.status,
+      };
+    }
+    return out;
+  }, [chain]);
 
   if (edges.length === 0) {
     return null; // Standalone doctype — no rail
@@ -76,7 +106,7 @@ export function CrossFlowActionsMenu({
 
   // 2M Part 3D: skeleton for the whole menu. Same B1 chrome as
   // FlowRailSkeleton / WhatsNext.
-  if (isLoading) {
+  if (isLoading || chainLoading) {
     return (
       <div
         className={cn(
@@ -128,6 +158,7 @@ export function CrossFlowActionsMenu({
                 key={`${edge.direction}-${edge.targetDoctype}`}
                 edge={edge}
                 sourceDocName={name}
+                stageStatus={stageStatusByDoctype[edge.targetDoctype]}
               />
             ))}
           </ul>
@@ -145,6 +176,7 @@ export function CrossFlowActionsMenu({
                 key={`${edge.direction}-${edge.targetDoctype}`}
                 edge={edge}
                 sourceDocName={name}
+                stageStatus={stageStatusByDoctype[edge.targetDoctype]}
               />
             ))}
           </ul>
@@ -155,51 +187,36 @@ export function CrossFlowActionsMenu({
 }
 
 // ---------------------------------------------------------------------------
-// Row — one button per adjacent doctype, with back-link short-circuit
+// Row — one button per adjacent doctype. The "View vs Create" decision
+// reads from the shared `useFlowChain` result, not from a per-edge query
+// (2O Part 1.4).
 // ---------------------------------------------------------------------------
 function AdjacencyRow({
   edge,
   sourceDocName,
+  stageStatus,
 }: {
   edge: FlowAdjacency;
   sourceDocName: string;
+  stageStatus?: { resolvedName?: string; status: string };
 }) {
-  // Back-link query — only if we have a known back-link pattern.
-  const filled = useMemo(
-    () =>
-      edge.backLink
-        ? edge.backLink.filters.map((f) => fillBackLinkFilter(f, sourceDocName))
-        : [],
-    [edge.backLink, sourceDocName],
-  );
-
-  const { data: existing, isLoading } = useFrappeList<{ name: string; parent?: string }>(
-    edge.backLink?.doctype ?? "",
-    {
-      filters: filled,
-      fields: edge.backLink?.selectFields ?? ["name"],
-      limit: 1,
-    },
-    {
-      enabled: !!edge.backLink,
-    },
-  );
-
-  const existingRecord = existing && existing.length > 0 ? existing[0] : null;
-  // 2L 1C: child-table back-link queries return rows with a `parent` field
-  // (the child row's name is in `name`, the parent's name is in `parent`).
-  // Use the parent when present so the View link points to the parent doc.
-  const existingParentName = existingRecord?.parent ?? existingRecord?.name ?? null;
+  // 2O Part 1.4: View ↔ Create decision from the SHARED chain result.
+  //   - backward edge with no resolved upstream → hidden (consistent with
+  //     the rail's "not in this flow" behavior)
+  //   - any edge with a resolved target doc → "View <name>"
+  //   - any edge without a resolved target → "Create" (the existing
+  //     forward-create flow)
+  const resolvedName = stageStatus?.resolvedName;
+  const isResolved = !!resolvedName;
+  const isView = isResolved;
 
   // Backward edge with no existing source record → render nothing.
-  if (edge.direction === "backward" && !existingRecord) {
+  if (edge.direction === "backward" && !isResolved) {
     return null;
   }
 
-  // Determine the affordance
-  const isView = !!existingRecord;
   const href = isView
-    ? buildAdjacencyViewHref(edge, existingParentName ?? existingRecord!.name)
+    ? buildAdjacencyViewHref(edge, resolvedName!)
     : edge.direction === "forward"
       ? buildAdjacencyCreateHref(edge, sourceDocName)
       : null;
@@ -213,37 +230,31 @@ function AdjacencyRow({
       ? "text-primary"
       : "text-muted-foreground";
 
-  const buttonText = isView
-    ? `View ${existingParentName ?? existingRecord!.name}`
-    : edge.label;
+  const buttonText = isView ? `View ${resolvedName}` : edge.label;
 
   return (
     <li>
-      {isLoading ? (
-        <SkeletonLine className="h-11 w-full rounded-xl" />
-      ) : (
-        <Button
-          variant={isView ? "outline" : "default"}
-          className={cn(
-            "w-full justify-between rounded-xl h-auto py-3 px-4 group",
-            !isView && "bg-primary text-primary-foreground hover:bg-primary/90",
-          )}
-          asChild={false}
+      <Button
+        variant={isView ? "outline" : "default"}
+        className={cn(
+          "w-full justify-between rounded-xl h-auto py-3 px-4 group",
+          !isView && "bg-primary text-primary-foreground hover:bg-primary/90",
+        )}
+        asChild={false}
+      >
+        <Link
+          href={href}
+          className="flex w-full items-center justify-between"
         >
-          <Link
-            href={href}
-            className="flex w-full items-center justify-between"
-          >
-            <span className="flex items-center gap-2.5">
-              <span className={cn("flex h-6 w-6 items-center justify-center rounded-md", isView ? "bg-info/10" : "bg-primary-foreground/15")}>
-                <Icon className={cn("h-3.5 w-3.5", iconClass, isView && "text-info")} />
-              </span>
-              <span className="text-sm font-medium">{buttonText}</span>
+          <span className="flex items-center gap-2.5">
+            <span className={cn("flex h-6 w-6 items-center justify-center rounded-md", isView ? "bg-info/10" : "bg-primary-foreground/15")}>
+              <Icon className={cn("h-3.5 w-3.5", iconClass, isView && "text-info")} />
             </span>
-            <ArrowRight className="h-3.5 w-3.5 opacity-60 transition-transform group-hover:translate-x-0.5" />
-          </Link>
-        </Button>
-      )}
+            <span className="text-sm font-medium">{buttonText}</span>
+          </span>
+          <ArrowRight className="h-3.5 w-3.5 opacity-60 transition-transform group-hover:translate-x-0.5" />
+        </Link>
+      </Button>
     </li>
   );
 }
@@ -257,7 +268,30 @@ export function CrossFlowActionsInline({
   className,
 }: CrossFlowActionsMenuProps) {
   const edges = useMemo(() => getAdjacencies(doctype), [doctype]);
+
+  // 2O Part 1.4: same single source of truth for the inline variant.
+  // RULES OF HOOKS: useFlowChain + this useMemo must run before the
+  // `edges.length === 0` early return — otherwise a standalone doctype
+  // (no edges) executes fewer hooks than a flow doctype and React throws.
+  const { result: chain, isLoading: chainLoading } = useFlowChain(doctype, name);
+  const stageStatusByDoctype = useMemo(() => {
+    const out: Record<string, { resolvedName?: string; status: string }> = {};
+    for (const s of chain.stages) {
+      out[s.doctype] = { resolvedName: s.documentName, status: s.status };
+    }
+    return out;
+  }, [chain]);
+
   if (edges.length === 0) return null;
+
+  if (chainLoading) {
+    return (
+      <div className={cn("flex flex-wrap gap-2", className)} aria-busy="true">
+        <SkeletonLine className="h-9 w-32 rounded-full" />
+        <SkeletonLine className="h-9 w-32 rounded-full" />
+      </div>
+    );
+  }
 
   return (
     <div className={cn("flex flex-wrap gap-2", className)}>
@@ -266,6 +300,7 @@ export function CrossFlowActionsInline({
           key={`${edge.direction}-${edge.targetDoctype}`}
           edge={edge}
           sourceDocName={name}
+          stageStatus={stageStatusByDoctype[edge.targetDoctype]}
         />
       ))}
     </div>
@@ -275,36 +310,19 @@ export function CrossFlowActionsInline({
 function AdjacencyChip({
   edge,
   sourceDocName,
+  stageStatus,
 }: {
   edge: FlowAdjacency;
   sourceDocName: string;
+  stageStatus?: { resolvedName?: string; status: string };
 }) {
-  const filled = useMemo(
-    () =>
-      edge.backLink
-        ? edge.backLink.filters.map((f) => fillBackLinkFilter(f, sourceDocName))
-        : [],
-    [edge.backLink, sourceDocName],
-  );
+  const resolvedName = stageStatus?.resolvedName;
+  const isView = !!resolvedName;
 
-  const { data: existing, isLoading } = useFrappeList<{ name: string; parent?: string }>(
-    edge.backLink?.doctype ?? "",
-    {
-      filters: filled,
-      fields: edge.backLink?.selectFields ?? ["name"],
-      limit: 1,
-    },
-    { enabled: !!edge.backLink },
-  );
+  if (edge.direction === "backward" && !isView) return null;
 
-  const existingRecord = existing && existing.length > 0 ? existing[0] : null;
-  const existingParentName = existingRecord?.parent ?? existingRecord?.name ?? null;
-
-  if (edge.direction === "backward" && !existingRecord) return null;
-
-  const isView = !!existingRecord;
   const href = isView
-    ? buildAdjacencyViewHref(edge, existingParentName ?? existingRecord!.name)
+    ? buildAdjacencyViewHref(edge, resolvedName!)
     : edge.direction === "forward"
       ? buildAdjacencyCreateHref(edge, sourceDocName)
       : null;
@@ -320,7 +338,7 @@ function AdjacencyChip({
     >
       <Link href={href} className="flex items-center gap-1.5">
         {isView ? <Eye className="h-3 w-3" /> : edge.direction === "forward" ? <Plus className="h-3 w-3" /> : <Link2 className="h-3 w-3" />}
-        {isView ? `View ${existingParentName ?? existingRecord!.name}` : edge.label}
+        {isView ? `View ${resolvedName}` : edge.label}
       </Link>
     </Button>
   );

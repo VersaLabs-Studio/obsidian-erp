@@ -246,10 +246,12 @@ describe("Part 1C: CrossFlowActionsMenu splits into Created from + Up next", () 
 
   it("a doctype with no edges still returns null (no orphan menu)", () => {
     const { container } = render(
-      React.createElement(CrossFlowActionsMenu, {
-        doctype: "Stock Reconciliation",
-        name: "SR-1",
-      }),
+      withProviders(
+        React.createElement(CrossFlowActionsMenu, {
+          doctype: "Stock Reconciliation",
+          name: "SR-1",
+        }),
+      ),
     );
     expect(container.firstChild).toBeNull();
   });
@@ -436,11 +438,13 @@ describe("Part 3D: WhatsNext + CrossFlowActionsMenu loading skeletons", () => {
 
   it("CrossFlowActionsMenu renders a skeleton when isLoading is true", () => {
     render(
-      React.createElement(CrossFlowActionsMenu, {
-        doctype: "Sales Order",
-        name: "SAL-ORD-2026-00001",
-        isLoading: true,
-      }),
+      withProviders(
+        React.createElement(CrossFlowActionsMenu, {
+          doctype: "Sales Order",
+          name: "SAL-ORD-2026-00001",
+          isLoading: true,
+        }),
+      ),
     );
     expect(screen.getByTestId("crossflow-skeleton")).toBeInTheDocument();
   });
