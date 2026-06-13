@@ -32,7 +32,7 @@ import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
 import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
 import { useFlowChain } from "@/hooks/flows/use-flow-chain";
-import { useFrappeDoc, useFrappeList, useFrappeUpdate } from "@/hooks/generic";
+import { useFrappeDoc, useFrappeUpdate } from "@/hooks/generic";
 import type { PurchaseInvoice } from "@/types/doctype-types";
 
 const ETB = new Intl.NumberFormat("en-ET", {
@@ -74,19 +74,10 @@ export default function PurchaseInvoiceDetailPage() {
   // (PI → Payment Entry is the only remaining direct downstream query
   // — it's the live one, and `useFlowChain` reads the same canonical
   // back-link pattern as the rail.)
-  const { data: paymentEntries, isLoading: loadingPE } = useFrappeList<{
-    name: string;
-  }>(
-    "Payment Entry",
-    {
-      filters: [["reference_name", "=", name]],
-      fields: ["name"],
-      limit: 5,
-    },
-    { enabled: !isLoading && !!invoice },
-  );
-
-  // 2N Part 1.1: unified flow resolution.
+  // 2N Part 1.1: unified flow resolution. The Payment stage is resolved here
+  // via the flow-link-map — the old per-page `useFrappeList("Payment Entry",
+  // { filters: [["reference_name", …]] })` filtered the PARENT by a CHILD
+  // field → 417 "Field not permitted in query: reference_name", and was unused.
   const { result: chain, isLoading: chainLoading } = useFlowChain("Purchase Invoice", name);
 
   // -- Status actions --------------------------------------------------------
@@ -97,6 +88,7 @@ export default function PurchaseInvoiceDetailPage() {
 
   const isDraft = invoice?.docstatus === 0;
   const isSubmitted = invoice?.docstatus === 1;
+  const isUnpaid = isSubmitted && (invoice?.outstanding_amount ?? 0) > 0;
 
   const handleSubmit = () => {
     setConfirmSubmit(false);
@@ -152,7 +144,7 @@ export default function PurchaseInvoiceDetailPage() {
       isPrimary: true,
       isLoading: updateMutation.isPending,
     },
-    isSubmitted && {
+    isUnpaid && {
       label: "Create Payment Entry",
       description: "Pay this vendor bill",
       onClick: () =>

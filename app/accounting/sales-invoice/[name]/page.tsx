@@ -25,7 +25,7 @@ import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
 import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
 import { useFlowChain } from "@/hooks/flows/use-flow-chain";
-import { useFrappeDoc, useFrappeList, useFrappeUpdate } from "@/hooks/generic";
+import { useFrappeDoc, useFrappeUpdate } from "@/hooks/generic";
 import type { SalesInvoice } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
 
@@ -58,19 +58,10 @@ export default function SalesInvoiceDetailPage() {
     name,
   );
 
-  const { data: paymentEntries, isLoading: loadingPE } = useFrappeList<{
-    name: string;
-  }>(
-    "Payment Entry Reference",
-    {
-      filters: [["reference_name", "=", name]],
-      fields: ["parent"],
-      limit: 5,
-    },
-    { enabled: !isLoading && !!invoice },
-  );
-
-  // 2N Part 1.1: unified flow resolution.
+  // 2N Part 1.1: unified flow resolution. The Payment stage (and whether a
+  // PE already exists) is resolved here via the flow-link-map — we no longer
+  // run a per-page back-link query (the old `useFrappeList("Payment Entry
+  // Reference", …)` hit the routeless child doctype → 404 and was unused).
   const { result: chain, isLoading: chainLoading } = useFlowChain("Sales Invoice", name);
 
   const updateMutation = useFrappeUpdate<SalesInvoice>("Sales Invoice", {
@@ -134,7 +125,7 @@ export default function SalesInvoiceDetailPage() {
       isPrimary: true,
       isLoading: updateMutation.isPending,
     },
-    isSubmitted && {
+    isUnpaid && {
       label: "Create Payment Entry",
       description: "Record a payment against this invoice",
       onClick: () =>
