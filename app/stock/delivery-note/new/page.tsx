@@ -29,9 +29,14 @@ import {
   FormFrappeSelect,
   FormDatePicker,
 } from "@/components/form";
+import { QuickAddField } from "@/components/quick-add/QuickAddField";
+import { ItemRateAutoFill } from "@/lib/flows/item-price-lookup";
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
 import { FlowWizard } from "@/components/flows/FlowWizard";
 import { useFrappeCreate, useFrappeDoc } from "@/hooks/generic";
+import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
+import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
+import { getActiveCompany } from "@/lib/settings/company";
 import {
   getAutoFillMapping,
   applyAutoFill,
@@ -42,6 +47,7 @@ import type { StepValidationResult } from "@/lib/flows/flow-validation";
 import type { WizardStep } from "@/types/flow-types";
 import type { SalesOrder } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
+import { FieldWrap } from "@/components/form/field-wrap";
 
 // ---------------------------------------------------------------------------
 // Form model — concrete item shape so the field array is fully typed
@@ -103,7 +109,7 @@ const WIZARD_STEPS: WizardStep[] = [
     label: "Customer & Shipping",
     description: "Confirm the customer and set delivery details",
     schema: null,
-    fields: ["customer", "company", "posting_date", "shipping_address_name", "po_no"],
+    fields: ["customer", "posting_date", "shipping_address_name", "po_no"],
     icon: "UserRound",
   },
   {
@@ -138,12 +144,12 @@ export default function NewDeliveryNotePage() {
   const [autoFilledFields, setAutoFilledFields] = useState<Set<string>>(
     new Set(),
   );
+  const [triedNextSteps, setTriedNextSteps] = useState<Set<number>>(new Set());
 
   const form = useForm<DNForm>({
     defaultValues: {
       naming_series: "MAT-DN-.YYYY.-",
       customer: "",
-      company: "",
       posting_date: new Date().toISOString().split("T")[0],
       posting_time: new Date().toTimeString().slice(0, 5),
       print_without_amount: 0,
@@ -246,6 +252,7 @@ export default function NewDeliveryNotePage() {
   }, [watchedAll]);
 
   // -- Persistence ------------------------------------------------------------
+  const { resolution, showError, dismiss } = useGuidedError();
   const createMutation = useFrappeCreate<
     { data: { name: string } },
     Record<string, unknown>
@@ -257,6 +264,7 @@ export default function NewDeliveryNotePage() {
         router.push(`/stock/delivery-note/${encodeURIComponent(name)}`);
       }
     },
+    onError: (err) => showError(resolveFrappeError(err, { doctype: "Delivery Note" })),
   });
 
   const handleSubmit = useCallback(() => {
@@ -271,6 +279,7 @@ export default function NewDeliveryNotePage() {
     }
     createMutation.mutate({
       ...values,
+      company: getActiveCompany(),
       items: items.map((it, idx) => ({
         ...it,
         amount: (Number(it.qty) || 0) * (Number(it.rate) || 0),
@@ -296,7 +305,7 @@ export default function NewDeliveryNotePage() {
       />
 
       <Form {...form}>
-        <InfoCard className="max-w-3xl">
+        <InfoCard>
           <FlowWizard
             steps={WIZARD_STEPS}
             formData={watchedAll as unknown as Record<string, unknown>}
@@ -304,6 +313,7 @@ export default function NewDeliveryNotePage() {
             isSubmitting={createMutation.isPending}
             onFormDataChange={() => {}}
             onStepChange={setStep}
+            onTriedNextChange={setTriedNextSteps}
             onSubmit={handleSubmit}
             onCancel={() => router.back()}
             submitLabel="Create Delivery Note"
@@ -322,8 +332,10 @@ export default function NewDeliveryNotePage() {
                       <FieldWrap
                         auto={isAuto("customer")}
                         loading={loadingSO}
+                        error={triedNextSteps.has(step) ? validationResults?.step1?.errors?.customer : undefined}
                       >
-                        <FormFrappeSelect
+                        {/* 2L 1A: Quick-Add enabled Customer */}
+                        <QuickAddField
                           control={control}
                           name="customer"
                           label="Customer"
@@ -332,18 +344,6 @@ export default function NewDeliveryNotePage() {
                           labelField="customer_name"
                           placeholder="Search customer..."
                           disabled={isAuto("customer")}
-                        />
-                      </FieldWrap>
-                      <FieldWrap auto={isAuto("company")}>
-                        <FormFrappeSelect
-                          control={control}
-                          name="company"
-                          label="Company"
-                          required
-                          doctype="Company"
-                          labelField="company_name"
-                          placeholder="Select company..."
-                          disabled={isAuto("company")}
                         />
                       </FieldWrap>
                       <FormDatePicker
@@ -358,7 +358,10 @@ export default function NewDeliveryNotePage() {
                         label="Posting Time"
                         placeholder="HH:MM"
                       />
-                      <FieldWrap auto={isAuto("shipping_address_name")}>
+                      <FieldWrap
+                        auto={isAuto("shipping_address_name")}
+                        error={triedNextSteps.has(step) ? validationResults?.step1?.errors?.shipping_address_name : undefined}
+                      >
                         <FormFrappeSelect
                           control={control}
                           name="shipping_address_name"
@@ -368,13 +371,14 @@ export default function NewDeliveryNotePage() {
                           disabled={
                             isAuto("shipping_address_name") || !watchedCustomer
                           }
-                          filters={
-                            watchedCustomer
-                              ? ([
-                                  ["Dynamic Link", "link_name", "=", watchedCustomer],
-                                ] as unknown as [string, string, unknown][])
-                              : []
-                          }
+                                  filters={
+                                    watchedCustomer
+                                      ? ([
+                                          ["Dynamic Link", "link_doctype", "=", "Customer"],
+                                          ["Dynamic Link", "link_name", "=", watchedCustomer],
+                                        ] as unknown as [string, string, unknown][])
+                                      : []
+                                  }
                           placeholder={
                             watchedCustomer
                               ? "Select address..."
@@ -430,7 +434,8 @@ export default function NewDeliveryNotePage() {
                             return (
                               <tr key={field.id} className="group">
                                 <td className="px-3 py-2 align-top">
-                                  <FormFrappeSelect
+                                  {/* 2L 1A: Quick-Add enabled per-row Item */}
+                                  <QuickAddField
                                     control={control}
                                     name={`items.${index}.item_code`}
                                     doctype="Item"
@@ -445,10 +450,6 @@ export default function NewDeliveryNotePage() {
                                     onValueChange={(_val, doc) => {
                                       if (doc) {
                                         setValue(
-                                          `items.${index}.rate`,
-                                          Number(doc.standard_rate) || 0,
-                                        );
-                                        setValue(
                                           `items.${index}.uom`,
                                           doc.stock_uom || "Nos",
                                         );
@@ -456,8 +457,18 @@ export default function NewDeliveryNotePage() {
                                           `items.${index}.item_name`,
                                           doc.item_name || "",
                                         );
+                                        // 2L Part 2: rate is auto-filled by ItemRateAutoFill
                                       }
                                     }}
+                                  />
+                                  {/* 2L Part 2: Auto-rate via Item Price (selling) */}
+                                  <ItemRateAutoFill<DNForm>
+                                    itemCodePath={`items.${index}.item_code`}
+                                    ratePath={`items.${index}.rate`}
+                                    priceList={watchedAll?.selling_price_list || ""}
+                                    currency={watchedAll?.currency || "ETB"}
+                                    side="selling"
+                                    setValue={setValue as any}
                                   />
                                 </td>
                                 <td className="px-3 py-2 align-top">
@@ -476,7 +487,8 @@ export default function NewDeliveryNotePage() {
                                   {ETB.format(qty * rate)}
                                 </td>
                                 <td className="px-3 py-2 align-top">
-                                  <FormFrappeSelect
+                                  {/* 2L 1A: Quick-Add enabled per-row Warehouse */}
+                                  <QuickAddField
                                     control={control}
                                     name={`items.${index}.warehouse`}
                                     doctype="Warehouse"
@@ -529,81 +541,106 @@ export default function NewDeliveryNotePage() {
               // ---- STEP 3 — Logistics & Review -----------------------------
               const v = getValues();
               return (
-                <div className="space-y-5">
+                <div className="space-y-6">
                   <StepHeading
                     icon={<Truck className="h-5 w-5 text-primary" />}
                     title="Logistics & Review"
-                    description="Set transporter details and confirm the delivery."
+                    description="Review everything below, then create — you can still go back to edit."
                   />
 
                   {/* Logistics fields */}
-                  <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                    <FormFrappeSelect
-                      control={control}
-                      name="transporter"
-                      label="Transporter"
-                      doctype="Supplier"
-                      placeholder="e.g., In-House, DHL..."
-                      filters={[["is_transporter", "=", 1]]}
-                    />
-                    <FormFrappeSelect
-                      control={control}
-                      name="driver"
-                      label="Driver"
-                      doctype="Driver"
-                      placeholder="Select driver..."
-                    />
-                    <FormInput
-                      control={control}
-                      name="vehicle_no"
-                      label="Vehicle Number"
-                      placeholder="License plate"
-                    />
-                    <FormInput
-                      control={control}
-                      name="lr_no"
-                      label="Gate Pass / LR No"
-                      placeholder="Receipt number"
-                    />
-                    <FormDatePicker
-                      control={control}
-                      name="lr_date"
-                      label="LR Date"
-                    />
-                    <FormFrappeSelect
-                      control={control}
-                      name="set_warehouse"
-                      label="Default Warehouse"
-                      doctype="Warehouse"
-                      placeholder="Source warehouse..."
-                      filters={[["is_group", "=", 0]]}
-                    />
+                  <div className="bg-card/40 rounded-2xl p-6 space-y-4">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Logistics</p>
+                    <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                      <FormFrappeSelect
+                        control={control}
+                        name="transporter"
+                        label="Transporter"
+                        doctype="Supplier"
+                        placeholder="e.g., In-House, DHL..."
+                        filters={[["is_transporter", "=", 1]]}
+                      />
+                      <FormFrappeSelect
+                        control={control}
+                        name="driver"
+                        label="Driver"
+                        doctype="Driver"
+                        placeholder="Select driver..."
+                      />
+                      <FormInput
+                        control={control}
+                        name="vehicle_no"
+                        label="Vehicle Number"
+                        placeholder="License plate"
+                      />
+                      <FormInput
+                        control={control}
+                        name="lr_no"
+                        label="Gate Pass / LR No"
+                        placeholder="Receipt number"
+                      />
+                      <FormDatePicker
+                        control={control}
+                        name="lr_date"
+                        label="LR Date"
+                      />
+                      <FormFrappeSelect
+                        control={control}
+                        name="set_warehouse"
+                        label="Default Warehouse"
+                        doctype="Warehouse"
+                        placeholder="Source warehouse..."
+                        filters={[["is_group", "=", 0]]}
+                      />
+                    </div>
                   </div>
 
-                  {/* Review summary */}
-                  <div className="rounded-xl border border-border/60 bg-card/40 p-5 backdrop-blur-sm">
-                    <div className="grid grid-cols-2 gap-4 text-sm">
+                  {/* Header summary */}
+                  <div className="bg-card/40 rounded-2xl p-6 space-y-4">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                       <Summary label="Customer" value={v.customer_name || v.customer} />
                       <Summary label="Company" value={v.company} />
                       <Summary label="Posting Date" value={v.posting_date} />
                       <Summary label="Shipping Address" value={v.shipping_address_name} />
+                      <Summary label="Customer PO No" value={v.po_no} />
                     </div>
-                    <div className="mt-4 border-t border-border/60 pt-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">
-                          {(watchedItems ?? []).filter((i) => i?.item_code).length}{" "}
-                          item(s)
-                        </span>
-                        <div className="text-right">
-                          <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                            Grand Total
-                          </span>
-                          <p className="text-2xl font-bold tabular-nums text-primary">
-                            {ETB.format(subtotal)}
-                          </p>
-                        </div>
-                      </div>
+                  </div>
+
+                  {/* Items table */}
+                  <div className="bg-card/40 rounded-2xl overflow-hidden">
+                    <div className="px-6 py-3 bg-muted/30">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        Items ({(watchedItems ?? []).filter(i => i?.item_code).length})
+                      </p>
                     </div>
+                    <table className="w-full text-sm">
+                      <thead className="border-b border-border/40">
+                        <tr className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                          <th className="px-6 py-2.5 text-left font-semibold">Item</th>
+                          <th className="px-6 py-2.5 text-right font-semibold">Qty</th>
+                          <th className="px-6 py-2.5 text-right font-semibold">Rate</th>
+                          <th className="px-6 py-2.5 text-right font-semibold">Amount</th>
+                          <th className="px-6 py-2.5 text-left font-semibold">Warehouse</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/40">
+                        {(watchedItems ?? []).filter(i => i?.item_code).map((item, idx) => (
+                          <tr key={idx}>
+                            <td className="px-6 py-3 font-medium">{item.item_name || item.item_code}</td>
+                            <td className="px-6 py-3 text-right tabular-nums">{item.qty} {item.uom}</td>
+                            <td className="px-6 py-3 text-right tabular-nums">{ETB.format(item.rate ?? 0)}</td>
+                            <td className="px-6 py-3 text-right font-medium tabular-nums">{ETB.format((item.qty || 0) * (item.rate || 0))}</td>
+                            <td className="px-6 py-3 text-muted-foreground">{item.warehouse || v.set_warehouse || "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-muted/20">
+                          <td colSpan={4} className="px-6 py-3 text-right font-bold uppercase text-xs">Grand Total</td>
+                          <td className="px-6 py-3 text-right font-bold text-lg text-primary tabular-nums">{ETB.format(subtotal)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
                   </div>
                 </div>
               );
@@ -611,6 +648,7 @@ export default function NewDeliveryNotePage() {
           />
         </InfoCard>
       </Form>
+      <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
     </div>
   );
 }
@@ -636,27 +674,6 @@ function StepHeading({
         <h3 className="text-base font-semibold text-foreground">{title}</h3>
         <p className="text-sm text-muted-foreground">{description}</p>
       </div>
-    </div>
-  );
-}
-
-function FieldWrap({
-  auto,
-  loading,
-  children,
-}: {
-  auto?: boolean;
-  loading?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className={cn("relative", loading && "animate-pulse")}>
-      {children}
-      {auto && (
-        <span className="pointer-events-none absolute right-2 top-0 inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-          <Lock className="h-3 w-3" />
-        </span>
-      )}
     </div>
   );
 }

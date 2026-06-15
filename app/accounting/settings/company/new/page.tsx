@@ -95,7 +95,7 @@ export default function NewCompanyPage() {
             </div>
 
             <div className="lg:col-span-4">
-              <div className="sticky top-24 p-8 rounded-[2.5rem] bg-primary/5 border border-primary/10 space-y-6">
+              <div className="sticky top-24 p-8 rounded-2xl bg-primary/5 border border-primary/10 space-y-6">
                 <h3 className="text-xl font-black tracking-tight flex items-center gap-2">
                   <Sparkles className="h-5 w-5 text-primary" />
                   Guide

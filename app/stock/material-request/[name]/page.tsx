@@ -1,8 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
+import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
 import {
   Send,
   Trash2,
@@ -17,10 +19,10 @@ import { FlowRail } from "@/components/flows/FlowRail";
 import { isModuleBuilt } from "@/lib/flows/module-availability";
 import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
-import { resolveFlowChain } from "@/lib/flows/flow-chain-resolver";
-import { useFrappeDoc, useFrappeList, useFrappeUpdate, useFrappeDelete } from "@/hooks/generic";
+import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
+import { useFlowChain } from "@/hooks/flows/use-flow-chain";
+import { useFrappeDoc, useFrappeUpdate, useFrappeDelete } from "@/hooks/generic";
 import type { MaterialRequest } from "@/types/doctype-types";
-import type { FlowStageStatus } from "@/types/flow-types";
 
 interface MRItem {
   item_code: string;
@@ -41,6 +43,7 @@ export default function MaterialRequestDetailPage() {
 
   const [confirmSubmit, setConfirmSubmit] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const { resolution, showError, dismiss } = useGuidedError();
 
   const {
     data: mr,
@@ -51,35 +54,8 @@ export default function MaterialRequestDetailPage() {
   const isDraft = mr?.docstatus === 0;
   const isSubmitted = mr?.docstatus === 1;
 
-  const { data: purchaseOrders, isLoading: loadingPO } = useFrappeList<{ name: string }>(
-    "Purchase Order",
-    { filters: [["material_request", "=", name]], fields: ["name"], limit: 5 },
-    { enabled: !isLoading && !!mr }
-  );
-
-  const chain = useMemo(() => {
-    const stageStatuses: Record<
-      string,
-      { status: FlowStageStatus; documentName?: string; documentUrl?: string }
-    > = {};
-
-    stageStatuses["Material Request"] = {
-      status: isSubmitted ? "completed" : "current",
-      documentName: name,
-      documentUrl: `/stock/material-request/${encodeURIComponent(name)}`,
-    };
-
-    const poName = purchaseOrders?.[0]?.name;
-    if (poName) {
-      stageStatuses["Purchase Order"] = {
-        status: "completed",
-        documentName: poName,
-        documentUrl: `/buying/purchase-order/${encodeURIComponent(poName)}`,
-      };
-    }
-
-    return resolveFlowChain("Material Request", name, stageStatuses);
-  }, [mr, purchaseOrders, name, isSubmitted]);
+  // 2N Part 1.1: unified flow resolution.
+  const { result: chain, isLoading: chainLoading } = useFlowChain("Material Request", name);
 
   const updateMutation = useFrappeUpdate<MaterialRequest>("Material Request", {
     showToast: false,
@@ -98,8 +74,8 @@ export default function MaterialRequestDetailPage() {
       { name, data: { docstatus: 1 } },
       {
         onSuccess: () => toast.success(`Material Request ${name} submitted`),
-        onError: (e) =>
-          toast.error("Submit failed", { description: e.message }),
+        onError: (err) =>
+          showError(resolveFrappeError(err, { doctype: "Material Request" })),
       }
     );
   };
@@ -122,7 +98,7 @@ export default function MaterialRequestDetailPage() {
       description: "Create PO from this request",
       onClick: () => router.push(`/buying/purchase-order/new?material_request=${encodeURIComponent(name)}`),
       disabled: !isModuleBuilt("Purchase Order"),
-      disabledReason: "Coming in Phase 2",
+      disabledReason: "Module not available",
     },
   ].filter(Boolean) as React.ComponentProps<typeof WhatsNext>["actions"];
 
@@ -189,7 +165,7 @@ export default function MaterialRequestDetailPage() {
       />
 
       <InfoCard title="Procurement Flow" className="overflow-hidden">
-        <FlowRail result={chain} isLoading={loadingPO} />
+        <FlowRail result={chain} currentDocName={name} sourceDoctype="Material Request" isLoading={chainLoading} />
       </InfoCard>
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
@@ -321,6 +297,9 @@ export default function MaterialRequestDetailPage() {
             <WhatsNext actions={whatsNext} />
           </InfoCard>
 
+          {/* 2L 1B: Universal cross-flow actions menu */}
+          <CrossFlowActionsMenu doctype="Material Request" name={name} />
+
           <InfoCard title="Activity">
             <ActivityTimeline
               items={[
@@ -367,6 +346,7 @@ export default function MaterialRequestDetailPage() {
         onConfirm={handleDelete}
         loading={deleteMutation.isPending}
       />
+      <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
     </div>
   );
 }

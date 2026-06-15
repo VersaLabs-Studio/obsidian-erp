@@ -1,365 +1,356 @@
 // app/crm/lead/[name]/page.tsx
-// Obsidian ERP v4.0 - Lead Detail Page (Schema-Driven Architecture)
+// Obsidian ERP v4.0 — Lead Detail (V4 Golden Template B1 Sidebar)
+// FlowRail (Lead-to-Cash chain) + WhatsNext + ActivityTimeline.
+// Every mutation routes through resolveFrappeError → GuidedErrorDialog.
+// Status changes via update mutation (Lead is a master doctype, no docstatus).
+
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import Link from "next/link";
+import { toast } from "sonner";
+import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
 import {
-  Edit,
-  Trash2,
-  MoreVertical,
+  GuidedErrorDialog,
+  useGuidedError,
+} from "@/components/errors/GuidedErrorDialog";
+import {
+  Edit3,
+  Loader2,
+  Ban,
   UserPlus,
-  Mail,
-  Phone,
-  Building2,
-  MapPin,
-  Globe,
-  Calendar,
-  User,
-  Hash,
-  Activity,
-  Tag,
-  ShieldAlert,
+  FileText,
 } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 
-// v3.0 Imports
-import { useFrappeDoc, useFrappeDelete } from "@/hooks/generic";
 import { PageHeader, LoadingState, ConfirmDialog } from "@/components/smart";
-import { InfoCard, DataPoint, StatCard } from "@/components/ui/info-card";
+import { StatusBadge } from "@/components/smart/status-badge";
+import { InfoCard, DataPoint } from "@/components/ui/info-card";
+import { Button } from "@/components/ui/button";
+import { FlowRail } from "@/components/flows/FlowRail";
+import { isModuleBuilt } from "@/lib/flows/module-availability";
+import { WhatsNext } from "@/components/smart/WhatsNext";
+import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
+import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
+import { useFlowChain } from "@/hooks/flows/use-flow-chain";
+import { useFrappeDoc, useFrappeUpdate, useFrappeCreate } from "@/hooks/generic";
+import { getActiveCompany } from "@/lib/settings/company";
 import type { Lead } from "@/types/doctype-types";
-import { cn } from "@/lib/utils";
 
-/**
- * Lead status badge variant mapping
- */
-function getStatusVariant(
-  status: string
-): "success" | "warning" | "destructive" | "default" {
-  switch (status) {
-    case "Converted":
-      return "success";
-    case "Interested":
-    case "Opportunity":
-    case "Quotation":
-      return "warning";
-    case "Do Not Contact":
-    case "Lost Quotation":
-      return "destructive";
-    default:
-      return "default";
-  }
-}
+// Lead status machine: Lead → Open → Replied → Opportunity → Converted → Do Not Contact
+const STATUS_TRANSITIONS: Record<string, string[]> = {
+  Lead: ["Open", "Replied", "Do Not Contact"],
+  Open: ["Replied", "Opportunity", "Converted", "Do Not Contact"],
+  Replied: ["Open", "Opportunity", "Interested", "Converted", "Do Not Contact"],
+  Interested: ["Opportunity", "Converted", "Do Not Contact"],
+  Opportunity: ["Converted", "Lost Quotation", "Do Not Contact"],
+  Quotation: ["Converted", "Lost Quotation", "Do Not Contact"],
+  Converted: [],
+  "Do Not Contact": ["Lead"],
+  "Lost Quotation": ["Open", "Do Not Contact"],
+};
 
 export default function LeadDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const name = decodeURIComponent(params.name as string);
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const name = decodeURIComponent(String(params.name));
 
-  // Fetch lead data
-  const { data: lead, isLoading, error } = useFrappeDoc<Lead>("Lead", name);
+  const [confirmStatusChange, setConfirmStatusChange] = useState<{
+    open: boolean;
+    newStatus: string;
+  }>({ open: false, newStatus: "" });
+  const { resolution, showError, dismiss } = useGuidedError();
 
-  // Delete mutation
-  const deleteMutation = useFrappeDelete("Lead", {
-    onSuccess: () => router.push("/crm/lead"),
-    successMessage: "Lead deleted successfully",
+  const {
+    data: lead,
+    isLoading,
+    error,
+  } = useFrappeDoc<Lead>("Lead", name);
+
+  // 2N Part 1.1: unified flow resolution.
+  // NOTE: the link map does not define a Lead→Opportunity forward edge, so
+  // the downstream Opportunity is no longer auto-resolved here. The Customer
+  // edge is in the link map. To restore the Opportunity resolution, add a
+  // Lead→Opportunity link to `flow-link-map.ts` or thread an
+  // `extraResolutions` arg in (see PE page for the pattern).
+  const { result: chain, isLoading: chainLoading } = useFlowChain("Lead", name);
+
+  // Status update mutation
+  const updateMutation = useFrappeUpdate<Lead>("Lead", { showToast: false });
+
+  // Customer create mutation (for Lead → Customer conversion)
+  const createCustomerMutation = useFrappeCreate("Customer", {
+    showToast: false,
   });
 
-  const handleDeleteConfirm = async () => {
-    await deleteMutation.mutateAsync(name);
-  };
+  // Check if already converted (Lead.customer is the linked Customer field)
+  const isConverted = lead?.status === "Converted" && lead?.customer;
 
-  const handleConvertToCustomer = () => {
-    if (!lead) return;
+  const handleConvertToCustomer = useCallback(() => {
+    if (isConverted && lead?.customer) {
+      router.push(`/crm/customer/${encodeURIComponent(lead.customer)}`);
+      return;
+    }
 
-    // Navigate to Customer create page with pre-filled Lead data
-    const queryParams = new URLSearchParams({
-      from_lead: lead.name,
-      customer_name: lead.company_name || lead.lead_name || "",
-      mobile_no: lead.mobile_no || "",
-      email_id: lead.email_id || "",
-      territory: lead.territory || "",
+    const customerData = {
+      customer_name: lead?.company_name || lead?.lead_name || name,
+      customer_type: "Company",
+      customer_group: "All Customer Groups",
+      territory: lead?.territory || "",
+      email_id: lead?.email_id || "",
+      mobile_no: lead?.mobile_no || "",
+      company: getActiveCompany(),
+      lead_name: name,
+    };
+
+    createCustomerMutation.mutate(customerData, {
+      onSuccess: (res) => {
+        const customerName = (res as { data?: { name?: string } })?.data?.name;
+        if (customerName) {
+          // Update Lead with customer link + status
+          updateMutation.mutate(
+            {
+              name,
+              data: {
+                customer: customerName,
+                status: "Converted",
+              },
+            },
+            {
+              onSuccess: () => {
+                toast.success(`Converted to Customer ${customerName}`);
+                router.push(`/crm/customer/${encodeURIComponent(customerName)}`);
+              },
+              onError: (err) =>
+                showError(resolveFrappeError(err, { doctype: "Lead" })),
+            },
+          );
+        }
+      },
+      onError: (err) =>
+        showError(resolveFrappeError(err, { doctype: "Customer" })),
     });
-    router.push(`/crm/customer/new?${queryParams.toString()}`);
-  };
+  }, [isConverted, lead, name, createCustomerMutation, updateMutation, router, showError]);
 
-  // Loading state
-  if (isLoading) {
-    return <LoadingState type="detail" />;
-  }
+  const handleStatusChange = useCallback(
+    (newStatus: string) => {
+      setConfirmStatusChange({ open: false, newStatus: "" });
+      updateMutation.mutate(
+        { name, data: { status: newStatus } },
+        {
+          onSuccess: () => {
+            toast.success(`Lead status changed to ${newStatus}`);
+          },
+          onError: (err) =>
+            showError(resolveFrappeError(err, { doctype: "Lead" })),
+        },
+      );
+    },
+    [name, updateMutation, showError],
+  );
 
-  // Error state
+  // Loading / error
+  if (isLoading) return <LoadingState />;
   if (error || !lead) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-destructive font-bold">Lead not found</p>
+      <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6">
+        <p className="text-sm text-destructive">
+          {error?.message ?? "Lead not found."}
+        </p>
+        <Button
+          variant="ghost"
+          className="mt-3"
+          onClick={() => router.push("/crm/lead")}
+        >
+          Back to Leads
+        </Button>
       </div>
     );
   }
 
-  const isConverted = lead.status === "Converted";
-  const displayName = lead.lead_name || lead.name;
-  const statusVariant = getStatusVariant(lead.status);
+  const allowedTransitions = STATUS_TRANSITIONS[lead.status] ?? [];
+
+  // WhatsNext actions
+  const whatsNext = [
+    isModuleBuilt("Customer") && {
+      label: isConverted ? "View Customer" : "Convert to Customer",
+      description: isConverted
+        ? `Converted to ${lead?.customer}`
+        : "Create a Customer record from this lead",
+      onClick: handleConvertToCustomer,
+      isPrimary: !isConverted,
+      isLoading: createCustomerMutation.isPending || updateMutation.isPending,
+    },
+    !isConverted &&
+    isModuleBuilt("Quotation") && {
+      label: "Create Quotation",
+      description: "Send a price proposal to this lead",
+      onClick: () =>
+        router.push(
+          `/sales/quotation/new?party_name=${encodeURIComponent(name)}&quotation_to=Lead`,
+        ),
+    },
+    allowedTransitions.length > 0 && {
+      label: "Change Status",
+      description: `Current: ${lead.status}`,
+      onClick: () => {
+        // Scroll to the status change menu in the header
+        const statusMenu = document.querySelector("[data-status-menu]");
+        if (statusMenu) {
+          statusMenu.scrollIntoView({ behavior: "smooth", block: "center" });
+          (statusMenu as HTMLElement).focus();
+        }
+      },
+      disabled: false,
+    },
+  ].filter(Boolean) as React.ComponentProps<typeof WhatsNext>["actions"];
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8 pb-20">
+    <div className="space-y-6 pb-12">
       <PageHeader
-        title={displayName}
-        subtitle={`ID: ${lead.name}`}
-        backUrl="/crm/lead"
-        status={{
-          label: lead.status,
-          variant: statusVariant,
-        }}
+        title={lead.lead_name || name}
+        subtitle={lead.company_name || lead.email_id}
+        backHref="/crm/lead"
         actions={
           <div className="flex items-center gap-2">
-            {/* Convert to Customer - Primary Action */}
-            {!isConverted && (
-              <Button
-                className="rounded-full shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-all duration-300"
-                onClick={handleConvertToCustomer}
-              >
-                <UserPlus className="h-4 w-4 mr-2" />
-                Create Customer
-              </Button>
-            )}
-
-            <Button
-              variant="outline"
-              className="rounded-full hover:bg-secondary transition-colors"
-              onClick={() =>
-                router.push(`/crm/lead/${encodeURIComponent(name)}/edit`)
-              }
-            >
-              <Edit className="h-4 w-4 mr-2" /> Edit
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/crm/lead/${encodeURIComponent(name)}/edit`}>
+                <Edit3 className="mr-1.5 h-4 w-4" /> Edit
+              </Link>
             </Button>
-
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="rounded-full hover:bg-secondary"
-                >
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="end"
-                className="rounded-2xl border-none shadow-xl bg-popover/90 backdrop-blur-xl p-2 w-48"
-              >
-                <DropdownMenuItem
-                  className="rounded-xl text-destructive focus:bg-destructive/10 focus:text-destructive transition-colors"
-                  onClick={() => setShowDeleteDialog(true)}
-                >
-                  <Trash2 className="h-4 w-4 mr-2" /> Delete Lead
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {allowedTransitions.length > 0 && (
+              <StatusChangeMenu
+                currentStatus={lead.status}
+                transitions={allowedTransitions}
+                onSelect={(status) =>
+                  setConfirmStatusChange({ open: true, newStatus: status })
+                }
+                isLoading={updateMutation.isPending}
+              />
+            )}
           </div>
         }
       />
 
-      {/* Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Main Content - 8 columns */}
-        <div className="lg:col-span-8 space-y-8">
-          {/* Lead Information */}
-          <InfoCard
-            title={
-              <span className="flex items-center gap-2">
-                <User className="h-4 w-4" /> Personal Information
-              </span>
-            }
-            delay={100}
-          >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-y-8 gap-x-12">
-              <DataPoint label="Full Name" value={lead.lead_name} />
-              <DataPoint label="Job Title" value={lead.job_title} />
-              <DataPoint label="First Name" value={lead.first_name} />
-              <DataPoint label="Last Name" value={lead.last_name} />
-            </div>
-          </InfoCard>
+      {/* Flow Tracker */}
+      <InfoCard title="Lead-to-Cash Flow" className="overflow-hidden">
+        <FlowRail result={chain} currentDocName={name} sourceDoctype="Lead" isLoading={chainLoading} />
+      </InfoCard>
 
-          {/* Organization */}
-          <InfoCard
-            title={
-              <span className="flex items-center gap-2">
-                <Building2 className="h-4 w-4" /> Organization Details
-              </span>
-            }
-            delay={200}
-          >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-y-8 gap-x-12">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        {/* Main column */}
+        <div className="space-y-6 lg:col-span-2">
+          <InfoCard title="Lead Details">
+            <div className="mb-4 flex items-center justify-between">
+              <StatusBadge status={lead.status} />
+            </div>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+              <DataPoint label="Lead Name" value={lead.lead_name} />
               <DataPoint label="Company" value={lead.company_name} />
-              <DataPoint label="Industry" value={lead.industry} />
-              <DataPoint label="Territory" value={lead.territory} />
-              <DataPoint
-                label="No. of Employees"
-                value={lead.no_of_employees}
-              />
-            </div>
-          </InfoCard>
-
-          {/* Contact Information */}
-          <InfoCard
-            title={
-              <span className="flex items-center gap-2">
-                <Mail className="h-4 w-4" /> Contact & Location
-              </span>
-            }
-            delay={300}
-          >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-y-8 gap-x-12">
-              <DataPoint
-                label="Email Address"
-                value={lead.email_id}
-                className="col-span-1"
-              />
-              <DataPoint label="Mobile Number" value={lead.mobile_no} />
+              <DataPoint label="Email" value={lead.email_id} />
+              <DataPoint label="Mobile" value={lead.mobile_no} />
               <DataPoint label="Phone" value={lead.phone} />
-              <DataPoint label="Website" value={lead.website} />
-
-              <div className="md:col-span-2 pt-4 border-t border-border/50">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <DataPoint label="City" value={lead.city} />
-                  <DataPoint label="State" value={lead.state} />
-                  <DataPoint label="Country" value={lead.country} />
-                </div>
-              </div>
+              <DataPoint label="Source" value={lead.source} />
+              <DataPoint label="Territory" value={lead.territory} />
+              <DataPoint label="Industry" value={lead.industry} />
+              <DataPoint label="Lead Type" value={lead.type} />
+              <DataPoint label="Request Type" value={lead.request_type} />
+              <DataPoint label="Lead Owner" value={lead.lead_owner} />
+              <DataPoint label="Campaign" value={lead.campaign_name} />
             </div>
           </InfoCard>
+
+          {(lead.no_of_employees || lead.annual_revenue || lead.website) && (
+            <InfoCard title="Organization">
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                <DataPoint label="No of Employees" value={lead.no_of_employees} />
+                <DataPoint label="Annual Revenue" value={lead.annual_revenue?.toString()} />
+                <DataPoint label="Website" value={lead.website} />
+                <DataPoint label="City" value={lead.city} />
+                <DataPoint label="State" value={lead.state} />
+                <DataPoint label="Country" value={lead.country} />
+              </div>
+            </InfoCard>
+          )}
         </div>
 
-        {/* Sidebar - 4 columns */}
-        <div className="lg:col-span-4 space-y-8">
-          {/* Status Card */}
-          <InfoCard
-            title={
-              <span className="flex items-center gap-2">
-                <Activity className="h-4 w-4" /> Current Status
-              </span>
-            }
-            variant="gradient"
-            delay={400}
-          >
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-muted-foreground">
-                  Lead Lifecycle
-                </span>
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "rounded-full px-4 py-1 border-none font-bold uppercase tracking-tighter",
-                    statusVariant === "success" &&
-                      "bg-emerald-500/10 text-emerald-600",
-                    statusVariant === "warning" &&
-                      "bg-amber-500/10 text-amber-600",
-                    statusVariant === "destructive" &&
-                      "bg-destructive/10 text-destructive",
-                    statusVariant === "default" &&
-                      "bg-secondary text-muted-foreground"
-                  )}
-                >
-                  {lead.status}
-                </Badge>
-              </div>
-              {isConverted && (
-                <div className="p-4 bg-emerald-500/5 rounded-2xl border border-emerald-500/20 text-center animate-in fade-in zoom-in-95 duration-500">
-                  <ShieldAlert className="h-8 w-8 text-emerald-500 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm font-bold text-emerald-700">
-                    Converted to Customer
-                  </p>
-                </div>
-              )}
-            </div>
-          </InfoCard>
-
-          {/* Classification */}
-          <InfoCard
-            title={
-              <span className="flex items-center gap-2">
-                <Tag className="h-4 w-4" /> Classification
-              </span>
-            }
-            delay={500}
-          >
-            <div className="space-y-6">
-              <StatCard
-                label="Lead Type"
-                value={lead.type}
-                valueClassName="text-sm font-bold"
-              />
-              <div className="grid grid-cols-1 gap-4">
-                <DataPoint label="Request Type" value={lead.request_type} />
-                <DataPoint label="Source" value={lead.source} />
-                <DataPoint label="Campaign" value={lead.campaign_name} />
-              </div>
-            </div>
-          </InfoCard>
-
-          {/* System Info */}
-          <InfoCard
-            title={
-              <span className="flex items-center gap-2 text-xs">
-                <Hash className="h-3 w-3" /> System Trace
-              </span>
-            }
-            variant="transparent"
-            delay={600}
-          >
-            <div className="space-y-4 text-xs text-muted-foreground/80">
-              <div className="flex justify-between items-center bg-secondary/20 p-2 rounded-lg">
-                <span className="flex items-center gap-1.5 font-medium">
-                  <Calendar className="h-3 w-3" /> Created
-                </span>
-                <span className="font-mono">
-                  {lead.creation
-                    ? new Date(lead.creation).toLocaleDateString()
-                    : "—"}
-                </span>
-              </div>
-              <div className="flex justify-between items-center bg-secondary/10 p-2 rounded-lg">
-                <span className="flex items-center gap-1.5 font-medium">
-                  <Activity className="h-3 w-3" /> Modified
-                </span>
-                <span className="font-mono">
-                  {lead.modified
-                    ? new Date(lead.modified).toLocaleDateString()
-                    : "—"}
-                </span>
-              </div>
-              <DataPoint
-                label="Lead Owner"
-                value={lead.lead_owner}
-                className="pt-2"
-              />
-            </div>
-          </InfoCard>
+        {/* Sidebar */}
+        <div className="space-y-6">
+          {/* 2L 1B: Universal cross-flow actions menu */}
+          <CrossFlowActionsMenu doctype="Lead" name={name} />
+          <WhatsNext actions={whatsNext} />
+          <ActivityTimeline
+            items={[
+              {
+                id: "created",
+                type: "created",
+                description: "Lead created",
+                user: lead.owner,
+                timestamp: lead.creation ?? new Date().toISOString(),
+              },
+              ...(lead.modified && lead.modified !== lead.creation
+                ? [
+                    {
+                      id: "updated",
+                      type: "updated" as const,
+                      description: "Lead updated",
+                      user: lead.modified_by,
+                      timestamp: lead.modified,
+                    },
+                  ]
+                : []),
+            ]}
+          />
         </div>
       </div>
 
-      {/* Delete Confirmation Dialog */}
       <ConfirmDialog
-        open={showDeleteDialog}
-        onOpenChange={setShowDeleteDialog}
-        title="Delete Lead"
-        description={`Are you sure you want to delete "${displayName}"? This action cannot be undone.`}
-        confirmText="Delete"
-        variant="destructive"
-        onConfirm={handleDeleteConfirm}
-        loading={deleteMutation.isPending}
+        open={confirmStatusChange.open}
+        onOpenChange={(open) =>
+          !open && setConfirmStatusChange({ open: false, newStatus: "" })
+        }
+        title={`Change status to "${confirmStatusChange.newStatus}"?`}
+        description={`This will update the lead status from "${lead.status}" to "${confirmStatusChange.newStatus}".`}
+        confirmText="Change Status"
+        onConfirm={() => handleStatusChange(confirmStatusChange.newStatus)}
+        loading={updateMutation.isPending}
       />
+
+      <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
+    </div>
+  );
+}
+
+function StatusChangeMenu({
+  currentStatus,
+  transitions,
+  onSelect,
+  isLoading,
+}: {
+  currentStatus: string;
+  transitions: string[];
+  onSelect: (status: string) => void;
+  isLoading: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-1">
+      {transitions.slice(0, 2).map((status) => (
+        <Button
+          key={status}
+          variant="outline"
+          size="sm"
+          disabled={isLoading}
+          onClick={() => onSelect(status)}
+        >
+          {isLoading && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />}
+          {status}
+        </Button>
+      ))}
+      {transitions.length > 2 && (
+        <Button variant="ghost" size="sm" disabled>
+          +{transitions.length - 2} more
+        </Button>
+      )}
     </div>
   );
 }

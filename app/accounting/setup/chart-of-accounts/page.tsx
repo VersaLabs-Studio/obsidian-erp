@@ -75,7 +75,7 @@ export default function ChartOfAccountsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
         {/* Sidebar Controls */}
         <div className="space-y-6">
-          <Card className="rounded-[2rem] border-border/50 bg-card/40 backdrop-blur-sm overflow-hidden">
+          <Card className="rounded-2xl border-border/50 bg-card/40 backdrop-blur-sm overflow-hidden">
             <CardContent className="p-6 space-y-6">
               <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">
@@ -107,7 +107,7 @@ export default function ChartOfAccountsPage() {
             </CardContent>
           </Card>
 
-          <Card className="rounded-[2.5rem] border-primary/10 bg-primary/5 p-6 space-y-4">
+          <Card className="rounded-2xl border-primary/10 bg-primary/5 p-6 space-y-4">
             <h4 className="font-bold text-sm flex items-center gap-2">
               <Calculator className="w-4 h-4 text-primary" /> Accounting Pro Tip
             </h4>
@@ -124,8 +124,8 @@ export default function ChartOfAccountsPage() {
           {isLoading ? (
             <LoadingState type="list" count={10} />
           ) : !selectedCompany ? (
-            <div className="flex flex-col items-center justify-center p-20 border-2 border-dashed border-border rounded-[2.5rem] bg-card/20 animate-in fade-in zoom-in duration-500 min-h-[500px]">
-              <div className="p-6 bg-primary/10 rounded-[2.5rem] mb-6">
+            <div className="flex flex-col items-center justify-center p-20 border-2 border-dashed border-border rounded-2xl bg-card/20 animate-in fade-in zoom-in duration-500 min-h-[500px]">
+              <div className="p-6 bg-primary/10 rounded-2xl mb-6">
                 <Calculator className="w-12 h-12 text-primary" />
               </div>
               <h3 className="text-xl font-bold">Select a Company</h3>
@@ -135,7 +135,7 @@ export default function ChartOfAccountsPage() {
               </p>
             </div>
           ) : (
-            <Card className="rounded-[2.5rem] border-border/50 bg-card/30 backdrop-blur-sm shadow-xl min-h-[600px] overflow-hidden">
+            <Card className="rounded-2xl border-border/50 bg-card/30 backdrop-blur-sm shadow-xl min-h-[600px] overflow-hidden">
               <CardContent className="p-8">
                 <AccountTree
                   accounts={filteredAccounts}

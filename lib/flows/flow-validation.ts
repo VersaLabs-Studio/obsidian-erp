@@ -24,7 +24,6 @@ export const salesOrderStepSchemas = {
   /** Step 1: Customer & Dates */
   step1: z.object({
     customer: z.string().min(1, "Customer is required"),
-    company: z.string().min(1, "Company is required"),
     transaction_date: z.string().min(1, "Transaction date is required"),
     delivery_date: z.string().min(1, "Delivery date is required"),
     currency: z.string().optional(),
@@ -66,7 +65,6 @@ export const salesOrderStepSchemas = {
 export const quotationStepSchemas = {
   step1: z.object({
     party_name: z.string().min(1, "Customer/Lead is required"),
-    company: z.string().min(1, "Company is required"),
     transaction_date: z.string().min(1, "Transaction date is required"),
     valid_till: z.string().min(1, "Valid till date is required"),
     quotation_to: z.string().optional(),
@@ -94,7 +92,6 @@ export const quotationStepSchemas = {
 export const deliveryNoteStepSchemas = {
   step1: z.object({
     customer: z.string().min(1, "Customer is required"),
-    company: z.string().min(1, "Company is required"),
     posting_date: z.string().min(1, "Posting date is required"),
   }),
   step2: z.object({
@@ -119,7 +116,6 @@ export const deliveryNoteStepSchemas = {
 export const salesInvoiceStepSchemas = {
   step1: z.object({
     customer: z.string().min(1, "Customer is required"),
-    company: z.string().min(1, "Company is required"),
     posting_date: z.string().min(1, "Posting date is required"),
     due_date: z.string().min(1, "Due date is required"),
   }),
@@ -141,11 +137,14 @@ export const salesInvoiceStepSchemas = {
 
 /**
  * Material Request step schemas
+ * 2L P0-B: `schedule_date` (Required By) is NOT mandated by ERPNext on the
+ * MR header — only enforced in the UI per the spec, not by Frappe. Relaxed
+ * to optional so the wizard gate stops blocking valid submissions where the
+ * user only set the transaction_date.
  */
 export const materialRequestStepSchemas = {
   step1: z.object({
     material_request_type: z.string().min(1, "Request type is required"),
-    company: z.string().min(1, "Company is required"),
     transaction_date: z.string().min(1, "Transaction date is required"),
     schedule_date: z.string().optional(),
     set_from_warehouse: z.string().optional(),
@@ -172,8 +171,7 @@ export const materialRequestStepSchemas = {
 export const stockEntryStepSchemas = {
   step1: z.object({
     purpose: z.string().min(1, "Purpose is required"),
-    company: z.string().min(1, "Company is required"),
-    posting_date: z.string().optional(),
+    posting_date: z.string().min(1, "Posting date is required"),
     from_warehouse: z.string().optional(),
     to_warehouse: z.string().optional(),
   }),
@@ -201,7 +199,6 @@ export const stockEntryStepSchemas = {
 export const purchaseInvoiceStepSchemas = {
   step1: z.object({
     supplier: z.string().min(1, "Supplier is required"),
-    company: z.string().min(1, "Company is required"),
     posting_date: z.string().min(1, "Posting date is required"),
   }),
   step2: z.object({
@@ -266,6 +263,245 @@ export const journalEntryStepSchemas = {
 };
 
 /**
+ * Purchase Order step schemas
+ * 2L P0-B: `schedule_date` (Required By) is NOT mandated by ERPNext on the
+ * PO header. Relaxed to optional so the wizard gate doesn't reject valid
+ * submissions where the user only set the transaction_date. P0-A:
+ * per-item `warehouse` is also relaxed — Frappe's R1 still requires it, but
+ * the wizard injects the header `set_warehouse` into each row on submit
+ * (see purchase-order/new/page.tsx), so the gate is satisfied by the
+ * post-submit propagation. We keep the per-item check as a soft signal
+ * for the UI (the step2 still surfaces missing per-item warehouses via
+ * the `warehouse.${idx}` error path when a per-item warehouse is *also*
+ * required for mixed-warehouse orders).
+ */
+export const purchaseOrderStepSchemas = {
+  step1: z.object({
+    supplier: z.string().min(1, "Supplier is required"),
+    transaction_date: z.string().min(1, "Transaction date is required"),
+    schedule_date: z.string().optional(),
+  }),
+  step2: z.object({
+    items: z
+      .array(
+        z.object({
+          item_code: z.string().min(1, "Item code is required"),
+          qty: z.number().min(0.01, "Quantity must be greater than 0"),
+          rate: z.number().min(0, "Rate must be non-negative"),
+          // Per-item warehouse is OPTIONAL at the gate — the header
+          // `set_warehouse` is propagated to each row on submit (P0-A).
+          // Keeping it as `.optional()` here means the wizard can advance
+          // with only the header set, and the submit handler fills the
+          // per-row warehouses.
+          warehouse: z.string().optional(),
+        })
+      )
+      .min(1, "At least one item is required"),
+  }),
+  step3: z.object({
+    confirmed: z.boolean().optional(),
+  }),
+};
+
+/**
+ * Request for Quotation step schemas
+ */
+export const rfqStepSchemas = {
+  step1: z.object({
+    transaction_date: z.string().min(1, "Transaction date is required"),
+  }),
+  step2: z.object({
+    items: z
+      .array(
+        z.object({
+          item_code: z.string().min(1, "Item code is required"),
+          qty: z.number().min(0.01, "Quantity must be greater than 0"),
+        })
+      )
+      .min(1, "At least one item is required"),
+    suppliers: z
+      .array(
+        z.object({
+          supplier: z.string().min(1, "Supplier is required"),
+        })
+      )
+      .min(1, "At least one supplier required"),
+  }),
+  step3: z.object({
+    confirmed: z.boolean().optional(),
+  }),
+};
+
+/**
+ * Supplier Quotation step schemas
+ */
+export const supplierQuotationStepSchemas = {
+  step1: z.object({
+    supplier: z.string().min(1, "Supplier is required"),
+    transaction_date: z.string().min(1, "Transaction date is required"),
+  }),
+  step2: z.object({
+    items: z
+      .array(
+        z.object({
+          item_code: z.string().min(1, "Item code is required"),
+          qty: z.number().min(0.01, "Quantity must be greater than 0"),
+          rate: z.number().min(0.01, "Rate must be greater than 0"),
+        })
+      )
+      .min(1, "At least one item is required"),
+  }),
+  step3: z.object({
+    confirmed: z.boolean().optional(),
+  }),
+};
+
+/**
+ * BOM step schemas
+ */
+export const bomStepSchemas = {
+  step1: z.object({
+    item: z.string().min(1, "Item is required"),
+    quantity: z.coerce.number().min(1, "Quantity must be at least 1"),
+    is_active: z.coerce.number().optional(),
+    is_default: z.coerce.number().optional(),
+  }),
+  step2: z.object({
+    items: z
+      .array(
+        z.object({
+          item_code: z.string().min(1, "Item code is required"),
+          qty: z.coerce.number().min(0.01, "Quantity must be greater than 0"),
+          rate: z.coerce.number().min(0, "Rate must be non-negative"),
+          uom: z.string().optional(),
+          amount: z.coerce.number().optional(),
+          source_warehouse: z.string().optional(),
+        })
+      )
+      .min(1, "At least one material is required"),
+    operations: z
+      .array(
+        z.object({
+          operation: z.string().min(1, "Operation is required"),
+          workstation: z.string().optional(),
+          time_in_mins: z.coerce.number().min(0).default(0),
+          operating_cost: z.coerce.number().optional(),
+        })
+      )
+      .optional(),
+  }),
+  step3: z.object({
+    confirmed: z.boolean().optional(),
+  }),
+};
+
+/**
+ * Lead step schemas
+ */
+export const leadStepSchemas = {
+  step1: z.object({
+    lead_name: z.string().min(1, "Lead name is required"),
+    company_name: z.string().optional(),
+    mobile_no: z.string().optional(),
+    email_id: z.string().optional(),
+  }),
+  step2: z.object({
+    source: z.string().optional(),
+    territory: z.string().optional(),
+    industry: z.string().optional(),
+    notes: z.string().optional(),
+  }),
+};
+
+/**
+ * Opportunity step schemas
+ */
+export const opportunityStepSchemas = {
+  step1: z.object({
+    opportunity_from: z.string().min(1, "Source type is required"),
+    party_name: z.string().min(1, "Lead/Customer is required"),
+    transaction_date: z.string().min(1, "Date is required"),
+  }),
+  step2: z.object({
+    opportunity_type: z.string().min(1, "Opportunity type is required"),
+    sales_stage: z.string().optional(),
+    probability: z.number().optional(),
+    expected_closing: z.string().optional(),
+    items: z.array(z.object({
+      item_code: z.string().min(1, "Item is required"),
+      qty: z.number().min(0.01).optional(),
+      rate: z.number().min(0).optional(),
+    })).optional(),
+  }),
+};
+
+/**
+ * Purchase Receipt step schemas (Phase 2H — inbound goods)
+ * Mirrors Delivery Note but for supplier deliveries.
+ */
+export const purchaseReceiptStepSchemas = {
+  step1: z.object({
+    supplier: z.string().min(1, "Supplier is required"),
+    posting_date: z.string().min(1, "Posting date is required"),
+  }),
+  step2: z.object({
+    items: z
+      .array(
+        z.object({
+          item_code: z.string().min(1, "Item code is required"),
+          qty: z.number().min(0.01, "Quantity must be greater than 0"),
+          rate: z.number().min(0, "Rate must be non-negative").optional(),
+          warehouse: z.string().min(1, "Warehouse is required"),
+        })
+      )
+      .min(1, "At least one item is required"),
+  }),
+  step3: z.object({
+    confirmed: z.boolean().optional(),
+  }),
+};
+
+/**
+ * Work Order step schemas
+ */
+export const workOrderStepSchemas = {
+  step1: z.object({
+    production_item: z.string().min(1, "Production item is required"),
+    bom_no: z.string().min(1, "BOM is required"),
+    qty: z.coerce.number().min(1, "Quantity must be at least 1"),
+    sales_order: z.string().optional(),
+    expected_delivery_date: z.string().optional(),
+  }),
+  step2: z.object({
+    fg_warehouse: z.string().min(1, "Target warehouse is required"),
+    wip_warehouse: z.string().optional(),
+    source_warehouse: z.string().optional(),
+    planned_start_date: z.string().min(1, "Planned start date is required"),
+  }),
+};
+
+/**
+ * Stock Reconciliation step schemas
+ */
+export const stockReconciliationStepSchemas = {
+  step1: z.object({
+    purpose: z.string().min(1, "Purpose is required"),
+    posting_date: z.string().min(1, "Posting date is required"),
+  }),
+  step2: z.object({
+    items: z.array(z.object({
+      item_code: z.string().min(1, "Item is required"),
+      warehouse: z.string().min(1, "Warehouse is required"),
+      qty: z.number(), // 0 is valid for reconciliation
+      valuation_rate: z.number().min(0).optional(),
+    })).min(1, "Add at least one item"),
+  }),
+  step3: z.object({
+    confirmed: z.boolean().optional(),
+  }),
+};
+
+/**
  * All step schemas indexed by doctype
  */
 export const WIZARD_STEP_SCHEMAS: Record<string, Record<string, z.ZodType>> = {
@@ -278,6 +514,15 @@ export const WIZARD_STEP_SCHEMAS: Record<string, Record<string, z.ZodType>> = {
   "Journal Entry": journalEntryStepSchemas,
   "Material Request": materialRequestStepSchemas,
   "Stock Entry": stockEntryStepSchemas,
+  "Purchase Order": purchaseOrderStepSchemas,
+  "Request for Quotation": rfqStepSchemas,
+  "Supplier Quotation": supplierQuotationStepSchemas,
+  "BOM": bomStepSchemas,
+  "Work Order": workOrderStepSchemas,
+  "Lead": leadStepSchemas,
+  "Opportunity": opportunityStepSchemas,
+  "Purchase Receipt": purchaseReceiptStepSchemas,
+  "Stock Reconciliation": stockReconciliationStepSchemas,
 };
 
 /**

@@ -89,7 +89,7 @@ export default function CreateModeOfPaymentPage() {
                 />
               </div>
               <div className="space-y-6">
-                <div className="p-6 rounded-[2rem] bg-secondary/10 border border-border/50 h-full flex flex-col justify-center">
+                <div className="p-6 rounded-2xl bg-secondary/10 border border-border/50 h-full flex flex-col justify-center">
                   <FormSwitch
                     control={control}
                     name="enabled"
@@ -101,7 +101,7 @@ export default function CreateModeOfPaymentPage() {
             </div>
           </InfoCard>
 
-          <div className="flex justify-end gap-3 sticky bottom-6 z-10 glass-card p-4 rounded-[2rem] shadow-2xl">
+          <div className="flex justify-end gap-3 sticky bottom-6 z-10 glass-card p-4 rounded-2xl shadow-xl">
             <Button
               type="button"
               variant="outline"

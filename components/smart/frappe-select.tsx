@@ -24,7 +24,7 @@ interface FrappeSelectProps {
   /** Field to use as display label (default: "name") */
   labelField?: string;
   /** Additional Frappe filters */
-  filters?: [string, string, unknown][];
+  filters?: ([string, string, unknown] | [string, string, string, unknown])[];
   /** Order by field and direction (use table prefix for joins) */
   orderBy?: { field: string; order?: "asc" | "desc" };
   /** Whether the select is disabled */
@@ -35,6 +35,17 @@ interface FrappeSelectProps {
   error?: boolean;
   /** Additional CSS classes */
   className?: string;
+  /**
+   * Optional footer slot — rendered below the options list. Used by
+   * Quick-Add to expose a "Create new <Doctype>" affordance. Forwards to
+   * `SearchableSelect` so it lives inside the popover.
+   */
+  footer?: React.ReactNode;
+  /**
+   * Optional footer slot for the empty state — rendered when the options
+   * list is empty. Forwards to `SearchableSelect`.
+   */
+  emptyFooter?: React.ReactNode;
 }
 
 /**
@@ -72,6 +83,8 @@ export function FrappeSelect({
   required,
   error,
   className,
+  footer,
+  emptyFooter,
 }: FrappeSelectProps) {
   const {
     data: options,
@@ -129,6 +142,8 @@ export function FrappeSelect({
       searchPlaceholder={`Search ${doctype.toLowerCase()}...`}
       emptyText={`No ${doctype.toLowerCase()} found`}
       disabled={disabled}
+      footer={footer}
+      emptyFooter={emptyFooter}
       className={cn(
         error && "border-destructive focus:ring-destructive",
         className,

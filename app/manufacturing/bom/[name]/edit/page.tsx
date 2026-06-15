@@ -1,4 +1,5 @@
-// @ts-nocheck
+// app/manufacturing/bom/[name]/edit/page.tsx
+// 2N Part 4.1: removed @ts-nocheck. Real types now enforced.
 "use client";
 
 import { useState, useEffect, useMemo, Suspense } from "react";
@@ -61,7 +62,6 @@ function EditBOMForm() {
     resolver: zodResolver(BOMUpdateSchema),
     defaultValues: {
       item: "",
-      company: "",
       quantity: 1,
       uom: "Nos",
       currency: "ETB",
@@ -93,29 +93,50 @@ function EditBOMForm() {
         with_operations: bom.with_operations,
         rm_cost_as_per: bom.rm_cost_as_per || "Valuation Rate",
         items:
-          bom.items?.map((i) => ({
+          // 2N Part 4.1: typed casts (BOM child rows are `unknown[]` in
+          // the generated Bom interface; the runtime shape is documented
+          // by the doctype).
+          (bom.items as Array<{
+            item_code: string;
+            qty: number;
+            uom: string;
+            rate: number;
+            amount: number;
+          }> ?? []).map((i) => ({
             item_code: i.item_code,
             qty: i.qty,
             uom: i.uom,
             rate: i.rate,
             amount: i.amount,
-          })) || [],
+          })),
         operations:
-          bom.operations?.map((o) => ({
+          (bom.operations as Array<{
+            operation: string;
+            workstation: string;
+            time_in_mins: number;
+            hour_rate: number;
+            operating_cost: number;
+          }> ?? []).map((o) => ({
             operation: o.operation,
             workstation: o.workstation,
             time_in_mins: o.time_in_mins,
             hour_rate: o.hour_rate,
             operating_cost: o.operating_cost,
-          })) || [],
+          })),
         scrap_items:
-          bom.scrap_items?.map((s) => ({
+          (bom.scrap_items as Array<{
+            item_code: string;
+            qty: number;
+            uom: string;
+            rate: number;
+            amount: number;
+          }> ?? []).map((s) => ({
             item_code: s.item_code,
             qty: s.qty,
             uom: s.uom,
             rate: s.rate,
             amount: s.amount,
-          })) || [],
+          })),
       });
       setWithOperations(bom.with_operations === 1);
     }
@@ -169,7 +190,8 @@ function EditBOMForm() {
     const ops = JSON.parse(operationsSerialized) as typeof operations;
     return ops.reduce((sum, op) => {
       const ws = workstations?.find((w) => w.name === op.workstation);
-      const hourRate = ws ? ws.hour_rate : op.hour_rate || 0;
+      const wsRate = ws?.hour_rate;
+      const hourRate = wsRate ?? op.hour_rate ?? 0;
       return sum + ((op.time_in_mins || 0) / 60) * hourRate;
     }, 0);
   }, [operationsSerialized, workstations]);
@@ -223,7 +245,7 @@ function EditBOMForm() {
       ...data,
       currency: "ETB",
       conversion_rate: 1,
-      items: data.items.map((item) => {
+      items: (data.items ?? []).map((item) => {
         const rate = item.rate || 0;
         const qty = item.qty || 0;
         return {
@@ -234,14 +256,14 @@ function EditBOMForm() {
         };
       }),
       operations: withOperations
-        ? data.operations?.map((op) => ({
+        ? (data.operations ?? []).map((op) => ({
             ...op,
             hour_rate: op.hour_rate || 0,
             doctype: "BOM Operation",
           }))
         : [],
       scrap_items:
-        data.scrap_items?.map((scrap) => ({
+        (data.scrap_items ?? []).map((scrap) => ({
           ...scrap,
           amount: (scrap.qty || 0) * (scrap.rate || 0),
           doctype: "BOM Scrap Item",
@@ -251,7 +273,7 @@ function EditBOMForm() {
     updateMutation.mutate({ name: bomName, data: payload });
   };
 
-  if (isLoading) return <LoadingState message="Fetching BOM details..." />;
+  if (isLoading) return <LoadingState variant="detail" />;
 
   return (
     <Form {...form}>
@@ -273,13 +295,6 @@ function EditBOMForm() {
                   label="Product to Manufacture"
                   doctype="Item"
                   placeholder="Select finished good..."
-                  required
-                />
-                <FormFrappeSelect
-                  control={form.control}
-                  name="company"
-                  label="Company"
-                  doctype="Company"
                   required
                 />
               </div>
@@ -753,10 +768,9 @@ export default function EditBOMPage() {
         title="Edit Bill of Materials"
         subtitle={`Modifying ${bomName}`}
         backHref={`/manufacturing/bom/${encodeURIComponent(bomName)}`}
-        icon={<BOMIcon className="h-5 w-5" />}
       />
 
-      <Suspense fallback={<LoadingState message="Loading BOM..." />}>
+      <Suspense fallback={<LoadingState variant="detail" />}>
         <EditBOMForm />
       </Suspense>
     </div>

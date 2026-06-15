@@ -137,8 +137,8 @@ export default function ModeOfPaymentListPage() {
               <div
                 key={mode.name}
                 className={cn(
-                  "group relative bg-card rounded-[2.5rem] border border-border/50 p-8",
-                  "hover:shadow-2xl hover:border-emerald-500/20 transition-all duration-500",
+                  "group relative bg-card rounded-2xl border border-border/50 p-8",
+                  "hover:shadow-xl hover:border-emerald-500/20 transition-all duration-500",
                   "cursor-pointer shadow-sm overflow-hidden",
                   !isEnabled && "opacity-60 grayscale-[0.5]",
                 )}

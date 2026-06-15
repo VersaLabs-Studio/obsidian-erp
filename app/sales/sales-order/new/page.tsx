@@ -22,6 +22,9 @@ import {
 
 import { PageHeader } from "@/components/smart";
 import { InfoCard } from "@/components/ui/info-card";
+import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
+import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
+import { getActiveCompany } from "@/lib/settings/company";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -29,6 +32,9 @@ import {
   FormFrappeSelect,
   FormDatePicker,
 } from "@/components/form";
+import { QuickAddField } from "@/components/quick-add/QuickAddField";
+import { ItemRateAutoFill } from "@/lib/flows/item-price-lookup";
+import { useItemPriceRate } from "@/lib/flows/item-price-lookup";
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
 import { FlowWizard } from "@/components/flows/FlowWizard";
 import { useFrappeCreate, useFrappeDoc } from "@/hooks/generic";
@@ -42,6 +48,7 @@ import type { StepValidationResult } from "@/lib/flows/flow-validation";
 import type { WizardStep } from "@/types/flow-types";
 import type { Quotation } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
+import { FieldWrap } from "@/components/form/field-wrap";
 
 // ---------------------------------------------------------------------------
 // Form model — concrete item shape so the field array is fully typed
@@ -99,7 +106,7 @@ const WIZARD_STEPS: WizardStep[] = [
     label: "Customer & Dates",
     description: "Confirm the customer and set the delivery timeline",
     schema: null,
-    fields: ["customer", "company", "transaction_date", "delivery_date"],
+    fields: ["customer", "transaction_date", "delivery_date"],
     icon: "UserRound",
   },
   {
@@ -129,17 +136,20 @@ export default function NewSalesOrderPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const quotationId = searchParams.get("quotation");
+  // R5: Customer-360 quick-action passes ?customer=<name>. Prefill + lock
+  // the customer field so the resulting SO is for the source customer.
+  const customerId = searchParams.get("customer");
 
   const [step, setStep] = useState(0);
   const [autoFilledFields, setAutoFilledFields] = useState<Set<string>>(
     new Set(),
   );
+  const [triedNextSteps, setTriedNextSteps] = useState<Set<number>>(new Set());
 
   const form = useForm<SOForm>({
     defaultValues: {
       naming_series: "SAL-ORD-.YYYY.-",
-      customer: "",
-      company: "",
+      customer: customerId ?? "",
       transaction_date: new Date().toISOString().split("T")[0],
       delivery_date: "",
       order_type: "Sales",
@@ -155,6 +165,16 @@ export default function NewSalesOrderPage() {
 
   const { control, getValues, reset, setValue } = form;
   const { fields, append, remove } = useFieldArray({ control, name: "items" });
+
+  // R5: when Customer-360 hands us ?customer=<name>, lock the field.
+  useEffect(() => {
+    if (!customerId) return;
+    setAutoFilledFields((prev) => {
+      const next = new Set(prev);
+      next.add("customer");
+      return next;
+    });
+  }, [customerId]);
 
   // Watch the entire form reactively — drives validation gate + FlowWizard formData
   const watchedAll = useWatch({ control });
@@ -230,6 +250,8 @@ export default function NewSalesOrderPage() {
   }, [watchedAll]);
 
   // -- Persistence ------------------------------------------------------------
+  const { resolution, showError, dismiss } = useGuidedError();
+
   const createMutation = useFrappeCreate<
     { data: { name: string } },
     Record<string, unknown>
@@ -240,6 +262,10 @@ export default function NewSalesOrderPage() {
       if (name) {
         router.push(`/sales/sales-order/${encodeURIComponent(name)}`);
       }
+    },
+    onError: (err) => {
+      const r = resolveFrappeError(err, { doctype: "Sales Order", values: getValues() });
+      showError(r);
     },
   });
 
@@ -255,6 +281,7 @@ export default function NewSalesOrderPage() {
     }
     createMutation.mutate({
       ...values,
+      company: getActiveCompany(),
       items: items.map((it) => ({
         ...it,
         amount: (Number(it.qty) || 0) * (Number(it.rate) || 0),
@@ -273,13 +300,15 @@ export default function NewSalesOrderPage() {
         subtitle={
           quotationId
             ? `From Quotation ${quotationId}`
-            : "Create a sales order in three steps"
+            : customerId
+              ? `From Customer ${customerId}`
+              : "Create a sales order in three steps"
         }
         backHref="/sales/sales-order"
       />
 
       <Form {...form}>
-        <InfoCard className="max-w-3xl">
+        <InfoCard>
           <FlowWizard
             steps={WIZARD_STEPS}
             formData={watchedAll as unknown as Record<string, unknown>}
@@ -287,6 +316,7 @@ export default function NewSalesOrderPage() {
             isSubmitting={createMutation.isPending}
             onFormDataChange={() => {}}
             onStepChange={setStep}
+            onTriedNextChange={setTriedNextSteps}
             onSubmit={handleSubmit}
             onCancel={() => router.back()}
             submitLabel="Create Sales Order"
@@ -305,8 +335,10 @@ export default function NewSalesOrderPage() {
                       <FieldWrap
                         auto={isAuto("customer")}
                         loading={loadingQuotation}
+                        error={triedNextSteps.has(step) ? validationResults?.step1?.errors?.customer : undefined}
                       >
-                        <FormFrappeSelect
+                        {/* 2L 1A: Quick-Add enabled master field — Customer */}
+                        <QuickAddField
                           control={control}
                           name="customer"
                           label="Customer"
@@ -315,18 +347,6 @@ export default function NewSalesOrderPage() {
                           labelField="customer_name"
                           placeholder="Search customer..."
                           disabled={isAuto("customer")}
-                        />
-                      </FieldWrap>
-                      <FieldWrap auto={isAuto("company")}>
-                        <FormFrappeSelect
-                          control={control}
-                          name="company"
-                          label="Company"
-                          required
-                          doctype="Company"
-                          labelField="company_name"
-                          placeholder="Select company..."
-                          disabled={isAuto("company")}
                         />
                       </FieldWrap>
                       <FormDatePicker
@@ -348,9 +368,12 @@ export default function NewSalesOrderPage() {
                         doctype="Address"
                         labelField="address_title"
                         disabled={!watchedCustomer}
+                        // R6: filter on the Dynamic Link child table
+                        // (`link_doctype` + `link_name`).
                         filters={
                           watchedCustomer
                             ? ([
+                                ["Dynamic Link", "link_doctype", "=", "Customer"],
                                 ["Dynamic Link", "link_name", "=", watchedCustomer],
                               ] as unknown as [string, string, unknown][])
                             : []
@@ -408,7 +431,8 @@ export default function NewSalesOrderPage() {
                             return (
                               <tr key={field.id} className="group">
                                 <td className="px-3 py-2 align-top">
-                                  <FormFrappeSelect
+                                  {/* 2L 1A: Quick-Add enabled per-row Item */}
+                                  <QuickAddField
                                     control={control}
                                     name={`items.${index}.item_code`}
                                     doctype="Item"
@@ -422,10 +446,7 @@ export default function NewSalesOrderPage() {
                                     ]}
                                     onValueChange={(_val, doc) => {
                                       if (doc) {
-                                        setValue(
-                                          `items.${index}.rate`,
-                                          Number(doc.standard_rate) || 0,
-                                        );
+                                        // Set uom/item_name immediately (always).
                                         setValue(
                                           `items.${index}.uom`,
                                           doc.stock_uom || "Nos",
@@ -434,8 +455,26 @@ export default function NewSalesOrderPage() {
                                           `items.${index}.item_name`,
                                           doc.item_name || "",
                                         );
+                                        // 2L Part 2: rate is now set by the
+                                        // ItemRateAutoFill below via the
+                                        // Item Price lookup (more specific
+                                        // than standard_rate). Don't set
+                                        // from standard_rate here — let the
+                                        // auto-fill run; if no Item Price
+                                        // exists, the user types manually.
                                       }
                                     }}
+                                  />
+                                  {/* 2L Part 2: Auto-rate via Item Price lookup.
+                                      Headless component — watches item_code,
+                                      looks up Item Price, writes the rate. */}
+                                  <ItemRateAutoFill<SOForm>
+                                    itemCodePath={`items.${index}.item_code`}
+                                    ratePath={`items.${index}.rate`}
+                                    priceList={watchedAll?.selling_price_list || ""}
+                                    currency={watchedAll?.currency || "ETB"}
+                                    side="selling"
+                                    setValue={setValue as any}
                                   />
                                 </td>
                                 <td className="px-3 py-2 align-top">
@@ -494,38 +533,64 @@ export default function NewSalesOrderPage() {
                 );
               }
 
-              // ---- STEP 3 — Review --------------------------------------
+              // ---- STEP 3 — Review & Confirm --------------------------------
               const v = getValues();
               return (
-                <div className="space-y-5">
+                <div className="space-y-6">
                   <StepHeading
                     icon={<ClipboardCheck className="h-5 w-5 text-primary" />}
                     title="Review & Confirm"
-                    description="Confirm the details below to create the order."
+                    description="Review everything below, then create — you can still go back to edit."
                   />
-                  <div className="rounded-xl border border-border/60 bg-card/40 p-5 backdrop-blur-sm">
-                    <div className="grid grid-cols-2 gap-4 text-sm">
+
+                  {/* Header fields */}
+                  <div className="bg-card/40 rounded-2xl p-6 space-y-4">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                       <Summary label="Customer" value={v.customer_name || v.customer} />
                       <Summary label="Company" value={v.company} />
                       <Summary label="Order Date" value={v.transaction_date} />
                       <Summary label="Delivery Date" value={v.delivery_date} />
+                      <Summary label="Order Type" value={v.order_type} />
+                      <Summary label="Currency" value={v.currency} />
+                      <Summary label="Price List" value={v.selling_price_list} />
+                      <Summary label="Customer Address" value={v.customer_address} />
+                      <Summary label="Customer PO No" value={v.po_no} />
                     </div>
-                    <div className="mt-4 border-t border-border/60 pt-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">
-                          {(watchedItems ?? []).filter((i) => i?.item_code).length}{" "}
-                          item(s)
-                        </span>
-                        <div className="text-right">
-                          <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                            Grand Total
-                          </span>
-                          <p className="text-2xl font-bold tabular-nums text-primary">
-                            {ETB.format(subtotal)}
-                          </p>
-                        </div>
-                      </div>
+                  </div>
+
+                  {/* Items table */}
+                  <div className="bg-card/40 rounded-2xl overflow-hidden">
+                    <div className="px-6 py-3 bg-muted/30">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        Items ({(watchedItems ?? []).filter(i => i?.item_code).length})
+                      </p>
                     </div>
+                    <table className="w-full text-sm">
+                      <thead className="border-b border-border/40">
+                        <tr className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                          <th className="px-6 py-2.5 text-left font-semibold">Item</th>
+                          <th className="px-6 py-2.5 text-right font-semibold">Qty</th>
+                          <th className="px-6 py-2.5 text-right font-semibold">Rate</th>
+                          <th className="px-6 py-2.5 text-right font-semibold">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/40">
+                        {(watchedItems ?? []).filter(i => i?.item_code).map((item, idx) => (
+                          <tr key={idx}>
+                            <td className="px-6 py-3 font-medium">{item.item_name || item.item_code}</td>
+                            <td className="px-6 py-3 text-right tabular-nums">{item.qty} {item.uom}</td>
+                            <td className="px-6 py-3 text-right tabular-nums">{ETB.format(item.rate ?? 0)}</td>
+                            <td className="px-6 py-3 text-right font-medium tabular-nums">{ETB.format((item.qty || 0) * (item.rate || 0))}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-muted/20">
+                          <td colSpan={3} className="px-6 py-3 text-right font-bold uppercase text-xs">Grand Total</td>
+                          <td className="px-6 py-3 text-right font-bold text-lg text-primary tabular-nums">{ETB.format(subtotal)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
                   </div>
                 </div>
               );
@@ -533,6 +598,8 @@ export default function NewSalesOrderPage() {
           />
         </InfoCard>
       </Form>
+
+      <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
     </div>
   );
 }
@@ -558,27 +625,6 @@ function StepHeading({
         <h3 className="text-base font-semibold text-foreground">{title}</h3>
         <p className="text-sm text-muted-foreground">{description}</p>
       </div>
-    </div>
-  );
-}
-
-function FieldWrap({
-  auto,
-  loading,
-  children,
-}: {
-  auto?: boolean;
-  loading?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className={cn("relative", loading && "animate-pulse")}>
-      {children}
-      {auto && (
-        <span className="pointer-events-none absolute right-2 top-0 inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-          <Lock className="h-3 w-3" />
-        </span>
-      )}
     </div>
   );
 }

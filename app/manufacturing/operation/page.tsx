@@ -1,6 +1,8 @@
 // app/manufacturing/operation/page.tsx
 // Obsidian ERP v4.0 - Operation List Page
-// @ts-nocheck
+// 2N Part 4.1: removed @ts-nocheck. The list page is read-only and uses
+// only typed hooks (useFrappeList, useFrappeDelete) + the standard
+// premium-UI chrome.
 
 "use client";
 
@@ -227,7 +229,7 @@ export default function OperationListPage() {
   };
 
   if (isLoading) {
-    return <LoadingState variant="cards" message="Loading operations..." />;
+    return <LoadingState variant="cards" />;
   }
 
   if (error) {

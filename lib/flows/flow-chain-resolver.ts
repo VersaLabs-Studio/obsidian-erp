@@ -3,8 +3,11 @@
 // Per Workflow Part 3 §4.2 — resolves the complete chain status for a document
 
 import type { FlowChainResult, FlowStage, FlowStageStatus } from "@/types/flow-types";
-import { getFlowForDocType } from "./flow-definitions";
+import { getFlowForDocType, getFlowDefinition } from "./flow-definitions";
 import { isModuleBuilt } from "./module-availability";
+
+// Re-export for the 2N Part 1.1 `useFlowChain` hook.
+export { getFlowForDocType, getFlowDefinition };
 
 /**
  * Resolve the complete flow chain for a document
@@ -118,10 +121,11 @@ export function resolveFlowChain(
  * Get the route path for a doctype
  * Maps doctype names to their URL paths
  */
-function getDocTypeRoute(doctype: string): string {
+export function getDocTypeRoute(doctype: string): string {
   const routeMap: Record<string, string> = {
     Lead: "crm/lead",
     Opportunity: "crm/opportunity",
+    Customer: "crm/customer",
     Quotation: "sales/quotation",
     "Sales Order": "sales/sales-order",
     "Work Order": "manufacturing/work-order",
@@ -132,11 +136,39 @@ function getDocTypeRoute(doctype: string): string {
     "Purchase Receipt": "stock/purchase-receipt",
     "Purchase Invoice": "accounting/purchase-invoice",
     "Material Request": "stock/material-request",
+    "Request for Quotation": "buying/request-for-quotation",
+    "Supplier Quotation": "buying/supplier-quotation",
     "Stock Entry": "stock/stock-entry",
     BOM: "manufacturing/bom",
+    "Stock Reconciliation": "stock/stock-reconciliation",
+    "Stock Ledger Entry": "stock/stock-ledger",
   };
 
   return routeMap[doctype] || doctype.toLowerCase().replace(/\s+/g, "-");
+}
+
+/**
+ * G2: Derive the auto-fill query-param name from a source doctype.
+ * E.g. "Quotation" → "quotation", "Sales Order" → "sales_order"
+ * This is the same param the WhatsNext "Create X" links already use.
+ */
+export function getAutoFillParam(sourceDoctype: string): string {
+  return sourceDoctype.toLowerCase().replace(/\s+/g, "_");
+}
+
+/**
+ * G2: Build the real create URL for a downstream doctype from a source document.
+ * E.g. buildCreateUrl("Quotation", "QTN-001", "Sales Order")
+ *   → "/sales/sales-order/new?quotation=QTN-001"
+ */
+export function buildCreateUrl(
+  sourceDoctype: string,
+  sourceName: string,
+  targetDoctype: string,
+): string {
+  const route = getDocTypeRoute(targetDoctype);
+  const param = getAutoFillParam(sourceDoctype);
+  return `/${route}/new?${param}=${encodeURIComponent(sourceName)}`;
 }
 
 /**

@@ -31,6 +31,18 @@ interface SearchableSelectProps {
   emptyText?: string;
   className?: string;
   disabled?: boolean;
+  /**
+   * Optional footer slot — rendered below the options list inside the popover.
+   * Used by Quick-Add to expose a "Create new <Doctype>" affordance.
+   * If the options list is empty and `emptyFooter` is not provided, the footer
+   * still renders; if you want a different render when empty, use `emptyText`.
+   */
+  footer?: React.ReactNode;
+  /**
+   * Text to show when there are no options AND no footer. Defaults to
+   * `emptyText` for backwards compatibility.
+   */
+  emptyFooter?: React.ReactNode;
 }
 
 export function SearchableSelect({
@@ -42,6 +54,8 @@ export function SearchableSelect({
   emptyText = "No results found.",
   className,
   disabled = false,
+  footer,
+  emptyFooter,
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState("");
@@ -135,6 +149,15 @@ export function SearchableSelect({
               ))
             )}
           </div>
+
+          {/* Footer slot — Quick-Add lives here */}
+          {(footer || (filteredOptions.length === 0 && emptyFooter)) && (
+            <div className="border-t border-border/50 p-1">
+              {filteredOptions.length === 0 && emptyFooter
+                ? emptyFooter
+                : footer}
+            </div>
+          )}
         </div>
       </PopoverContent>
     </Popover>

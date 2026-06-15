@@ -1,4 +1,10 @@
-// @ts-nocheck
+// app/api/stock/stock-entry/route.ts
+// Obsidian ERP v4.0 — Stock Entry list/create API route.
+//
+// 2O Part 5 cleanup: removed `@ts-nocheck` — the route only consumes the
+// typed `createListHandler` / `createCreateHandler` factories, so the
+// suppression wasn't needed.
+
 import { createListHandler, createCreateHandler } from "@/lib/api-factory";
 import { StockEntryCreateSchema } from "@/lib/schemas/doctype-schemas";
 

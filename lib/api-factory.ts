@@ -1,8 +1,32 @@
 // lib/api-factory.ts
 // Obsidian ERP v4.0 - API Route Handler Factory
+//
+// 2P-FINAL Part A.2 — SHIP-GATE RBAC ENFORCEMENT.
+//
+// Every CRUD handler now resolves a per-request, user-scoped Frappe
+// client via `getRequestClient(request)` (which forwards the `sid`
+// cookie — see `lib/auth/resolve-user.ts` A.1). ERPNext then runs its
+// native DocPerm engine for the requesting user. We do NOT re-
+// implement permissions — we stop suppressing Frappe's.
+//
+// Fail-closed: no session → 401 (not a service-account 200, which
+// is what happened before — every read/write ran as Administrator).
+//
+// The factory still uses `frappeClient.handleError` for error
+// shaping (it's stateless — fine to keep importing the singleton
+// just for that helper). Frappe returns 403 (PermissionError) for
+// out-of-role access; `handleError` already maps that to a clean 403
+// shape (`lib/frappe-client.ts:112`).
+//
+// The five handlers (createListHandler, createGetHandler,
+// createCreateHandler, createUpdateHandler, createDeleteHandler)
+// all already receive `request: NextRequest` as their first arg
+// (this file, lines 58, 147, 194, 247, 327) — no route signature
+// changes are needed at the consumer.
 
 import { NextRequest, NextResponse } from "next/server";
 import { frappeClient } from "./frappe-client";
+import { getRequestClient } from "./auth/resolve-user";
 import { ZodSchema, ZodError } from "zod";
 
 /**
@@ -56,6 +80,20 @@ export function createListHandler(
   options?: ListHandlerOptions,
 ) {
   return async function GET(request: NextRequest) {
+    // 2P-FINAL Part A.2 — per-request user-scoped Frappe client.
+    // Fail closed (401) when no session is present.
+    const client = getRequestClient(request);
+    if (!client) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Unauthorized",
+          details: "No valid session.",
+          statusCode: 401,
+        },
+        { status: 401 },
+      );
+    }
     try {
       const { searchParams } = new URL(request.url);
 
@@ -111,9 +149,11 @@ export function createListHandler(
       );
       const offset = parseInt(searchParams.get("offset") || "0");
 
-      // Fetch from Frappe - use any to bypass strict SDK typing for dynamic filters
+      // Fetch from Frappe via the USER-scoped client (A.2). Frappe
+      // runs DocPerm for the requesting user. A 403 PermissionError
+      // becomes a clean 403 via handleError.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = await frappeClient.db.getDocList(doctype, {
+      const data = await client.db.getDocList(doctype, {
         fields: fields || ["*"],
         filters: filters as any, // Dynamic filters need type bypass
         orderBy,
@@ -148,6 +188,19 @@ export function createGetHandler(doctype: string) {
     request: NextRequest,
     { params }: { params: Promise<{ name: string }> },
   ) {
+    // 2P-FINAL Part A.2 — per-request user-scoped Frappe client.
+    const client = getRequestClient(request);
+    if (!client) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Unauthorized",
+          details: "No valid session.",
+          statusCode: 401,
+        },
+        { status: 401 },
+      );
+    }
     try {
       const { name } = await params;
 
@@ -162,7 +215,7 @@ export function createGetHandler(doctype: string) {
         );
       }
 
-      const data = await frappeClient.db.getDoc(
+      const data = await client.db.getDoc(
         doctype,
         decodeURIComponent(name),
       );
@@ -192,6 +245,19 @@ export function createGetHandler(doctype: string) {
  */
 export function createCreateHandler<T>(doctype: string, schema?: ZodSchema<T>) {
   return async function POST(request: NextRequest) {
+    // 2P-FINAL Part A.2 — per-request user-scoped Frappe client.
+    const client = getRequestClient(request);
+    if (!client) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Unauthorized",
+          details: "No valid session.",
+          statusCode: 401,
+        },
+        { status: 401 },
+      );
+    }
     try {
       const body = await request.json();
 
@@ -214,7 +280,7 @@ export function createCreateHandler<T>(doctype: string, schema?: ZodSchema<T>) {
         }
       }
 
-      const data = await frappeClient.db.createDoc(doctype, body);
+      const data = await client.db.createDoc(doctype, body);
 
       return NextResponse.json(
         {
@@ -248,6 +314,19 @@ export function createUpdateHandler<T>(doctype: string, schema?: ZodSchema<T>) {
     request: NextRequest,
     context?: { params: Promise<{ name: string }> },
   ) {
+    // 2P-FINAL Part A.2 — per-request user-scoped Frappe client.
+    const client = getRequestClient(request);
+    if (!client) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Unauthorized",
+          details: "No valid session.",
+          statusCode: 401,
+        },
+        { status: 401 },
+      );
+    }
     try {
       // Get name from route params or query string
       let name: string | null = null;
@@ -294,7 +373,7 @@ export function createUpdateHandler<T>(doctype: string, schema?: ZodSchema<T>) {
         }
       }
 
-      const data = await frappeClient.db.updateDoc(
+      const data = await client.db.updateDoc(
         doctype,
         decodeURIComponent(name),
         body,
@@ -328,6 +407,19 @@ export function createDeleteHandler(doctype: string) {
     request: NextRequest,
     context?: { params: Promise<{ name: string }> },
   ) {
+    // 2P-FINAL Part A.2 — per-request user-scoped Frappe client.
+    const client = getRequestClient(request);
+    if (!client) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Unauthorized",
+          details: "No valid session.",
+          statusCode: 401,
+        },
+        { status: 401 },
+      );
+    }
     try {
       // Get name from route params or query string
       let name: string | null = null;
@@ -353,7 +445,7 @@ export function createDeleteHandler(doctype: string) {
         );
       }
 
-      await frappeClient.db.deleteDoc(doctype, decodeURIComponent(name));
+      await client.db.deleteDoc(doctype, decodeURIComponent(name));
 
       return NextResponse.json({
         success: true,

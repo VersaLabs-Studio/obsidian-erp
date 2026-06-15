@@ -35,7 +35,7 @@ export function useFrappeOptions(
     /** Extra fields to fetch */
     extraFields?: string[];
     /** Additional filters */
-    filters?: [string, string, unknown][];
+    filters?: ([string, string, unknown] | [string, string, string, unknown])[];
     /** Order by field and direction (use table prefix for joins, e.g. "`tabAddress`.name") */
     orderBy?: { field: string; order?: "asc" | "desc" };
     /** Limit number of options */

@@ -106,7 +106,7 @@ export default function CreatePaymentTermsPage() {
                 required
                 placeholder="e.g. Net 30 Days"
               />
-              <div className="p-6 rounded-[2rem] bg-indigo-500/5 border border-indigo-500/10 flex items-center h-full">
+              <div className="p-6 rounded-2xl bg-indigo-500/5 border border-indigo-500/10 flex items-center h-full">
                 <FormSwitch
                   control={control}
                   name="allocate_payment_based_on_payment_terms"
@@ -121,7 +121,7 @@ export default function CreatePaymentTermsPage() {
             title="Payment Schedule (Terms)"
             icon={<Clock className="h-4 w-4" />}
           >
-            <div className="rounded-[2.5rem] border border-border bg-card/50 backdrop-blur-sm overflow-hidden shadow-sm">
+            <div className="rounded-2xl border border-border bg-card/50 backdrop-blur-sm overflow-hidden shadow-sm">
               <table className="w-full text-sm">
                 <thead className="bg-secondary/20 border-b border-border">
                   <tr>
@@ -273,7 +273,7 @@ export default function CreatePaymentTermsPage() {
             </div>
           </InfoCard>
 
-          <div className="flex justify-end gap-3 sticky bottom-6 z-10 glass-card p-4 rounded-[2rem] shadow-2xl">
+          <div className="flex justify-end gap-3 sticky bottom-6 z-10 glass-card p-4 rounded-2xl shadow-xl">
             <Button
               type="button"
               variant="outline"

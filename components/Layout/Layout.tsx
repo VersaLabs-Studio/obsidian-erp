@@ -46,9 +46,12 @@ import {
   Cpu,
   Cog,
   BookOpen,
+  Tag,
 } from "lucide-react";
 import { useState, useEffect } from "react";
-import { usePathname } from "next/navigation";
+import { useNotifications } from "@/lib/stores/use-notifications";
+import { NotificationsPanel } from "@/components/notifications/notifications-panel";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -73,7 +76,7 @@ const navigation = [
     title: "CRM",
     icon: Users,
     items: [
-      { title: "Dashboard", href: "/crm", icon: LayoutDashboard },
+      { title: "Dashboard", href: "/crm/dashboard", icon: LayoutDashboard },
       { title: "Leads", href: "/crm/lead", icon: Target },
       { title: "Customers", href: "/crm/customer", icon: Users },
       { title: "Contacts", href: "/crm/contact", icon: User },
@@ -99,6 +102,7 @@ const navigation = [
     title: "Inventory",
     icon: Package,
     items: [
+      { title: "Dashboard", href: "/stock/dashboard", icon: LayoutDashboard },
       { title: "Items", href: "/stock/item", icon: Box },
       { title: "Warehouses", href: "/stock/warehouse", icon: Warehouse },
       { title: "Delivery Notes", href: "/stock/delivery-note", icon: Truck },
@@ -112,7 +116,18 @@ const navigation = [
         href: "/stock/stock-entry",
         icon: ArrowRightLeft,
       },
-      { title: "Stock Balance", href: "/stock/balance", icon: Scale },
+      { title: "Stock Balance", href: "/stock/stock-balance", icon: Scale },
+      {
+        title: "Stock Ledger",
+        href: "/stock/stock-ledger",
+        icon: ClipboardList,
+      },
+      {
+        title: "Stock Reconciliation",
+        href: "/stock/stock-reconciliation",
+        icon: ClipboardList,
+      },
+      { title: "Item Price", href: "/stock/settings/item-price", icon: Tag },
       { title: "Settings", href: "/stock/settings", icon: Settings },
     ],
   },
@@ -120,6 +135,7 @@ const navigation = [
     title: "Buying",
     icon: ShoppingCart,
     items: [
+      { title: "Dashboard", href: "/buying/dashboard", icon: LayoutDashboard },
       {
         title: "Suppliers",
         href: "/buying/supplier",
@@ -138,6 +154,11 @@ const navigation = [
     icon: Factory,
     items: [
       {
+        title: "Dashboard",
+        href: "/manufacturing/dashboard",
+        icon: LayoutDashboard,
+      },
+      {
         title: "Work Orders",
         href: "/manufacturing/work-order",
         icon: ClipboardList,
@@ -152,6 +173,7 @@ const navigation = [
     title: "HR",
     icon: Briefcase,
     items: [
+      { title: "Dashboard", href: "/hr/dashboard", icon: LayoutDashboard },
       { title: "Employees", href: "/hr/employee", icon: Users },
       { title: "Settings", href: "/hr/settings", icon: Settings },
     ],
@@ -160,7 +182,7 @@ const navigation = [
     title: "Accounting",
     icon: Calculator,
     items: [
-      { title: "Dashboard", href: "/accounting", icon: LayoutDashboard },
+      { title: "Dashboard", href: "/accounting/dashboard", icon: LayoutDashboard },
       {
         title: "Sales Invoices",
         href: "/accounting/sales-invoice",
@@ -181,14 +203,21 @@ const navigation = [
         href: "/accounting/journal-entry",
         icon: BookOpen,
       },
+      { title: "Price Lists", href: "/accounting/settings/price-list", icon: Tag },
       { title: "Setup", href: "/accounting/setup", icon: Settings },
     ],
   },
   {
     title: "Reports",
     icon: BarChart3,
-    href: "/reports",
-    items: [],
+    // 2N Part 3.2: Reports group is a sub-section of Accounting. We link
+    // each financial report directly rather than nesting a parent route.
+    items: [
+      { title: "Profit & Loss", href: "/accounting/reports/profit-and-loss", icon: TrendingUp },
+      { title: "Balance Sheet", href: "/accounting/reports/balance-sheet", icon: BarChart3 },
+      { title: "Accounts Receivable", href: "/accounting/reports/accounts-receivable", icon: Wallet },
+      { title: "Accounts Payable", href: "/accounting/reports/accounts-payable", icon: Wallet },
+    ],
   },
 ];
 
@@ -330,7 +359,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [openSections, setOpenSections] = useState<string[]>(["Inventory"]); // Default open
+  const [notifOpen, setNotifOpen] = useState(false);
+  const { unreadCount } = useNotifications();
   const pathname = usePathname();
+  const router = useRouter();
 
   // Close mobile menu on route change
   useEffect(() => {
@@ -366,7 +398,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <div className="flex items-center gap-3 group cursor-pointer">
           <div className="h-10 w-10 relative overflow-hidden rounded-xl shadow-lg shadow-primary/20 transition-transform duration-300 group-hover:scale-105 group-hover:rotate-3">
             <img 
-              src="/Obsidian-logo.png" 
+              src="/logo.png" 
               alt="Obsidian Logo" 
               className="h-full w-full object-contain bg-white p-1"
             />
@@ -467,9 +499,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               My Account
             </DropdownMenuLabel>
             <DropdownMenuSeparator className="bg-border/50" />
-            <DropdownMenuItem className="rounded-xl py-2.5 focus:bg-secondary cursor-pointer transition-colors">
+            {/* Preferences — routes to /settings (single page, 4 sections). */}
+            <DropdownMenuItem
+              className="rounded-xl py-2.5 focus:bg-secondary cursor-pointer transition-colors"
+              onSelect={() => router.push("/settings")}
+            >
               <Settings className="mr-3 h-4 w-4" /> Preferences
             </DropdownMenuItem>
+            {/* Help & Support and Sign Out remain in-scope for a follow-up;
+                they currently render as no-op items (no onSelect handler). */}
             <DropdownMenuItem className="rounded-xl py-2.5 focus:bg-secondary cursor-pointer transition-colors">
               <HelpCircle className="mr-3 h-4 w-4" /> Help & Support
             </DropdownMenuItem>
@@ -551,14 +589,21 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-2">
             {/* Theme Toggle */}
             <ThemeToggle />
-            <Button
-              size="icon"
-              variant="ghost"
-              className="relative rounded-full hover:bg-card shadow-sm transition-all duration-300 hover:scale-105"
-            >
-              <Bell className="h-5 w-5 text-muted-foreground" />
-              <span className="absolute top-1.5 right-1.5 h-2.5 w-2.5 bg-red-500 rounded-full border-2 border-background animate-pulse" />
-            </Button>
+            <div className="relative">
+              <Button
+                size="icon"
+                variant="ghost"
+                className="relative rounded-full hover:bg-card shadow-sm transition-all duration-300 hover:scale-105"
+                onClick={() => setNotifOpen(!notifOpen)}
+                aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
+              >
+                <Bell className="h-5 w-5 text-muted-foreground" />
+                {unreadCount > 0 && (
+                  <span className="absolute top-1.5 right-1.5 h-2.5 w-2.5 bg-red-500 rounded-full border-2 border-background animate-pulse" />
+                )}
+              </Button>
+              <NotificationsPanel open={notifOpen} onClose={() => setNotifOpen(false)} />
+            </div>
             <div className="hidden sm:block h-6 w-[1px] bg-border/50 mx-1" />
             <Button
               variant="outline"

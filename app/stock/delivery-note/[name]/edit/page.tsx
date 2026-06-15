@@ -8,6 +8,8 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useForm, useFieldArray, useWatch } from "react-hook-form";
 import { toast } from "sonner";
+import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
+import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
 import { Plus, Trash2 } from "lucide-react";
 
 import { PageHeader, LoadingState } from "@/components/smart";
@@ -67,12 +69,12 @@ export default function EditDeliveryNotePage() {
   const name = decodeURIComponent(String(params.name));
 
   const [, setStep] = useState(0);
+  const { resolution, showError, dismiss } = useGuidedError();
   const { data: order, isLoading, error } = useFrappeDoc<DeliveryNote>("Delivery Note", name);
 
   const form = useForm<DNForm>({
     defaultValues: {
       customer: "",
-      company: "",
       posting_date: "",
       posting_time: "",
       set_warehouse: "",
@@ -141,8 +143,10 @@ export default function EditDeliveryNotePage() {
   }, [watchedAll]);
 
   const updateMutation = useFrappeUpdate<DeliveryNote>("Delivery Note", {
+    showToast: false,
     successMessage: "Delivery Note updated",
     onSuccess: () => router.push(`/stock/delivery-note/${encodeURIComponent(name)}`),
+    onError: (err) => showError(resolveFrappeError(err, { doctype: "Delivery Note" })),
   });
 
   const handleSubmit = useCallback(() => {
@@ -206,7 +210,7 @@ export default function EditDeliveryNotePage() {
         backHref={`/stock/delivery-note/${encodeURIComponent(name)}`}
       />
       <Form {...form}>
-        <InfoCard className="max-w-3xl">
+        <InfoCard>
           <FlowWizard
             steps={WIZARD_STEPS}
             formData={watchedAll as unknown as Record<string, unknown>}
@@ -223,7 +227,6 @@ export default function EditDeliveryNotePage() {
                 return (
                   <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                     <FormFrappeSelect control={control} name="customer" label="Customer" required doctype="Customer" labelField="customer_name" />
-                    <FormFrappeSelect control={control} name="company" label="Company" required doctype="Company" labelField="company_name" />
                     <FormDatePicker control={control} name="posting_date" label="Posting Date" required />
                     <FormInput control={control} name="posting_time" label="Posting Time" type="time" />
                     <FormFrappeSelect
@@ -233,11 +236,14 @@ export default function EditDeliveryNotePage() {
                       doctype="Address"
                       labelField="address_title"
                       disabled={!watchedCustomer}
-                      filters={
-                        watchedCustomer
-                          ? ([["Dynamic Link", "link_name", "=", watchedCustomer]] as unknown as [string, string, unknown][])
-                          : []
-                      }
+                          filters={
+                            watchedCustomer
+                              ? ([
+                                  ["Dynamic Link", "link_doctype", "=", "Customer"],
+                                  ["Dynamic Link", "link_name", "=", watchedCustomer],
+                                ] as unknown as [string, string, unknown][])
+                              : []
+                          }
                     />
                     <FormInput control={control} name="po_no" label="Customer PO No" />
                   </div>
@@ -358,6 +364,7 @@ export default function EditDeliveryNotePage() {
           />
         </InfoCard>
       </Form>
+      <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
     </div>
   );
 }

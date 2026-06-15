@@ -22,9 +22,14 @@ import {
   FormFrappeSelect,
   FormDatePicker,
 } from "@/components/form";
+import { QuickAddField } from "@/components/quick-add/QuickAddField";
+import { ItemRateAutoFill } from "@/lib/flows/item-price-lookup";
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
 import { FlowWizard } from "@/components/flows/FlowWizard";
 import { useFrappeCreate, useFrappeDoc } from "@/hooks/generic";
+import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
+import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
+import { getActiveCompany } from "@/lib/settings/company";
 import {
   getAutoFillMapping,
   applyAutoFill,
@@ -35,6 +40,21 @@ import type { StepValidationResult } from "@/lib/flows/flow-validation";
 import type { WizardStep } from "@/types/flow-types";
 import type { DeliveryNote } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
+import { FieldWrap } from "@/components/form/field-wrap";
+
+// 2P-FINAL Part C — Map a `from` query-string value to the source
+// doctype label that `/api/erpnext/make-from` expects. We accept the
+// ERPNext-style human label ("Sales Order", "Delivery Note") and
+// the short slug ("SO", "DN") for back-compat with the 2M/2P
+// cross-flow WhatsNext links.
+type MakeFromSource = "Sales Order" | "Delivery Note";
+function resolveMakeFromSource(raw: string | null): MakeFromSource | null {
+  if (!raw) return null;
+  const k = raw.trim();
+  if (k === "Sales Order" || k === "SO") return "Sales Order";
+  if (k === "Delivery Note" || k === "DN") return "Delivery Note";
+  return null;
+}
 
 interface SIItem {
   item_code: string;
@@ -44,6 +64,12 @@ interface SIItem {
   rate: number;
   amount?: number;
   uom?: string;
+  // 2P Part 1.3 — per-item source-link fields. Set by the SO/DN prefill
+  // effect so the new SI is wired into the flow rail's back-link map.
+  sales_order?: string;
+  so_detail?: string;
+  delivery_note?: string;
+  dn_detail?: string;
 }
 
 interface SIForm {
@@ -78,7 +104,7 @@ const WIZARD_STEPS: WizardStep[] = [
     label: "Customer & Source",
     description: "Confirm the customer and invoice dates",
     schema: null,
-    fields: ["customer", "company", "posting_date", "due_date", "delivery_note"],
+    fields: ["customer", "posting_date", "due_date", "delivery_note"],
     icon: "UserRound",
   },
   {
@@ -108,17 +134,33 @@ export default function NewSalesInvoicePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const deliveryNoteId = searchParams.get("delivery_note");
+  const salesOrderId = searchParams.get("sales_order"); // 2M Part 1A
+  const customerId = searchParams.get("customer");
+  // 2P-FINAL Part C — the canonical make-from path. When the page
+  // is opened with `?from=Sales Order&name=…` (or
+  // `?from=Delivery Note&name=…`), we call /api/erpnext/make-from
+  // FIRST and hydrate the wizard from the returned draft. The old
+  // `?sales_order=` / `?delivery_note=` URLs (2M/2P) still work —
+  // they trigger the hand-mapping fallback.
+  const makeFromSource = resolveMakeFromSource(searchParams.get("from"));
+  const makeFromName = searchParams.get("name");
+  // Convenience alias: any source identified by `from=...&name=...`
+  // is also the "auto-prefill" signal that gates the make-from
+  // effect. We compute it once so the effect deps are stable.
+  const makeFromKey = makeFromSource && makeFromName
+    ? `${makeFromSource}::${makeFromName}`
+    : null;
 
   const [step, setStep] = useState(0);
   const [autoFilledFields, setAutoFilledFields] = useState<Set<string>>(
     new Set(),
   );
+  const [triedNextSteps, setTriedNextSteps] = useState<Set<number>>(new Set());
 
   const form = useForm<SIForm>({
     defaultValues: {
       naming_series: "ACC-SINV-.YYYY.-",
-      customer: "",
-      company: "",
+      customer: customerId || "",
       posting_date: new Date().toISOString().split("T")[0],
       due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
         .toISOString()
@@ -143,6 +185,16 @@ export default function NewSalesInvoicePage() {
       enabled: !!deliveryNoteId,
     });
 
+  // 2M Part 1A: SO→SI prefill. ERPNext carries `sales_order` as a top-level
+  // field on Sales Invoice; the cross-flow / WhatsNext href is
+  // `?sales_order=SO-…`. Mirror the DN→SI effect below for that path so the
+  // SO-driven cross-flow actually fills customer + currency + items.
+  const { data: salesOrder, isLoading: loadingSO } = useFrappeDoc<Record<string, unknown>>(
+    "Sales Order",
+    salesOrderId ?? "",
+    { enabled: !!salesOrderId },
+  );
+
   useEffect(() => {
     if (!deliveryNote) return;
     const mapping = getAutoFillMapping("Delivery Note", "Sales Invoice");
@@ -157,10 +209,20 @@ export default function NewSalesInvoicePage() {
       mapping,
     ) as unknown as SIItem[];
 
+    // 2P Part 1.3 — per-item DN link (mirrors the SO→SI fix above).
+    const dnName = String(deliveryNote.name ?? "");
+    const sourceItems =
+      ((deliveryNote as { items?: Record<string, unknown>[] }).items) ?? [];
+    const itemsWithLink = items.map((it, i) => ({
+      ...it,
+      delivery_note: dnName,
+      dn_detail: String(sourceItems[i]?.name ?? ""),
+    }));
+
     reset({
       ...getValues(),
       ...(header as Partial<SIForm>),
-      items: items.length ? items : [{ ...EMPTY_ITEM }],
+      items: itemsWithLink.length ? itemsWithLink : [{ ...EMPTY_ITEM }],
       due_date: "",
     });
 
@@ -176,6 +238,196 @@ export default function NewSalesInvoicePage() {
       description: "Set the due date to continue.",
     });
   }, [deliveryNote, deliveryNoteId, reset, getValues]);
+
+  // 2M Part 1A: SO→SI prefill effect — mirrors the DN→SI effect.
+  useEffect(() => {
+    if (!salesOrder) return;
+    const mapping = getAutoFillMapping("Sales Order", "Sales Invoice");
+    if (!mapping) return;
+
+    const header = applyAutoFill(
+      salesOrder as Record<string, unknown>,
+      mapping,
+    );
+    const items = applyItemAutoFill(
+      (salesOrder as { items?: Record<string, unknown>[] }).items ?? [],
+      mapping,
+    ) as unknown as SIItem[];
+
+    // 2P Part 1.3 — CRITICAL: per-item `sales_order` + `so_detail` link.
+    // The auto-fill registry's item mapping runs over each *source item row*,
+    // so `sourceField: "name"` would resolve to the SO Item row's own name
+    // (e.g. "Sales Order Item-1"), not the parent SO's name. ERPNext
+    // resolves the back-link from the SI side via `sales_order` ON THE
+    // ITEM ROW (the same field on the child table); without it the flow
+    // rail's "SO → SI" back-link never lights up. Post-fill here.
+    const soName = String(salesOrder.name ?? "");
+    const sourceItems =
+      ((salesOrder as { items?: Record<string, unknown>[] }).items) ?? [];
+    const itemsWithLink = items.map((it, i) => ({
+      ...it,
+      sales_order: soName,
+      so_detail: String(sourceItems[i]?.name ?? ""),
+    }));
+
+    reset({
+      ...getValues(),
+      ...(header as Partial<SIForm>),
+      items: itemsWithLink.length ? itemsWithLink : [{ ...EMPTY_ITEM }],
+      due_date: "",
+    });
+
+    const filled = new Set<string>([
+      ...mapping.headerMappings
+        .filter((m) => m.isReadOnly)
+        .map((m) => m.targetField),
+      "items",
+    ]);
+    setAutoFilledFields(filled);
+
+    toast.success(`Loaded from Sales Order ${salesOrderId}`, {
+      description: "Set the due date to continue.",
+    });
+  }, [salesOrder, salesOrderId, reset, getValues]);
+
+  // 2P-FINAL Part C — CANONICAL MAKE-FROM PATH. When the URL has
+  // `?from=<Sales Order|Delivery Note>&name=<source-doc>` we call
+  // `/api/erpnext/make-from` (the server-side ERPNext mapper) and
+  // hydrate the wizard from the returned draft. ERPNext's mapper
+  // knows every per-item back-link, tax row, and pricing rule —
+  // more correct than the 2P Part 1 hand-mapping.
+  //
+  // The 2M/2P hand-mapping prefill is preserved as a SILENT
+  // FALLBACK. The make-from call is wrapped in try/catch; on any
+  // error (network, 5xx, empty draft, unsupported transition), the
+  // code logs to the console + falls through to the existing
+  // `salesOrder` / `deliveryNote` useFrappeDoc + hand-mapping
+  // effect below. The user sees the same UX either way.
+  useEffect(() => {
+    if (!makeFromSource || !makeFromName) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/erpnext/make-from", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sourceDoctype: makeFromSource,
+            sourceName: makeFromName,
+            targetDoctype: "Sales Invoice",
+          }),
+        });
+        if (!res.ok) {
+          throw new Error(`make-from returned ${res.status}`);
+        }
+        const json = (await res.json()) as {
+          success?: boolean;
+          data?: { doctype?: string; doc?: Record<string, unknown> };
+          error?: string;
+          details?: string;
+        };
+        if (!json.success || !json.data?.doc) {
+          throw new Error(json.error ?? "make-from returned no doc");
+        }
+        if (cancelled) return;
+        const draft = json.data.doc as Record<string, unknown>;
+        const draftItems = Array.isArray(draft.items)
+          ? (draft.items as Array<Record<string, unknown>>)
+          : [];
+
+        // 2P-FINAL Part C — when the source is a SO, fill the
+        // per-item `sales_order` / `so_detail` from the draft (the
+        // server mapper sets them; we just normalize the key names
+        // for the wizard's SIItem shape). When the source is a DN,
+        // the mapper sets `delivery_note` / `dn_detail` directly on
+        // the items. Either way, the wizard's child-table slot
+        // receives the full back-link set.
+        const itemsWithLink: SIItem[] = draftItems.map((it) => {
+          const base: SIItem = {
+            item_code: String(it.item_code ?? ""),
+            item_name: it.item_name as string | undefined,
+            description: it.description as string | undefined,
+            qty: Number(it.qty ?? 1) || 1,
+            rate: Number(it.rate ?? 0) || 0,
+            amount:
+              Number(it.amount ?? 0) ||
+              (Number(it.qty ?? 1) || 1) * (Number(it.rate ?? 0) || 0),
+            uom: (it.uom as string | undefined) ?? "Nos",
+          };
+          if (makeFromSource === "Sales Order") {
+            base.sales_order = makeFromName;
+            base.so_detail = String(it.name ?? "");
+          } else {
+            base.delivery_note = makeFromName;
+            base.dn_detail = String(it.name ?? "");
+          }
+          return base;
+        });
+
+        // Header fields: copy any keys the draft has, mapped to the
+        // SIForm shape. Unknown / non-string fields are ignored.
+        const header: Partial<SIForm> = {};
+        const fieldMap: Array<[keyof SIForm, string]> = [
+          ["customer", "customer"],
+          ["customer_name", "customer_name"],
+          ["company", "company"],
+          ["posting_date", "posting_date"],
+          ["due_date", "due_date"],
+          ["currency", "currency"],
+          ["conversion_rate", "conversion_rate"],
+          ["selling_price_list", "selling_price_list"],
+          ["debit_to", "debit_to"],
+          ["cost_center", "cost_center"],
+        ];
+        for (const [formKey, draftKey] of fieldMap) {
+          const v = draft[draftKey];
+          if (v === undefined || v === null || v === "") continue;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (header as any)[formKey] = v;
+        }
+
+        reset({
+          ...getValues(),
+          ...header,
+          items: itemsWithLink.length ? itemsWithLink : [{ ...EMPTY_ITEM }],
+          // The mapper often leaves due_date blank — surface a
+          // sensible default so the wizard can advance.
+          due_date:
+            header.due_date ||
+            new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+              .toISOString()
+              .split("T")[0] ||
+            "",
+        });
+
+        setAutoFilledFields(
+          new Set<string>([
+            ...Object.keys(header),
+            "items",
+          ]),
+        );
+
+        toast.success(`Loaded from ${makeFromSource} ${makeFromName}`, {
+          description: "Review the items, set the due date, then create.",
+        });
+      } catch (err) {
+        // Silent fallback per the handoff: do NOT surface a scary
+        // error to the user. The hand-mapping prefill effect below
+        // will run on the same `salesOrder` / `deliveryNote` query
+        // result when the corresponding `?sales_order=` / `?delivery_note=`
+        // is present. If neither is set, the user lands on a blank
+        // wizard — which is the same behavior as before 2P-FINAL.
+        // eslint-disable-next-line no-console
+        console.warn(
+          "[2P-FINAL Part C] make-from failed; falling back to hand-mapping:",
+          err,
+        );
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [makeFromKey, makeFromSource, makeFromName, reset, getValues]);
 
   const isAuto = useCallback(
     (field: string) => autoFilledFields.has(field),
@@ -201,6 +453,8 @@ export default function NewSalesInvoicePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [watchedAll]);
 
+  const { resolution, showError, dismiss } = useGuidedError();
+
   const createMutation = useFrappeCreate<
     { data: { name: string } },
     Record<string, unknown>
@@ -212,6 +466,7 @@ export default function NewSalesInvoicePage() {
         router.push(`/accounting/sales-invoice/${encodeURIComponent(name)}`);
       }
     },
+    onError: (err) => showError(resolveFrappeError(err, { doctype: "Sales Invoice" })),
   });
 
   const handleSubmit = useCallback(() => {
@@ -226,6 +481,8 @@ export default function NewSalesInvoicePage() {
     }
     createMutation.mutate({
       ...values,
+      company: getActiveCompany(),
+      set_posting_time: 1,
       items: items.map((it) => ({
         ...it,
         amount: (Number(it.qty) || 0) * (Number(it.rate) || 0),
@@ -240,15 +497,17 @@ export default function NewSalesInvoicePage() {
       <PageHeader
         title="New Sales Invoice"
         subtitle={
-          deliveryNoteId
-            ? `From Delivery Note ${deliveryNoteId}`
-            : "Create a sales invoice in three steps"
+          salesOrderId
+            ? `From Sales Order ${salesOrderId}`
+            : deliveryNoteId
+              ? `From Delivery Note ${deliveryNoteId}`
+              : "Create a sales invoice in three steps"
         }
         backHref="/accounting/sales-invoice"
       />
 
       <Form {...form}>
-        <InfoCard className="max-w-3xl">
+        <InfoCard>
           <FlowWizard
             steps={WIZARD_STEPS}
             formData={watchedAll as unknown as Record<string, unknown>}
@@ -256,6 +515,7 @@ export default function NewSalesInvoicePage() {
             isSubmitting={createMutation.isPending}
             onFormDataChange={() => {}}
             onStepChange={setStep}
+            onTriedNextChange={setTriedNextSteps}
             onSubmit={handleSubmit}
             onCancel={() => router.back()}
             submitLabel="Create Sales Invoice"
@@ -272,9 +532,11 @@ export default function NewSalesInvoicePage() {
                     <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                       <FieldWrap
                         auto={isAuto("customer")}
-                        loading={loadingDN}
+                        loading={loadingDN || loadingSO}
+                        error={triedNextSteps.has(step) ? validationResults?.step1?.errors?.customer : undefined}
                       >
-                        <FormFrappeSelect
+                        {/* 2L 1A: Quick-Add enabled Customer */}
+                        <QuickAddField
                           control={control}
                           name="customer"
                           label="Customer"
@@ -283,18 +545,6 @@ export default function NewSalesInvoicePage() {
                           labelField="customer_name"
                           placeholder="Search customer..."
                           disabled={isAuto("customer")}
-                        />
-                      </FieldWrap>
-                      <FieldWrap auto={isAuto("company")}>
-                        <FormFrappeSelect
-                          control={control}
-                          name="company"
-                          label="Company"
-                          required
-                          doctype="Company"
-                          labelField="company_name"
-                          placeholder="Select company..."
-                          disabled={isAuto("company")}
                         />
                       </FieldWrap>
                       <FormDatePicker
@@ -369,7 +619,8 @@ export default function NewSalesInvoicePage() {
                             return (
                               <tr key={field.id} className="group">
                                 <td className="px-3 py-2 align-top">
-                                  <FormFrappeSelect
+                                  {/* 2L 1A: Quick-Add enabled per-row Item */}
+                                  <QuickAddField
                                     control={control}
                                     name={`items.${index}.item_code`}
                                     doctype="Item"
@@ -384,10 +635,6 @@ export default function NewSalesInvoicePage() {
                                     onValueChange={(_val, doc) => {
                                       if (doc) {
                                         setValue(
-                                          `items.${index}.rate`,
-                                          Number(doc.standard_rate) || 0,
-                                        );
-                                        setValue(
                                           `items.${index}.uom`,
                                           doc.stock_uom || "Nos",
                                         );
@@ -395,8 +642,18 @@ export default function NewSalesInvoicePage() {
                                           `items.${index}.item_name`,
                                           doc.item_name || "",
                                         );
+                                        // 2L Part 2: rate is auto-filled by ItemRateAutoFill
                                       }
                                     }}
+                                  />
+                                  {/* 2L Part 2: Auto-rate via Item Price (selling) */}
+                                  <ItemRateAutoFill<SIForm>
+                                    itemCodePath={`items.${index}.item_code`}
+                                    ratePath={`items.${index}.rate`}
+                                    priceList={watchedAll?.selling_price_list || ""}
+                                    currency={watchedAll?.currency || "ETB"}
+                                    side="selling"
+                                    setValue={setValue as any}
                                   />
                                 </td>
                                 <td className="px-3 py-2 align-top">
@@ -455,37 +712,63 @@ export default function NewSalesInvoicePage() {
                 );
               }
 
+              // ---- STEP 3 — Review & Confirm --------------------------------
               const v = getValues();
               return (
-                <div className="space-y-5">
+                <div className="space-y-6">
                   <StepHeading
                     icon={<ClipboardCheck className="h-5 w-5 text-primary" />}
                     title="Review & Confirm"
-                    description="Confirm the details below to create the invoice."
+                    description="Review everything below, then create — you can still go back to edit."
                   />
-                  <div className="rounded-xl border border-border/60 bg-card/40 p-5 backdrop-blur-sm">
-                    <div className="grid grid-cols-2 gap-4 text-sm">
+
+                  {/* Header fields */}
+                  <div className="bg-card/40 rounded-2xl p-6 space-y-4">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                       <Summary label="Customer" value={v.customer_name || v.customer} />
                       <Summary label="Company" value={v.company} />
                       <Summary label="Posting Date" value={v.posting_date} />
                       <Summary label="Due Date" value={v.due_date} />
+                      <Summary label="Receivable Account" value={v.debit_to} />
+                      <Summary label="Cost Center" value={v.cost_center} />
+                      <Summary label="Currency" value={v.currency} />
+                      <Summary label="Price List" value={v.selling_price_list} />
                     </div>
-                    <div className="mt-4 border-t border-border/60 pt-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">
-                          {(watchedItems ?? []).filter((i) => i?.item_code).length}{" "}
-                          item(s)
-                        </span>
-                        <div className="text-right">
-                          <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                            Grand Total
-                          </span>
-                          <p className="text-2xl font-bold tabular-nums text-primary">
-                            {ETB.format(subtotal)}
-                          </p>
-                        </div>
-                      </div>
+                  </div>
+
+                  {/* Items table */}
+                  <div className="bg-card/40 rounded-2xl overflow-hidden">
+                    <div className="px-6 py-3 bg-muted/30">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        Items ({(watchedItems ?? []).filter(i => i?.item_code).length})
+                      </p>
                     </div>
+                    <table className="w-full text-sm">
+                      <thead className="border-b border-border/40">
+                        <tr className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                          <th className="px-6 py-2.5 text-left font-semibold">Item</th>
+                          <th className="px-6 py-2.5 text-right font-semibold">Qty</th>
+                          <th className="px-6 py-2.5 text-right font-semibold">Rate</th>
+                          <th className="px-6 py-2.5 text-right font-semibold">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/40">
+                        {(watchedItems ?? []).filter(i => i?.item_code).map((item, idx) => (
+                          <tr key={idx}>
+                            <td className="px-6 py-3 font-medium">{item.item_name || item.item_code}</td>
+                            <td className="px-6 py-3 text-right tabular-nums">{item.qty} {item.uom}</td>
+                            <td className="px-6 py-3 text-right tabular-nums">{ETB.format(item.rate ?? 0)}</td>
+                            <td className="px-6 py-3 text-right font-medium tabular-nums">{ETB.format((item.qty || 0) * (item.rate || 0))}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-muted/20">
+                          <td colSpan={3} className="px-6 py-3 text-right font-bold uppercase text-xs">Grand Total</td>
+                          <td className="px-6 py-3 text-right font-bold text-lg text-primary tabular-nums">{ETB.format(subtotal)}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
                   </div>
                 </div>
               );
@@ -493,6 +776,7 @@ export default function NewSalesInvoicePage() {
           />
         </InfoCard>
       </Form>
+      <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
     </div>
   );
 }
@@ -515,27 +799,6 @@ function StepHeading({
         <h3 className="text-base font-semibold text-foreground">{title}</h3>
         <p className="text-sm text-muted-foreground">{description}</p>
       </div>
-    </div>
-  );
-}
-
-function FieldWrap({
-  auto,
-  loading,
-  children,
-}: {
-  auto?: boolean;
-  loading?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className={cn("relative", loading && "animate-pulse")}>
-      {children}
-      {auto && (
-        <span className="pointer-events-none absolute right-2 top-0 inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-          <Lock className="h-3 w-3" />
-        </span>
-      )}
     </div>
   );
 }

@@ -3518,6 +3518,8 @@ export interface PurchaseOrder {
   status:
     | "Draft"
     | "On Hold"
+    | "Pending Approval"
+    | "Approved"
     | "To Receive and Bill"
     | "To Bill"
     | "To Receive"

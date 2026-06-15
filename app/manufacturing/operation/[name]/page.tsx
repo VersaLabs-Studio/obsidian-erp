@@ -1,6 +1,6 @@
 // app/manufacturing/operation/[name]/page.tsx
 // Obsidian ERP v4.0 - Operation Detail Page with Sub-Operations Display
-// @ts-nocheck
+// 2N Part 4.1: removed @ts-nocheck. Detail page is masters-style (no flow).
 
 "use client";
 
@@ -85,7 +85,7 @@ export default function OperationDetailPage() {
 
   if (isLoading) {
     return (
-      <LoadingState variant="detail" message="Opening operation profile..." />
+      <LoadingState variant="detail" />
     );
   }
 
@@ -443,7 +443,12 @@ export default function OperationDetailPage() {
         title="Permanently Delete Operation?"
         description={`This will remove "${operationName}" from the manufacturing system. Any Bill of Materials (BOM) using this operation may fail or require updates.`}
         confirmText="Remove Operation"
-        onConfirm={() => deleteMutation.mutateAsync(operationName)}
+        onConfirm={() => {
+          // 2N Part 4.1: fire-and-forget — the Promise from mutateAsync
+          // is intentionally not awaited here; the dialog closes on
+          // success via the mutation's own handler.
+          void deleteMutation.mutateAsync(operationName);
+        }}
         loading={deleteMutation.isPending}
         variant="destructive"
       />

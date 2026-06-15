@@ -9,6 +9,8 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useForm, useFieldArray, useWatch } from "react-hook-form";
 import { toast } from "sonner";
+import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
+import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
 import { Plus, Trash2 } from "lucide-react";
 
 import { PageHeader, LoadingState } from "@/components/smart";
@@ -61,12 +63,12 @@ export default function EditSalesOrderPage() {
   const name = decodeURIComponent(String(params.name));
 
   const [, setStep] = useState(0);
+  const { resolution, showError, dismiss } = useGuidedError();
   const { data: order, isLoading, error } = useFrappeDoc<SalesOrder>("Sales Order", name);
 
   const form = useForm<SOForm>({
     defaultValues: {
       customer: "",
-      company: "",
       transaction_date: "",
       delivery_date: "",
       items: [{ ...EMPTY_ITEM }],
@@ -121,8 +123,10 @@ export default function EditSalesOrderPage() {
   }, [watchedAll]);
 
   const updateMutation = useFrappeUpdate<SalesOrder>("Sales Order", {
+    showToast: false,
     successMessage: "Sales Order updated",
     onSuccess: () => router.push(`/sales/sales-order/${encodeURIComponent(name)}`),
+    onError: (err) => showError(resolveFrappeError(err, { doctype: "Sales Order" })),
   });
 
   const handleSubmit = useCallback(() => {
@@ -179,7 +183,7 @@ export default function EditSalesOrderPage() {
         backHref={`/sales/sales-order/${encodeURIComponent(name)}`}
       />
       <Form {...form}>
-        <InfoCard className="max-w-3xl">
+        <InfoCard>
           <FlowWizard
             steps={WIZARD_STEPS}
             formData={watchedAll as unknown as Record<string, unknown>}
@@ -196,22 +200,26 @@ export default function EditSalesOrderPage() {
                 return (
                   <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                     <FormFrappeSelect control={control} name="customer" label="Customer" required doctype="Customer" labelField="customer_name" />
-                    <FormFrappeSelect control={control} name="company" label="Company" required doctype="Company" labelField="company_name" />
                     <FormDatePicker control={control} name="transaction_date" label="Order Date" required />
                     <FormDatePicker control={control} name="delivery_date" label="Delivery Date" required />
-                    <FormFrappeSelect
-                      control={control}
-                      name="customer_address"
-                      label="Shipping Address"
-                      doctype="Address"
-                      labelField="address_title"
-                      disabled={!watchedCustomer}
-                      filters={
-                        watchedCustomer
-                          ? ([["Dynamic Link", "link_name", "=", watchedCustomer]] as unknown as [string, string, unknown][])
-                          : []
-                      }
-                    />
+                      <FormFrappeSelect
+                        control={control}
+                        name="customer_address"
+                        label="Shipping Address"
+                        doctype="Address"
+                        labelField="address_title"
+                        disabled={!watchedCustomer}
+                        // R6: filter on Dynamic Link child table
+                        filters={
+                          watchedCustomer
+                            ? ([
+                                ["Dynamic Link", "link_doctype", "=", "Customer"],
+                                ["Dynamic Link", "link_name", "=", watchedCustomer],
+                              ] as unknown as [string, string, unknown][])
+                            : []
+                        }
+                        placeholder="Select address..."
+                      />
                     <FormInput control={control} name="po_no" label="Customer PO No" />
                   </div>
                 );
@@ -308,6 +316,7 @@ export default function EditSalesOrderPage() {
           />
         </InfoCard>
       </Form>
+      <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
     </div>
   );
 }

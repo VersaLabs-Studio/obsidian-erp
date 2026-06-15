@@ -1,4 +1,4 @@
-// @ts-nocheck
+// 2N Part 4.1: removed @ts-nocheck.
 "use client";
 
 import { useState, useEffect, Suspense, useMemo } from "react";
@@ -32,7 +32,7 @@ import {
 } from "@/lib/schemas/doctype-schemas";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import type { WorkOrder, Bom } from "@/types/doctype-types";
+import type { WorkOrder, Bom, Uom } from "@/types/doctype-types";
 
 function EditWorkOrderForm() {
   const router = useRouter();
@@ -47,7 +47,6 @@ function EditWorkOrderForm() {
       naming_series: "MFG-WO-.YYYY.-",
       production_item: "",
       bom_no: "",
-      company: "",
       qty: 1,
       fg_warehouse: "",
       planned_start_date: "",
@@ -135,7 +134,7 @@ function EditWorkOrderForm() {
       return;
     }
 
-    const ratio = data.qty / (bomDetails.quantity || 1);
+    const ratio = (data.qty ?? 0) / (bomDetails.quantity || 1);
 
     // Discrete UOM keywords that almost always require whole numbers in ERP
     const DISCRETE_UOMS = [
@@ -149,7 +148,7 @@ function EditWorkOrderForm() {
     ];
 
     // UOM Validation for parent qty
-    const itemUomMustBeInteger = uomMap.get(bomDetails.uom);
+    const itemUomMustBeInteger = bomDetails.uom ? uomMap.get(bomDetails.uom) : undefined;
     if (itemUomMustBeInteger === 1 && !Number.isInteger(data.qty)) {
       toast.error(
         `Quantity for item ${data.production_item} must be a whole number for UOM ${bomDetails.uom}`,
@@ -158,10 +157,20 @@ function EditWorkOrderForm() {
     }
 
     // Format required_items from BOM with UOM validation
-    const required_items = [];
-    for (const item of bomDetails.items || []) {
-      let reqQty = item.qty * ratio;
-      const mustBeInt = uomMap.get(item.uom);
+    // 2N Part 4.1: typed-cast the `unknown` child rows (Bom.items is
+    // `unknown[]` in the generated interface; runtime shape is documented
+    // by the Frappe doctype).
+    interface BomItemRow {
+      item_code: string;
+      item_name?: string;
+      uom?: string;
+      qty: number;
+      source_warehouse?: string;
+    }
+    const required_items: unknown[] = [];
+    for (const item of (bomDetails.items ?? []) as BomItemRow[]) {
+      let reqQty = (item.qty ?? 0) * ratio;
+      const mustBeInt = item.uom ? uomMap.get(item.uom) : undefined;
 
       // Heuristic: If we know it must be int OR it's a known discrete UOM, round it
       const isDiscrete = DISCRETE_UOMS.some((u) =>
@@ -212,7 +221,7 @@ function EditWorkOrderForm() {
           {/* Main Form */}
           <div className="lg:col-span-2 space-y-6">
             {/* Product & BOM */}
-            <div className="bg-card rounded-[2rem] border border-border/50 p-8 shadow-sm space-y-6">
+            <div className="bg-card rounded-2xl border border-border/50 p-8 shadow-sm space-y-6">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
                   <Package className="h-5 w-5 text-primary" />
@@ -265,18 +274,11 @@ function EditWorkOrderForm() {
                   type="number"
                   required
                 />
-                <FormFrappeSelect
-                  control={form.control}
-                  name="company"
-                  label="Company"
-                  doctype="Company"
-                  required
-                />
               </div>
             </div>
 
             {/* Source & Scheduling */}
-            <div className="bg-card rounded-[2rem] border border-border/50 p-8 shadow-sm space-y-6">
+            <div className="bg-card rounded-2xl border border-border/50 p-8 shadow-sm space-y-6">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
                   <FileText className="h-5 w-5 text-blue-500" />
@@ -331,7 +333,7 @@ function EditWorkOrderForm() {
             </div>
 
             {/* Warehouses */}
-            <div className="bg-card rounded-[2rem] border border-border/50 p-8 shadow-sm space-y-6">
+            <div className="bg-card rounded-2xl border border-border/50 p-8 shadow-sm space-y-6">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
                   <Factory className="h-5 w-5 text-amber-500" />
@@ -393,7 +395,7 @@ function EditWorkOrderForm() {
 
           {/* Sidebar */}
           <div className="lg:col-span-1 space-y-6">
-            <div className="bg-card rounded-[2rem] border border-border/50 p-8 shadow-xl shadow-primary/5 sticky top-6">
+            <div className="bg-card rounded-2xl border border-border/50 p-8 shadow-xl shadow-primary/5 sticky top-6">
               <h3 className="font-bold text-lg mb-6 flex items-center gap-2">
                 <ClipboardList className="h-5 w-5 text-primary" />
                 Updated Metrics
@@ -420,10 +422,10 @@ function EditWorkOrderForm() {
                       </span>
                       <span className="font-black text-xl text-primary">
                         ETB{" "}
-                        {(
-                          (bomDetails.total_cost || 0) *
-                          (workOrderQty / bomDetails.quantity)
-                        ).toLocaleString(undefined, {
+                          {(
+                            (bomDetails.total_cost || 0) *
+                            ((workOrderQty ?? 0) / (bomDetails.quantity || 1))
+                          ).toLocaleString(undefined, {
                           minimumFractionDigits: 2,
                         })}
                       </span>

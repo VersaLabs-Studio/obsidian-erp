@@ -1,822 +1,632 @@
-// @ts-nocheck
 "use client";
 
-import { useState, useEffect, useMemo, Suspense } from "react";
+// app/manufacturing/bom/new/page.tsx
+// BOM Create — 3-step FlowWizard, Zod gating, error resolver.
+// Step 1: Product (item, qty, is_active, is_default)
+// Step 2: Materials & Operations (items table, operations table)
+// Step 3: Review (costing rollup)
+
+import { useMemo, useState, useCallback, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useForm, useFieldArray } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm, useFieldArray, useWatch } from "react-hook-form";
+import { toast } from "sonner";
+import {
+  Package,
+  Layers,
+  ClipboardCheck,
+  Plus,
+  Trash2,
+  Cog,
+} from "lucide-react";
+
+import { PageHeader } from "@/components/smart";
+import { InfoCard } from "@/components/ui/info-card";
+import {
+  GuidedErrorDialog,
+  useGuidedError,
+} from "@/components/errors/GuidedErrorDialog";
+import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Save,
-  Loader2,
-  Layers as BOMIcon,
-  Plus,
-  Trash2,
-  Package,
-  Cog,
-  DollarSign,
-  Calculator,
-  AlertTriangle,
-  Clock,
-} from "lucide-react";
-import {
-  Form,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormControl,
-  FormMessage,
-} from "@/components/ui/form";
-import { Switch } from "@/components/ui/switch";
-import { useFrappeCreate, useFrappeDoc, useFrappeList } from "@/hooks/generic";
-import { PageHeader, LoadingState } from "@/components/smart";
-import { FormInput, FormFrappeSelect, FormSwitch } from "@/components/form";
-import {
-  BOMCreateSchema,
-  type BOMFormData,
-} from "@/lib/schemas/doctype-schemas";
-import { toast } from "sonner";
+  FormInput,
+  FormFrappeSelect,
+  FormSwitch,
+} from "@/components/form";
+import { QuickAddField } from "@/components/quick-add/QuickAddField";
+import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
+import { FlowWizard } from "@/components/flows/FlowWizard";
+import { useFrappeCreate, useFrappeDoc } from "@/hooks/generic";
+import { validateWizardStep } from "@/lib/flows/flow-validation";
+import { getActiveCompany } from "@/lib/settings/company";
+import type { StepValidationResult } from "@/lib/flows/flow-validation";
+import type { WizardStep } from "@/types/flow-types";
+import type { BOMFormData, BOMItemData, BOMOperationData } from "@/lib/schemas/doctype-schemas";
 import { cn } from "@/lib/utils";
-import type { Item, Workstation, Operation } from "@/types/doctype-types";
 
-function CreateBOMForm() {
+// ---------------------------------------------------------------------------
+// Form model
+// ---------------------------------------------------------------------------
+interface BOMForm {
+  item: string;
+  company: string;
+  quantity: number;
+  uom: string;
+  currency: string;
+  conversion_rate: number;
+  is_active: number;
+  is_default: number;
+  with_operations: number;
+  items: BOMItemData[];
+  operations: BOMOperationData[];
+}
+
+const EMPTY_ITEM: BOMItemData = {
+  item_code: "",
+  item_name: "",
+  qty: 1,
+  rate: 0,
+  amount: 0,
+  uom: "Nos",
+  source_warehouse: "",
+};
+
+const EMPTY_OPERATION: BOMOperationData = {
+  operation: "",
+  workstation: "",
+  time_in_mins: 0,
+  operating_cost: 0,
+};
+
+const WIZARD_STEPS: WizardStep[] = [
+  {
+    id: "step1",
+    label: "Product",
+    description: "Select the item and set batch quantity",
+    schema: null,
+    fields: ["item", "quantity", "is_active", "is_default"],
+    icon: "Package",
+  },
+  {
+    id: "step2",
+    label: "Materials & Operations",
+    description: "Add raw materials and optional operations",
+    schema: null,
+    fields: ["items", "operations"],
+    icon: "Layers",
+  },
+  {
+    id: "step3",
+    label: "Review",
+    description: "Review the BOM before creating",
+    schema: null,
+    fields: [],
+    icon: "ClipboardCheck",
+  },
+];
+
+const ETB = new Intl.NumberFormat("en-ET", {
+  style: "currency",
+  currency: "ETB",
+});
+
+export default function NewBOMPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const copyFrom = searchParams.get("copy");
+  const prefillItem = searchParams.get("item");
 
-  const [withOperations, setWithOperations] = useState(false);
+  const [step, setStep] = useState(0);
+  const [triedNextSteps, setTriedNextSteps] = useState<Set<number>>(new Set());
 
-  const form = useForm<BOMFormData>({
-    resolver: zodResolver(BOMCreateSchema),
+  const form = useForm<BOMForm>({
     defaultValues: {
-      item: "",
-      company: "",
+      item: prefillItem || "",
       quantity: 1,
       uom: "Nos",
+      currency: "ETB",
+      conversion_rate: 1,
       is_active: 1,
       is_default: 0,
       with_operations: 0,
-      rm_cost_as_per: "Valuation Rate",
-      items: [],
+      items: [{ ...EMPTY_ITEM }],
       operations: [],
-      scrap_items: [],
     },
   });
 
-  // Material items array
-  const {
-    fields: materialFields,
-    append: appendMaterial,
-    remove: removeMaterial,
-  } = useFieldArray({
-    control: form.control,
-    name: "items",
-  });
+  const { control, getValues, setValue } = form;
 
-  // Scrap items array
-  const {
-    fields: scrapFields,
-    append: appendScrap,
-    remove: removeScrap,
-  } = useFieldArray({
-    control: form.control,
-    name: "scrap_items",
-  });
-
-  // Operation items array
-  const {
-    fields: operationFields,
-    append: appendOperation,
-    remove: removeOperation,
-  } = useFieldArray({
-    control: form.control,
-    name: "operations",
-  });
-
-  // Fetch workstations for rate lookup
-  const { data: workstations } = useFrappeList<Workstation>("Workstation", {
-    fields: ["name", "workstation_name", "hour_rate"],
-    limit: 100,
-  });
-
-  // Copy BOM data if duplicating
-  const { data: sourceBOM } = useFrappeDoc("BOM", copyFrom || "", {
-    enabled: !!copyFrom,
-  });
+  const { data: itemDoc } = useFrappeDoc<{ stock_uom?: string }>(
+    "Item",
+    prefillItem || "",
+    { enabled: !!prefillItem }
+  );
 
   useEffect(() => {
-    if (sourceBOM) {
-      form.reset({
-        ...form.getValues(),
-        item: sourceBOM.item,
-        quantity: sourceBOM.quantity,
-        uom: sourceBOM.uom,
-        company: sourceBOM.company,
-        with_operations: sourceBOM.with_operations,
-        items:
-          sourceBOM.items?.map((i: any) => ({
-            item_code: i.item_code,
-            qty: i.qty,
-            uom: i.uom,
-            rate: i.rate,
-          })) || [],
-        operations:
-          sourceBOM.operations?.map((o: any) => ({
-            operation: o.operation,
-            workstation: o.workstation,
-            time_in_mins: o.time_in_mins,
-            hour_rate: o.hour_rate,
-          })) || [],
-        scrap_items:
-          sourceBOM.scrap_items?.map((s: any) => ({
-            item_code: s.item_code,
-            qty: s.qty,
-            uom: s.uom,
-            rate: s.rate,
-          })) || [],
-      });
-      setWithOperations(sourceBOM.with_operations === 1);
-      toast.info(`Copied from ${sourceBOM.name}`);
+    if (prefillItem) {
+      setValue("item", prefillItem);
+      if (itemDoc?.stock_uom) {
+        setValue("uom", itemDoc.stock_uom);
+      }
     }
-  }, [sourceBOM, form]);
+  }, [prefillItem, itemDoc, setValue]);
+  const {
+    fields: itemFields,
+    append: appendItem,
+    remove: removeItem,
+  } = useFieldArray({ control, name: "items" });
+  const {
+    fields: opFields,
+    append: appendOp,
+    remove: removeOp,
+  } = useFieldArray({ control, name: "operations" });
 
-  // Calculate costs - use JSON.stringify for proper reactivity on nested array changes
-  const materials = form.watch("items") || [];
-  const operations = form.watch("operations") || [];
-  const quantity = form.watch("quantity") || 1;
+  const watchedAll = useWatch({ control });
+  const watchedItems = watchedAll?.items ?? [];
+  const watchedOps = watchedAll?.operations ?? [];
+  const withOps = watchedAll?.with_operations === 1;
 
-  // Serialize for dependency tracking (nested arrays need this)
-  const materialsSerialized = JSON.stringify(materials);
-  const operationsSerialized = JSON.stringify(operations);
+  const rawMaterialCost = useMemo(
+    () =>
+      (watchedItems ?? []).reduce(
+        (sum, it) => sum + (Number(it?.qty) || 0) * (Number(it?.rate) || 0),
+        0,
+      ),
+    [watchedItems],
+  );
 
-  const rawMaterialCost = useMemo(() => {
-    const items = JSON.parse(materialsSerialized) as typeof materials;
-    return items.reduce((sum, m) => sum + (m.qty || 0) * (m.rate || 0), 0);
-  }, [materialsSerialized]);
-
-  const operatingCost = useMemo(() => {
-    const ops = JSON.parse(operationsSerialized) as typeof operations;
-    return ops.reduce((sum, op) => {
-      const ws = workstations?.find((w) => w.name === op.workstation);
-      const hourRate = ws?.hour_rate || op.hour_rate || 0;
-      return sum + ((op.time_in_mins || 0) / 60) * hourRate;
-    }, 0);
-  }, [operationsSerialized, workstations]);
+  const operatingCost = useMemo(
+    () =>
+      (watchedOps ?? []).reduce(
+        (sum, op) => sum + (Number(op?.operating_cost) || 0),
+        0,
+      ),
+    [watchedOps],
+  );
 
   const totalCost = rawMaterialCost + operatingCost;
-  const costPerUnit = quantity > 0 ? totalCost / quantity : 0;
 
-  // Handle item selection to auto-fill UOM and Rate
-  const handleItemChange = (index: number, itemCode: string, itemDoc?: any) => {
-    if (itemDoc) {
-      form.setValue(`items.${index}.uom`, itemDoc.stock_uom);
-      form.setValue(
-        `items.${index}.rate`,
-        itemDoc.valuation_rate || itemDoc.last_purchase_rate || 0,
-      );
-    }
-  };
+  const validationResults = useMemo<Record<string, StepValidationResult>>(() => {
+    const values = {
+      ...getValues(),
+      ...watchedAll,
+      items: watchedAll?.items ?? [],
+      operations: watchedAll?.operations ?? [],
+    };
+    return {
+      step1: validateWizardStep("BOM", "step1", values),
+      step2: validateWizardStep("BOM", "step2", values),
+      step3: { valid: true, errors: {} },
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchedAll]);
 
-  // Handle workstation selection to auto-fill rate
-  const handleWorkstationChange = (index: number, workstationName: string) => {
-    const ws = workstations?.find((w) => w.name === workstationName);
-    if (ws) {
-      form.setValue(`operations.${index}.hour_rate`, ws.hour_rate);
-    } else {
-      // If manually cleared or not found
-      form.setValue(`operations.${index}.hour_rate`, 0);
-    }
-  };
+  const { resolution, showError, dismiss } = useGuidedError();
 
-  // Create mutation
-  const createMutation = useFrappeCreate("BOM", {
-    onSuccess: (response) => {
-      toast.success("BOM created successfully");
-      const name = response.data?.name || response.name;
+  const createMutation = useFrappeCreate<
+    { data: { name: string } },
+    Record<string, unknown>
+  >("BOM", {
+    successMessage: "BOM created",
+    onSuccess: (res) => {
+      const name = res?.data?.name;
       if (name) {
         router.push(`/manufacturing/bom/${encodeURIComponent(name)}`);
-      } else {
-        router.push("/manufacturing/bom");
       }
     },
-    onError: (err: any) => toast.error(err.message),
+    onError: (err) => {
+      const r = resolveFrappeError(err, {
+        doctype: "BOM",
+        values: getValues(),
+      });
+      showError(r);
+    },
   });
 
-  const onSubmit = (data: BOMFormData) => {
-    data.with_operations = withOperations ? 1 : 0;
-    // Format data according to Frappe expectations
-    const payload = {
-      ...data,
-      docstatus: 0, // Draft
-      currency: "ETB",
-      conversion_rate: 1,
-      items: data.items.map((item) => {
-        const rate = item.rate || 0;
-        const qty = item.qty || 0;
-        return {
-          ...item,
-          rate: rate,
-          amount: qty * rate, // Calculate amount explicitly
-          doctype: "BOM Item",
-        };
-      }),
-      operations: withOperations
-        ? data.operations?.map((op) => ({
-            ...op,
-            hour_rate: op.hour_rate || 0,
-            doctype: "BOM Operation",
-          }))
-        : [],
-      scrap_items:
-        data.scrap_items?.map((scrap) => ({
-          ...scrap,
-          amount: (scrap.qty || 0) * (scrap.rate || 0),
-          doctype: "BOM Scrap Item",
-        })) || [],
-    };
-    createMutation.mutate(payload);
-  };
-
-  // Handle form validation errors
-  const onFormError = (errors: any) => {
-    console.error("Full validation errors:", errors);
-
-    // Explicitly stringify to ensure we see everything in case of proxy/truncation
-    const errorDetail = JSON.stringify(errors, null, 2);
-    console.error("Stringified errors:", errorDetail);
-
-    // Show validation errors via toast
-    const messages: string[] = [];
-
-    // Recursive error collector to find all messages
-    const collectErrors = (errs: any, path = "") => {
-      if (!errs) return;
-      if (errs.message) {
-        messages.push(`${path}: ${errs.message}`);
-      } else {
-        Object.keys(errs).forEach((key) => {
-          collectErrors(errs[key], path ? `${path}.${key}` : key);
-        });
-      }
-    };
-
-    collectErrors(errors);
-
-    if (messages.length > 0) {
-      toast.error("Validation failed: \n" + messages.join("\n"));
-    } else {
-      toast.error("Form validation failed. Please check all required fields.");
+  const handleSubmit = useCallback(() => {
+    const values = getValues();
+    const items = (values.items ?? []).filter(
+      (it) => it.item_code && Number(it.qty) > 0,
+    );
+    if (items.length === 0) {
+      toast.error("Add at least one material before creating the BOM.");
+      setStep(1);
+      return;
     }
-  };
+    createMutation.mutate({
+      ...values,
+      company: getActiveCompany(),
+      items: items.map((it) => ({
+        ...it,
+        amount: (Number(it.qty) || 0) * (Number(it.rate) || 0),
+      })),
+      operations: (values.operations ?? []).filter((op) => op.operation),
+      conversion_rate: 1,
+      currency: "ETB",
+    });
+  }, [createMutation, getValues]);
 
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit, onFormError)}>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main Form - 2 columns */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Header Section */}
-            <div className="bg-card rounded-2xl border border-border/50 p-6 space-y-4 shadow-sm">
-              <div className="flex items-center gap-2 font-semibold text-lg">
-                <Package className="h-5 w-5 text-primary" />
-                Product Details
-              </div>
+    <div className="space-y-6 pb-12">
+      <PageHeader
+        title="New BOM"
+        subtitle="Define a production recipe in three steps"
+        backHref="/manufacturing/bom"
+      />
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormFrappeSelect
-                  control={form.control}
-                  name="item"
-                  label="Product to Manufacture"
-                  doctype="Item"
-                  placeholder="Select finished good..."
-                  required
-                  extraFields={["stock_uom"]}
-                  onValueChange={(val, doc) => {
-                    if (doc?.stock_uom) {
-                      form.setValue("uom", doc.stock_uom);
-                    }
-                  }}
-                />
-                <FormFrappeSelect
-                  control={form.control}
-                  name="company"
-                  label="Company"
-                  doctype="Company"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                <FormInput
-                  control={form.control}
-                  name="quantity"
-                  label="Batch Quantity"
-                  type="number"
-                  required
-                />
-                <FormFrappeSelect
-                  control={form.control}
-                  name="uom"
-                  label="UOM"
-                  doctype="UOM"
-                />
-                <div className="flex items-end pb-2 gap-4">
-                  <FormSwitch
-                    control={form.control}
-                    name="is_default"
-                    label="Default BOM"
+      <Form {...form}>
+        <FlowWizard
+          steps={WIZARD_STEPS}
+          formData={watchedAll as unknown as Record<string, unknown>}
+          validationResults={validationResults}
+          isSubmitting={createMutation.isPending}
+          onFormDataChange={() => {}}
+          onStepChange={setStep}
+          onTriedNextChange={setTriedNextSteps}
+          onSubmit={handleSubmit}
+          onCancel={() => router.back()}
+          submitLabel="Create BOM"
+          submittingLabel="Creating..."
+          renderStep={(s) => {
+            // ---- STEP 1 — Product ------------------------------------------
+            if (s.id === "step1") {
+              return (
+                <div className="space-y-6">
+                  <StepHeading
+                    icon={<Package className="h-5 w-5 text-primary" />}
+                    title="Product"
+                    description="Select the item to manufacture and set the batch quantity."
                   />
-                </div>
-              </div>
-
-              {/* Operations Toggle */}
-              <div className="flex items-center justify-between p-4 bg-secondary/30 rounded-xl border border-border/50">
-                <div>
-                  <p className="font-medium">Include Operations Costing</p>
-                  <p className="text-sm text-muted-foreground">
-                    Add machine time costs to BOM
-                  </p>
-                </div>
-                <Switch
-                  checked={withOperations}
-                  onCheckedChange={(checked) => {
-                    setWithOperations(checked);
-                    form.setValue("with_operations", checked ? 1 : 0);
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Materials Section */}
-            <div className="bg-card rounded-2xl border border-border/50 p-6 space-y-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 font-semibold text-lg">
-                  <Package className="h-5 w-5 text-emerald-500" />
-                  Raw Materials
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="rounded-full h-8"
-                  onClick={() =>
-                    appendMaterial({
-                      item_code: "",
-                      qty: 1,
-                      uom: "Nos",
-                      rate: 0,
-                    })
-                  }
-                >
-                  <Plus className="h-3 w-3 mr-1" /> Add Material
-                </Button>
-              </div>
-
-              {materialFields.length === 0 ? (
-                <div className="text-center py-10 border-2 border-dashed border-border/50 rounded-2xl">
-                  <Package className="h-12 w-12 mx-auto mb-3 opacity-20" />
-                  <p className="text-muted-foreground">
-                    No materials added yet
-                  </p>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="mt-2"
-                    onClick={() =>
-                      appendMaterial({
-                        item_code: "",
-                        qty: 1,
-                        uom: "Nos",
-                        rate: 0,
-                      })
-                    }
-                  >
-                    Add First Material
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {materialFields.map((field, index) => (
-                    <div
-                      key={field.id}
-                      className="grid grid-cols-12 gap-2 items-start p-4 bg-secondary/20 rounded-xl relative group"
-                    >
-                      <div className="col-span-12 md:col-span-4">
-                        <FormFrappeSelect
-                          control={form.control}
-                          name={`items.${index}.item_code`}
-                          label="Item"
-                          doctype="Item"
-                          placeholder="Select..."
-                          extraFields={[
-                            "valuation_rate",
-                            "last_purchase_rate",
-                            "stock_uom",
-                          ]}
-                          onValueChange={(val, doc) =>
-                            handleItemChange(index, val, doc)
-                          }
-                        />
-                      </div>
-                      <div className="col-span-4 md:col-span-2">
-                        <FormInput
-                          control={form.control}
-                          name={`items.${index}.qty`}
-                          label="Qty"
-                          type="number"
-                        />
-                      </div>
-                      <div className="col-span-4 md:col-span-2">
-                        <FormFrappeSelect
-                          control={form.control}
-                          name={`items.${index}.uom`}
-                          label="UOM"
-                          doctype="UOM"
-                        />
-                      </div>
-                      <div className="col-span-4 md:col-span-2">
-                        <FormInput
-                          control={form.control}
-                          name={`items.${index}.rate`}
-                          label="Rate"
-                          type="number"
-                        />
-                      </div>
-                      <div className="col-span-10 md:col-span-1 flex flex-col justify-end h-full py-2">
-                        {index === 0 && (
-                          <span className="text-[10px] uppercase text-muted-foreground mb-1">
-                            Amount
-                          </span>
-                        )}
-                        <span className="font-medium text-sm">
-                          {(
-                            (form.watch(`items.${index}.qty`) || 0) *
-                            (form.watch(`items.${index}.rate`) || 0)
-                          ).toFixed(2)}
-                        </span>
-                      </div>
-                      <div className="col-span-2 md:col-span-1 flex items-end justify-end h-full">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-9 w-9 text-destructive hover:bg-destructive/10 rounded-full"
-                          onClick={() => removeMaterial(index)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Operations Section */}
-            {withOperations && (
-              <div className="bg-card rounded-2xl border border-border/50 p-6 space-y-4 shadow-sm animate-in fade-in slide-in-from-top-4 duration-300">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 font-semibold text-lg">
-                    <Cog className="h-5 w-5 text-blue-500" />
-                    Operations
+                  <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                    <QuickAddField
+                      control={control}
+                      name="item"
+                      label="Item to Manufacture"
+                      required
+                      doctype="Item"
+                      placeholder="Search item..."
+                      extraFields={["item_name", "stock_uom", "description"]}
+                      onValueChange={(_val, doc) => {
+                        if (doc) {
+                          setValue("uom", doc.stock_uom || "Nos");
+                        }
+                      }}
+                    />
+                    <FormInput
+                      control={control}
+                      name="quantity"
+                      label="Batch Quantity"
+                      type="number"
+                      required
+                    />
+                    <FormInput
+                      control={control}
+                      name="uom"
+                      label="UOM"
+                      placeholder="Nos"
+                    />
                   </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="rounded-full h-8"
-                    onClick={() =>
-                      appendOperation({
-                        operation: "",
-                        workstation: "",
-                        time_in_mins: 1,
-                        hour_rate: 0,
-                      })
-                    }
-                  >
-                    <Plus className="h-3 w-3 mr-1" /> Add Operation
-                  </Button>
-                </div>
-
-                {operationFields.length === 0 ? (
-                  <div className="text-center py-10 border-2 border-dashed border-border/50 rounded-2xl">
-                    <Cog className="h-12 w-12 mx-auto mb-3 opacity-20" />
-                    <p className="text-muted-foreground">
-                      No operations added yet
-                    </p>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="mt-2"
-                      onClick={() =>
-                        appendOperation({
-                          operation: "",
-                          workstation: "",
-                          time_in_mins: 1,
-                          hour_rate: 0,
-                        })
-                      }
-                    >
-                      Add First Operation
-                    </Button>
+                  <div className="flex gap-6 pt-2">
+                    <FormSwitch
+                      control={control}
+                      name="is_active"
+                      label="Active"
+                    />
+                    <FormSwitch
+                      control={control}
+                      name="is_default"
+                      label="Default BOM"
+                    />
                   </div>
-                ) : (
-                  <div className="space-y-3">
-                    {operationFields.map((field, index) => (
-                      <div
-                        key={field.id}
-                        className="grid grid-cols-12 gap-2 items-start p-4 bg-secondary/20 rounded-xl relative group"
+                </div>
+              );
+            }
+
+            // ---- STEP 2 — Materials & Operations ---------------------------
+            if (s.id === "step2") {
+              return (
+                <div className="space-y-6">
+                  <StepHeading
+                    icon={<Layers className="h-5 w-5 text-primary" />}
+                    title="Materials & Operations"
+                    description="Add raw materials and optional production operations."
+                  />
+
+                  {/* Materials Table */}
+                  <div className="overflow-hidden rounded-xl border border-border/60 bg-card/40 backdrop-blur-sm">
+                    <table className="w-full text-sm">
+                      <thead className="border-b border-border/60 bg-secondary/20">
+                        <tr className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                          <th className="px-3 py-2.5 text-left font-semibold">Item</th>
+                          <th className="px-3 py-2.5 text-right font-semibold">Qty</th>
+                          <th className="px-3 py-2.5 text-right font-semibold">Rate</th>
+                          <th className="px-3 py-2.5 text-right font-semibold">Amount</th>
+                          <th className="w-10" />
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border/50">
+                        {itemFields.map((field, index) => {
+                          const qty = Number(watchedItems?.[index]?.qty) || 0;
+                          const rate = Number(watchedItems?.[index]?.rate) || 0;
+                          return (
+                            <tr key={field.id} className="group">
+                              <td className="px-3 py-2 align-top">
+                                <QuickAddField
+                                  control={control}
+                                  name={`items.${index}.item_code`}
+                                  doctype="Item"
+                                  hideLabel
+                                  placeholder="Item..."
+                                  extraFields={["standard_rate", "stock_uom", "item_name"]}
+                                  onValueChange={(_val, doc) => {
+                                    if (doc) {
+                                      setValue(
+                                        `items.${index}.rate`,
+                                        Number(doc.standard_rate) || 0,
+                                      );
+                                      setValue(
+                                        `items.${index}.uom`,
+                                        doc.stock_uom || "Nos",
+                                      );
+                                      setValue(
+                                        `items.${index}.item_name`,
+                                        doc.item_name || "",
+                                      );
+                                    }
+                                  }}
+                                />
+                              </td>
+                              <td className="px-3 py-2 align-top">
+                                <NumberCell
+                                  control={control}
+                                  name={`items.${index}.qty`}
+                                />
+                              </td>
+                              <td className="px-3 py-2 align-top">
+                                <NumberCell
+                                  control={control}
+                                  name={`items.${index}.rate`}
+                                />
+                              </td>
+                              <td className="px-3 py-3 text-right align-middle font-semibold tabular-nums text-foreground">
+                                {ETB.format(qty * rate)}
+                              </td>
+                              <td className="px-2 py-2 text-center align-middle">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+                                  onClick={() => removeItem(index)}
+                                  disabled={itemFields.length === 1}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    <div className="flex items-center justify-between border-t border-border/60 bg-secondary/10 px-3 py-3">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="rounded-full border-dashed"
+                        onClick={() => appendItem({ ...EMPTY_ITEM })}
                       >
-                        <div className="col-span-12 md:col-span-3">
-                          <FormFrappeSelect
-                            control={form.control}
-                            name={`operations.${index}.operation`}
-                            label="Operation"
-                            doctype="Operation"
-                          />
-                        </div>
-                        <div className="col-span-12 md:col-span-3">
-                          <FormFrappeSelect
-                            control={form.control}
-                            name={`operations.${index}.workstation`}
-                            label="Workstation"
-                            doctype="Workstation"
-                            onValueChange={(val) =>
-                              handleWorkstationChange(index, val)
-                            }
-                          />
-                        </div>
-                        <div className="col-span-4 md:col-span-2">
-                          <FormInput
-                            control={form.control}
-                            name={`operations.${index}.time_in_mins`}
-                            label="Time (min)"
-                            type="number"
-                          />
-                        </div>
-                        <div className="col-span-4 md:col-span-2">
-                          <FormInput
-                            control={form.control}
-                            name={`operations.${index}.hour_rate`}
-                            label="Rate/hr"
-                            type="number"
-                            disabled
-                          />
-                        </div>
-                        <div className="col-span-10 md:col-span-1 flex flex-col justify-end h-full py-2">
-                          {index === 0 && (
-                            <span className="text-[10px] uppercase text-muted-foreground mb-1">
-                              Cost
-                            </span>
-                          )}
-                          <span className="font-medium text-sm">
-                            {(
-                              ((form.watch(
-                                `operations.${index}.time_in_mins`,
-                              ) || 0) /
-                                60) *
-                              (form.watch(`operations.${index}.hour_rate`) || 0)
-                            ).toFixed(2)}
-                          </span>
-                        </div>
-                        <div className="col-span-2 md:col-span-1 flex items-end justify-end h-full">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-9 w-9 text-destructive hover:bg-destructive/10 rounded-full"
-                            onClick={() => removeOperation(index)}
+                        <Plus className="mr-1.5 h-4 w-4" /> Add Material
+                      </Button>
+                      <div className="text-right">
+                        <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                          Raw Material Cost
+                        </p>
+                        <p className="text-xl font-bold tabular-nums text-foreground">
+                          {ETB.format(rawMaterialCost)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Operations */}
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Cog className="h-5 w-5 text-blue-500" />
+                        <span className="font-semibold">Operations (Optional)</span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="rounded-full border-dashed"
+                        onClick={() => appendOp({ ...EMPTY_OPERATION })}
+                      >
+                        <Plus className="mr-1.5 h-4 w-4" /> Add Operation
+                      </Button>
+                    </div>
+
+                    {opFields.length > 0 && (
+                      <div className="space-y-3">
+                        {opFields.map((field, index) => (
+                          <div
+                            key={field.id}
+                            className="grid grid-cols-12 gap-3 items-center p-3 rounded-xl bg-secondary/20 border border-border/30"
                           >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
+                            <div className="col-span-4">
+                              <FormFrappeSelect
+                                control={control}
+                                name={`operations.${index}.operation`}
+                                doctype="Operation"
+                                hideLabel
+                                placeholder="Operation..."
+                              />
+                            </div>
+                            <div className="col-span-3">
+                              <FormFrappeSelect
+                                control={control}
+                                name={`operations.${index}.workstation`}
+                                doctype="Workstation"
+                                hideLabel
+                                placeholder="Workstation..."
+                              />
+                            </div>
+                            <div className="col-span-2">
+                              <NumberCell
+                                control={control}
+                                name={`operations.${index}.time_in_mins`}
+                                placeholder="Time (min)"
+                              />
+                            </div>
+                            <div className="col-span-2">
+                              <NumberCell
+                                control={control}
+                                name={`operations.${index}.operating_cost`}
+                                placeholder="Cost"
+                              />
+                            </div>
+                            <div className="col-span-1 flex justify-end">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                onClick={() => removeOp(index)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
                   </div>
-                )}
-              </div>
-            )}
-
-            {/* Scrap & Waste Section */}
-            <div className="bg-card rounded-2xl border border-border/50 p-6 space-y-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 font-semibold text-lg">
-                  <Trash2 className="h-5 w-5 text-amber-500" />
-                  Scrap & Waste
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="rounded-full h-8"
-                  onClick={() =>
-                    appendScrap({
-                      item_code: "",
-                      qty: 0,
-                      uom: "Nos",
-                      rate: 0,
-                    })
-                  }
-                >
-                  <Plus className="h-3 w-3 mr-1" /> Add Scrap
-                </Button>
-              </div>
+              );
+            }
 
-              {scrapFields.length === 0 ? (
-                <div className="text-center py-8 border-2 border-dashed border-border/50 rounded-2xl">
-                  <p className="text-muted-foreground text-sm">
-                    No scrap/waste defined for this recipe
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {scrapFields.map((field, index) => (
-                    <div
-                      key={field.id}
-                      className="grid grid-cols-12 gap-2 items-start p-4 bg-secondary/20 rounded-xl relative group"
-                    >
-                      <div className="col-span-12 md:col-span-4">
-                        <FormFrappeSelect
-                          control={form.control}
-                          name={`scrap_items.${index}.item_code`}
-                          label="Scrap Item"
-                          doctype="Item"
-                          placeholder="Select..."
-                          onValueChange={(val, doc) => {
-                            if (doc) {
-                              form.setValue(
-                                `scrap_items.${index}.uom`,
-                                doc.stock_uom,
-                              );
-                              form.setValue(
-                                `scrap_items.${index}.rate`,
-                                doc.valuation_rate || 0,
-                              );
-                            }
-                          }}
-                        />
-                      </div>
-                      <div className="col-span-4 md:col-span-2">
-                        <FormInput
-                          control={form.control}
-                          name={`scrap_items.${index}.qty`}
-                          label="Qty"
-                          type="number"
-                        />
-                      </div>
-                      <div className="col-span-4 md:col-span-2">
-                        <FormFrappeSelect
-                          control={form.control}
-                          name={`scrap_items.${index}.uom`}
-                          label="UOM"
-                          doctype="UOM"
-                        />
-                      </div>
-                      <div className="col-span-4 md:col-span-2">
-                        <FormInput
-                          control={form.control}
-                          name={`scrap_items.${index}.rate`}
-                          label="Rate"
-                          type="number"
-                        />
-                      </div>
-                      <div className="col-span-2 md:col-span-2 flex items-end justify-end h-full">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-9 w-9 text-destructive hover:bg-destructive/10 rounded-full"
-                          onClick={() => removeScrap(index)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Cost Summary Sidebar */}
-          <div className="lg:col-span-1">
-            <div className="bg-card rounded-2xl border border-border/50 p-6 sticky top-6 space-y-6 shadow-lg">
-              <div className="flex items-center gap-2 font-semibold text-lg">
-                <Calculator className="h-5 w-5 text-primary" />
-                Cost Summary
-              </div>
-
-              <div className="space-y-4">
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-muted-foreground">Raw Materials</span>
-                    <span className="font-medium">
-                      ETB{" "}
-                      {rawMaterialCost.toLocaleString(undefined, {
-                        minimumFractionDigits: 2,
-                      })}
-                    </span>
+            // ---- STEP 3 — Review -------------------------------------------
+            const v = getValues();
+            return (
+              <div className="space-y-5">
+                <StepHeading
+                  icon={<ClipboardCheck className="h-5 w-5 text-primary" />}
+                  title="Review & Confirm"
+                  description="Confirm the details below to create the BOM."
+                />
+                <div className="rounded-xl border border-border/60 bg-card/40 p-5 backdrop-blur-sm">
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <Summary label="Item" value={v.item} />
+                    <Summary label="Company" value={v.company} />
+                    <Summary label="Batch Quantity" value={`${v.quantity} ${v.uom || "Nos"}`} />
+                    <Summary
+                      label="Status"
+                      value={v.is_active ? "Active" : "Inactive"}
+                    />
                   </div>
-                  {withOperations && (
-                    <div className="flex justify-between items-center text-sm">
+                  <div className="mt-4 border-t border-border/60 pt-4 space-y-3">
+                    <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">
-                        Operating Cost
+                        {(watchedItems ?? []).filter((i) => i?.item_code).length}{" "}
+                        material(s)
                       </span>
-                      <span className="font-medium">
-                        ETB{" "}
-                        {operatingCost.toLocaleString(undefined, {
-                          minimumFractionDigits: 2,
-                        })}
-                      </span>
+                      <span className="font-semibold">{ETB.format(rawMaterialCost)}</span>
                     </div>
-                  )}
-                  <div className="pt-4 border-t border-border/50">
-                    <div className="flex justify-between items-center">
-                      <span className="font-semibold">Total Cost</span>
-                      <span className="text-xl font-bold text-primary">
-                        ETB{" "}
-                        {totalCost.toLocaleString(undefined, {
-                          minimumFractionDigits: 2,
-                        })}
-                      </span>
+                    {watchedOps.length > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">
+                          {watchedOps.filter((o) => o?.operation).length} operation(s)
+                        </span>
+                        <span className="font-semibold">{ETB.format(operatingCost)}</span>
+                      </div>
+                    )}
+                    <div className="border-t border-border/60 pt-3 flex items-center justify-between">
+                      <span className="font-bold text-foreground">Total Cost</span>
+                      <div className="text-right">
+                        <p className="text-2xl font-bold tabular-nums text-primary">
+                          {ETB.format(totalCost)}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                          Per {v.quantity} {v.uom || "Nos"}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
-
-                <div className="p-4 bg-primary/5 rounded-2xl space-y-1 border border-primary/10">
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-muted-foreground uppercase tracking-widest">
-                      Cost per Unit
-                    </span>
-                    <span className="font-bold text-primary text-lg">
-                      ETB{" "}
-                      {costPerUnit.toLocaleString(undefined, {
-                        minimumFractionDigits: 4,
-                      })}
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground text-right italic">
-                    Based on batch size of {form.watch("quantity") || 0}
-                  </p>
-                </div>
               </div>
+            );
+          }}
+        />
+      </Form>
 
-              {materials.length === 0 && (
-                <div className="flex items-start gap-3 p-4 bg-amber-500/10 rounded-2xl text-amber-600 text-xs border border-amber-500/20">
-                  <AlertTriangle className="h-4 w-4 shrink-0" />
-                  <p>
-                    A Bill of Materials requires at least one raw material to be
-                    valid.
-                  </p>
-                </div>
-              )}
-
-              <div className="space-y-3 pt-4">
-                <Button
-                  type="submit"
-                  disabled={createMutation.isPending || materials.length === 0}
-                  className="w-full rounded-full h-12 text-base shadow-lg shadow-primary/20 transition-all active:scale-95"
-                >
-                  {createMutation.isPending ? (
-                    <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                  ) : (
-                    <Save className="h-5 w-5 mr-2" />
-                  )}
-                  Create BOM
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => router.push("/manufacturing/bom")}
-                  className="w-full rounded-full text-muted-foreground hover:text-foreground"
-                >
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </form>
-    </Form>
+      <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
+    </div>
   );
 }
 
-export default function CreateBOMPage() {
+// ---------------------------------------------------------------------------
+// Local presentational helpers
+// ---------------------------------------------------------------------------
+function StepHeading({
+  icon,
+  title,
+  description,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+}) {
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Create Bill of Materials"
-        subtitle="Define the recipe to manufacture a product"
-        backHref="/manufacturing/bom"
-        icon={<BOMIcon className="h-5 w-5" />}
-      />
-
-      <Suspense fallback={<LoadingState message="Initializing form..." />}>
-        <CreateBOMForm />
-      </Suspense>
+    <div className="flex items-start gap-3">
+      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+        {icon}
+      </div>
+      <div>
+        <h3 className="text-base font-semibold text-foreground">{title}</h3>
+        <p className="text-sm text-muted-foreground">{description}</p>
+      </div>
     </div>
+  );
+}
+
+function Summary({ label, value }: { label: string; value?: string }) {
+  return (
+    <div>
+      <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        {label}
+      </p>
+      <p className="font-medium text-foreground">{value || "—"}</p>
+    </div>
+  );
+}
+
+function NumberCell({
+  control,
+  name,
+  placeholder,
+}: {
+  control: ReturnType<typeof useForm<BOMForm>>["control"];
+  name: `items.${number}.qty` | `items.${number}.rate` | `operations.${number}.time_in_mins` | `operations.${number}.operating_cost`;
+  placeholder?: string;
+}) {
+  return (
+    <FormField
+      control={control}
+      name={name}
+      render={({ field }) => (
+        <FormItem>
+          <FormControl>
+            <Input
+              {...field}
+              type="number"
+              inputMode="decimal"
+              placeholder={placeholder}
+              className="h-10 rounded-lg border-0 bg-secondary/30 text-right tabular-nums"
+              onChange={(e) => field.onChange(Number(e.target.value))}
+            />
+          </FormControl>
+        </FormItem>
+      )}
+    />
   );
 }

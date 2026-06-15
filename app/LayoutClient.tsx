@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import Layout from "@/components/Layout/Layout";
+import { SessionGuard } from "@/components/Layout/SessionGuard";
 import { Toaster } from "sonner";
 import { getQueryClient } from "@/lib/query-client";
 import { ToastProvider } from "@/components/ui/toast";
@@ -32,7 +33,16 @@ export default function LayoutClient({
       <QueryClientProvider client={queryClient}>
         <ToastProvider>
           <Suspense fallback={<LoadingFallback />}>
-            <Layout>{children}</Layout>
+            {/* SessionGuard (post-2P-FINAL UX fix) — when there's no
+                Frappe sid cookie, every CRUD route 401s (correct
+                ship-gate behavior). Without this guard, the global
+                dashboard silently renders empty KPIs and the dev
+                console fills with 401s. The guard runs /api/auth/me
+                on mount, shows a sign-in card on 401, and only then
+                renders the children. Cached 5 min in sessionStorage. */}
+            <SessionGuard>
+              <Layout>{children}</Layout>
+            </SessionGuard>
           </Suspense>
         </ToastProvider>
         <ReactQueryDevtools initialIsOpen={false} />

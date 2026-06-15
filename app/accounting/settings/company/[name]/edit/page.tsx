@@ -124,7 +124,7 @@ export default function EditCompanyPage() {
             </div>
 
             <div className="lg:col-span-4">
-              <div className="sticky top-24 p-8 rounded-[2.5rem] bg-primary/5 border border-primary/10 space-y-6">
+              <div className="sticky top-24 p-8 rounded-2xl bg-primary/5 border border-primary/10 space-y-6">
                 <Button
                   type="submit"
                   className="w-full rounded-full h-12 shadow-xl shadow-primary/20"

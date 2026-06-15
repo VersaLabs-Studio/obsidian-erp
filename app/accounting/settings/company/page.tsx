@@ -49,7 +49,7 @@ function CompanyRow({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05 }}
-      className="group relative flex items-center justify-between p-6 mb-4 bg-card hover:bg-card/80 hover:shadow-xl transition-all duration-300 rounded-[2rem] border border-transparent hover:border-primary/5"
+      className="group relative flex items-center justify-between p-6 mb-4 bg-card hover:bg-card/80 hover:shadow-xl transition-all duration-300 rounded-2xl border border-transparent hover:border-primary/5"
     >
       <div className="flex items-center gap-6 flex-1 min-w-0">
         <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center font-black text-primary text-xl group-hover:scale-110 transition-transform">
@@ -85,7 +85,7 @@ function CompanyRow({
           </DropdownMenuTrigger>
           <DropdownMenuContent
             align="end"
-            className="rounded-2xl border-none shadow-2xl bg-popover/95 backdrop-blur-xl p-2 min-w-[160px]"
+            className="rounded-2xl border-none shadow-xl bg-popover/95 backdrop-blur-xl p-2 min-w-[160px]"
           >
             <DropdownMenuItem
               className="rounded-xl px-4 py-3 cursor-pointer"
@@ -130,7 +130,7 @@ export default function CompaniesPage() {
 
   if (error)
     return (
-      <div className="flex items-center justify-center p-20 bg-destructive/5 rounded-[2rem] border border-destructive/10">
+      <div className="flex items-center justify-center p-20 bg-destructive/5 rounded-2xl border border-destructive/10">
         <p className="text-destructive font-bold text-lg">
           Failed to load companies
         </p>

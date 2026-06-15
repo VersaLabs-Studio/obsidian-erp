@@ -7,7 +7,10 @@
 
 import { useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { toast } from "sonner";
+import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
+import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
 import {
   Send,
   Ban,
@@ -16,6 +19,7 @@ import {
   Wallet,
   ArrowDownLeft,
   ArrowUpRight,
+  Edit3,
 } from "lucide-react";
 
 import { PageHeader, LoadingState, ConfirmDialog } from "@/components/smart";
@@ -25,9 +29,10 @@ import { Button } from "@/components/ui/button";
 import { FlowRail } from "@/components/flows/FlowRail";
 import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
-import { resolveFlowChain } from "@/lib/flows/flow-chain-resolver";
-import { useFrappeDoc, useFrappeList, useFrappeUpdate } from "@/hooks/generic";
-import type { PaymentEntry, SalesInvoice, PurchaseInvoice } from "@/types/doctype-types";
+import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
+import { useFlowChain } from "@/hooks/flows/use-flow-chain";
+import { useFrappeDoc, useFrappeUpdate } from "@/hooks/generic";
+import type { PaymentEntry } from "@/types/doctype-types";
 import type { FlowStageStatus } from "@/types/flow-types";
 import { cn } from "@/lib/utils";
 
@@ -51,6 +56,7 @@ export default function PaymentEntryDetailPage() {
 
   const [confirmSubmit, setConfirmSubmit] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const { resolution, showError, dismiss } = useGuidedError();
 
   const { data: entry, isLoading, error } = useFrappeDoc<PaymentEntry>(
     "Payment Entry",
@@ -68,41 +74,31 @@ export default function PaymentEntryDetailPage() {
     );
   }, [entry]);
 
-  const { data: linkedInvoice, isLoading: loadingInvoice } =
-    useFrappeDoc<SalesInvoice>(
-      invoiceRef?.reference_doctype ?? "Sales Invoice",
-      invoiceRef?.reference_name ?? "",
-      { enabled: !!invoiceRef?.reference_name },
-    );
-
-  // -- Build the flow chain from real linked documents -----------------------
-  const chain = useMemo(() => {
-    const stageStatuses: Record<
-      string,
-      { status: FlowStageStatus; documentName?: string; documentUrl?: string }
-    > = {};
-
-    if (invoiceRef?.reference_name) {
-      const invDoctype = invoiceRef.reference_doctype;
-      stageStatuses[invDoctype] = {
+  // -- extraResolutions: 2N Part 1.1 — the link map doesn't see the PE's
+  //    references[] child rows, so we inject the source invoice manually.
+  const extraResolutions = useMemo<
+    Record<string, { status: FlowStageStatus; documentName?: string; documentUrl?: string }>
+  >(() => {
+    if (!invoiceRef?.reference_name) return {};
+    const invDoctype = invoiceRef.reference_doctype;
+    return {
+      [invDoctype]: {
         status: "completed",
         documentName: invoiceRef.reference_name,
         documentUrl:
           invDoctype === "Sales Invoice"
             ? `/accounting/sales-invoice/${encodeURIComponent(invoiceRef.reference_name)}`
             : `/accounting/purchase-invoice/${encodeURIComponent(invoiceRef.reference_name)}`,
-      };
-    }
-
-    // Payment Entry is the current stage
-    stageStatuses["Payment Entry"] = {
-      status: entry?.docstatus === 1 ? "completed" : "current",
-      documentName: name,
-      documentUrl: `/accounting/payment-entry/${encodeURIComponent(name)}`,
+      },
     };
+  }, [invoiceRef]);
 
-    return resolveFlowChain("Payment Entry", name, stageStatuses);
-  }, [entry, invoiceRef, name]);
+  // 2N Part 1.1: unified flow resolution.
+  const { result: chain, isLoading: chainLoading } = useFlowChain(
+    "Payment Entry",
+    name,
+    extraResolutions,
+  );
 
   // -- Status actions (real mutations) --------------------------------------
   const updateMutation = useFrappeUpdate<PaymentEntry>("Payment Entry", {
@@ -118,8 +114,8 @@ export default function PaymentEntryDetailPage() {
       { name, data: { docstatus: 1, status: "Submitted" } },
       {
         onSuccess: () => toast.success(`Payment Entry ${name} submitted`),
-        onError: (e) =>
-          toast.error("Submit failed", { description: e.message }),
+        onError: (err) =>
+          showError(resolveFrappeError(err, { doctype: "Payment Entry" })),
       },
     );
   };
@@ -130,8 +126,8 @@ export default function PaymentEntryDetailPage() {
       { name, data: { docstatus: 2, status: "Cancelled" } },
       {
         onSuccess: () => toast.success(`Payment Entry ${name} cancelled`),
-        onError: (e) =>
-          toast.error("Cancel failed", { description: e.message }),
+        onError: (err) =>
+          showError(resolveFrappeError(err, { doctype: "Payment Entry" })),
       },
     );
   };
@@ -192,6 +188,17 @@ export default function PaymentEntryDetailPage() {
         }}
         actions={
           <div className="flex items-center gap-2">
+            {/* 2M Part 3A: draft-only Edit affordance. The PE detail page was
+                the only transactional sibling missing the Edit button that
+                SO/SI/Quotation/DN/SE/SR/PI/PR/Lead/Opp all have. Draft only
+                (docstatus === 0); submitted PEs are immutable. */}
+            {isDraft && (
+              <Button variant="outline" size="sm" asChild>
+                <Link href={`/accounting/payment-entry/${encodeURIComponent(name)}/edit`}>
+                  <Edit3 className="mr-1.5 h-4 w-4" /> Edit
+                </Link>
+              </Button>
+            )}
             {isDraft && (
               <Button
                 size="sm"
@@ -353,12 +360,15 @@ export default function PaymentEntryDetailPage() {
           </InfoCard>
 
           <InfoCard title="Flow Rail">
-            <FlowRail result={chain} isLoading={loadingInvoice} />
+            <FlowRail result={chain} currentDocName={name} sourceDoctype="Payment Entry" isLoading={chainLoading} />
           </InfoCard>
 
           <InfoCard title="What's Next">
             <WhatsNext actions={whatsNext} />
           </InfoCard>
+
+          {/* 2L 1B: Universal cross-flow actions menu */}
+          <CrossFlowActionsMenu doctype="Payment Entry" name={name} />
 
           <InfoCard title="Activity">
             <ActivityTimeline
@@ -404,6 +414,7 @@ export default function PaymentEntryDetailPage() {
         variant="destructive"
         onConfirm={handleCancel}
       />
+      <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
     </div>
   );
 }

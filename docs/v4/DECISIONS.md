@@ -341,6 +341,128 @@ export interface CronRunRecord {
 
 ---
 
+## B5 — Server-Error Guided Resolution
+
+**Blocks:** Nothing (reusable architecture, implemented in Phase 2c)
+**Status:** Decided and implemented; every future phase adds strategies as it meets new error classes.
+
+### Problem
+
+Frappe rejects business-rule violations (HTTP 417 / `ValidationError`) with technical strings flashed as raw toasts. Users see raw Frappe jargon like *"1.0 units of Item P-001: Raw Paper needed in Warehouse Stores - P to complete this transaction."* and must manually navigate to fix the issue.
+
+### Decision
+
+**No raw Frappe error may reach the user as a toast.** All mutation errors pass through `resolveFrappeError` → typed `Resolution` → `GuidedErrorDialog` or `GuidedErrorInline`.
+
+### Architecture
+
+```
+lib/errors/frappe-error-resolver.ts
+  resolveFrappeError(err, ctx) → Resolution
+
+components/errors/GuidedErrorDialog.tsx
+  useGuidedError() → { resolution, showError, dismiss }
+  <GuidedErrorDialog resolution={r} onDismiss={dismiss} />
+```
+
+### Strategy Table (ordered — first match wins)
+
+| Code | Signature | Resolution |
+|------|-----------|------------|
+| `INSUFFICIENT_STOCK` | "units of … needed in Warehouse … to complete" | Explain shortfall; action: Create Material Request (prefilled) |
+| `MANDATORY_MISSING` | "is mandatory" / "Mandatory fields required" | Name field in plain language; action: Dismiss |
+| `LINK_VALIDATION` | "Could not find" / "not found" | Explain missing link; action: Dismiss |
+| `LINKED_DOC_EXISTS` | "cannot cancel because … exists" / "linked with submitted" / "is linked with" | Parse linked doctype + name; action: Open {Doctype} {name} (real navigate) |
+| `DUPLICATE` | "Duplicate" / "already exists" | Explain conflict; action: Dismiss |
+| `GENERIC_FALLBACK` | anything else | Clean error card with collapsed technical details |
+
+### Rule
+
+Every `useFrappe{Create,Update,Delete}` `onError` callback calls `resolveFrappeError` and surfaces the result via `GuidedErrorDialog`. Each future phase adds strategies as it encounters new Frappe error classes.
+
+### Action Rule (B5 extension — Phase 2F)
+
+Every `ResolutionAction` is either:
+1. A **functional** action (`navigate` / `prefill` / `mutate`) with a real `run` that performs an observable side effect, OR
+2. A **dismiss** action.
+
+**No decorative buttons.** No `run: () => {}` no-ops outside dismiss actions. Every offered resolution must conform to the documented business workflow — never offer an action the workflow forbids (e.g. "Reduce quantity" when the workflow requires procurement to resolve shortfalls).
+
+### Render Rule (Phase 2F)
+
+Every page that calls `showError` must also **render** `<GuidedErrorDialog>` in its JSX. Calling `showError()` without a rendered dialog produces a silent failure (state updates but nothing displays).
+
+### Tests
+
+Unit tests per strategy in `tests/smoke.test.ts` — each test asserts the expected `code`, `title`, and action labels for a representative error message.
+
+---
+
+## B6 — Wizard Gate Hardening
+
+**Decided in:** Phase 2F (2026-06-05)
+
+### Problem
+
+`FlowWizard` defaulted `isCurrentStepValid` to `true` when the current step's `id` was missing from `validationResults` (fail-open). This meant that if a page's step IDs didn't match the validationResults keys, the wizard would silently allow progression without validation. Additionally, several wizards (MR, SE) hardcoded `step2: { valid: true }`, bypassing items validation entirely.
+
+### Decision
+
+1. **FlowWizard fails closed.** When `validationResults` is provided but the current step's `id` is missing, the step is treated as **invalid** (not valid). A `console.warn` fires in dev to surface the mismatch.
+
+2. **Step IDs must match validationResults keys.** This is a structural invariant. All wizard step schemas use `step1`/`step2`/`step3` naming (enforced by test). All page-level `validationResults` objects use the same keys.
+
+3. **Items validation runs at wizard gate time.** MR and SE step2 now call `validateWizardStep()` instead of hardcoding `{ valid: true }`. The wizard blocks Next when items array is empty.
+
+### Tests
+
+- `validateWizardStep("Material Request", "step2", { items: [] })` → `valid === false`
+- `validateWizardStep("Stock Entry", "step2", { items: [] })` → `valid === false`
+- Unknown step id lookup in validationResults → `valid === false` (fail-closed)
+- All `WIZARD_STEP_SCHEMAS` keys match `/^step\d+$/` pattern
+
+---
+
+## B5 Extension — Error Parsing (Phase 2G)
+
+**Decided in:** Phase 2G (2026-06-05)
+
+All Frappe errors pass through `extractFrappeMessage` before display. The UI never shows `[object Object]` or a raw `_server_messages` blob. Every create/edit/detail mutation renders a `GuidedErrorDialog`; raw `toast.error(rawError)` is prohibited.
+
+`extractFrappeMessage` handles: `_server_messages` (JSON array, nested JSON, HTML stripping), `exception` (take after last `:`), `message` (string/object/array), `httpStatus` (status code fallback). Guard: never returns `[object Object]`.
+
+---
+
+## B7 — Implicit Company (Phase 2G)
+
+**Decided in:** Phase 2G (2026-06-05)
+
+`company` is a tenant-implicit field sourced from `getActiveCompany()` (default "Pana"), injected at submit, never user-entered, changeable only in Settings. Rationale: DB-per-tenant ⇒ one company per tenant. Making the user pick `company` on every document is wrong UX.
+
+Implementation: `lib/settings/company.ts` with `getActiveCompany()` / `setActiveCompany()`. Company removed from all Zod step schemas. Injected in mutation payloads.
+
+---
+
+## B8 — CRM Head = Lead → Customer (Phase 2G)
+
+**Decided in:** Phase 2G (2026-06-05)
+
+The Lead-to-Cash entry is Lead → Convert to Customer → Quotation/Sales Order (per WORKFLOW_PART1 §3). Opportunity is demoted to a secondary/settings area, not a surfaced stage in the FlowRail or Lead's WhatsNext.
+
+The conversion is idempotent: if the Lead is already converted (`converted_to` set, `status = "Converted"`), the action becomes "View Customer" — never creates a duplicate.
+
+---
+
+## B9 — Notifications Center (Phase 2G)
+
+**Decided in:** Phase 2G (2026-06-05)
+
+A global notification store captures every toast + guided resolution. The Layout Bell is its surface. The unread dot reflects real unread count (disappears at zero). In-memory session storage; persistence deferred.
+
+Architecture: `lib/stores/notification-store.ts` (subscribe/getSnapshot pattern for `useSyncExternalStore`), `lib/stores/toast-wrapper.ts` (drop-in Sonner replacement), `components/notifications/notifications-panel.tsx` (B1 surface panel).
+
+---
+
 ## Summary — Gate Status
 
 | Gate | Status | Resolution |
@@ -354,4 +476,73 @@ export interface CronRunRecord {
 
 ---
 
+## B7 Completion — Company Injection Verified (Phase 2H)
+
+**Decided in:** Phase 2H (2026-06-05)
+
+Phase 2G removed `company` from all Zod step schemas and built `getActiveCompany()`, but only injected `company` in 3 payloads (JE, PE, WO). Phase 2H completes B7 by injecting `company: getActiveCompany()` into all 13 remaining create payloads:
+
+SO, Quotation, DN, SI, PI, MR, SE, PO, RFQ, SQ, WO (new page), BOM, Opportunity.
+
+No create page now POSTs without a company field. The company field is no longer rendered as a user-selectable input in wizard steps (it was already removed from schemas in 2G); the value is injected at submit time from `getActiveCompany()`.
+
+---
+
+## B10 — Purchase Receipt Module (Phase 2H)
+
+**Decided in:** Phase 2H (2026-06-05)
+
+**Decision:** Build Purchase Receipt as a first-class module (4 pages: list, new, detail, edit), completing the procure-to-pay chain per WORKFLOW_PART1 §6.2.
+
+**Implementation:**
+- Cloned from Delivery Note golden template, inverted for inbound goods (supplier instead of customer)
+- `purchaseReceiptStepSchemas` added: step1 (supplier + posting_date), step2 (items with warehouse required), step3 (review)
+- "Purchase Receipt" added to `BUILT_MODULES` and `WIZARD_STEP_SCHEMAS`
+- Auto-fill registry already had `Purchase Order->Purchase Receipt` and `Purchase Receipt->Purchase Invoice` entries (Phase 2c)
+- PO detail WhatsNext "Create Purchase Receipt" now enabled (was disabled because module wasn't built)
+- PR detail WhatsNext "Create Purchase Invoice" enabled
+- PR added to error resolver route maps (LINKED_DOC_EXISTS + DUPLICATE)
+- FlowRail: `PURCHASE_FLOW` already had Purchase Receipt stage (Phase 2c)
+- 7 new tests: step schemas, validation, warehouse requirement
+
+**Field spec derived from:** PO spec (§5.2) + DN spec (§4.5) — Part 2 has no dedicated PR section.
+
+**Naming series:** `MAT-PRE-.YYYY.-` (matches Frappe convention).
+
+---
+
 *Decisions documented by the Tech Lead on 2026-06-01. These decisions are locked per IMPLEMENTATION_HANDOFF.md §3 — do not re-open mid-build.*
+
+---
+
+## B11 — v4 Ship-Scope Re-baseline & Acceleration (Phase 2O/2P)
+
+**Decided by:** Kidus + Brain (2026-06-13), after the Phase 2N live retest.
+**Supersedes:** the phase plan that placed AI (Phase 3) and DB-per-tenant (Phase 4) inside the v4 ship.
+
+### Context
+
+The transactional core (Lead-to-Cash, Procure-to-Pay, Manufacturing spines), dashboards, reporting, and the 360 masters are built. The remaining work to ship v4 to the first pilot (an Ethiopian printing business) is **stabilization + enterprise-readiness**, not AI. Kidus directed an aggressive 2-day finish.
+
+### Decisions
+
+#### B11(a) — AI Transformation deferred to v4.1
+
+All of `ARCHITECTURE_V4_PART3_AI_INTEGRATION.md` (the assistant, `lib/ai/*`, AI executor, tool registry, guardrails runtime) moves to **v4.1**. The provider is **not** chosen now — when AI is built, it targets a **provider-agnostic LLM interface** (adapter layer) so Claude/OpenAI/etc. can be swapped. The B1 security infrastructure (per-user scoped client, Zod tool-arg validation, server guardrails, injection isolation) is still built in v4 **as RBAC** (B11(c)) — it is the prerequisite that makes v4.1 AI safe to switch on. The AI slot in the UI (§4.2 Global Home) stays **reserved-not-built**, RBAC-gated and hidden.
+
+#### B11(b) — DB-per-tenant deferred to v4.1
+
+v4 runs on the **single existing production Frappe/ERPNext instance on the VPS**. No automated tenant provisioning, no subdomain middleware, no NextAuth multi-tenant layer in v4. For the pilot, instances are created **manually on the VPS** and the API key/secret is plugged into the client repo. `company` stays tenant-implicit via `getActiveCompany()` (B7). Subdomain routing + provisioning automation = v4.1.
+
+#### B11(c) — "v4 shipped" definition
+
+v4 is shippable when, on the production VPS instance, a non-technical SME user can run the full business end-to-end with minimal training. Concretely, v4 ship scope = **two mega phases**:
+
+- **Phase 2O — Stabilize + Intelligence + Automate:** flow-resolution rewrite (the cross-cutting P0), reports fix, skeletons everywhere, dashboard upgrade (charts/CTAs/notification tiles + unified per-module hubs), Manufacturing automation (one-click production), carry-forward fixes.
+- **Phase 2P — Enterprise Readiness + SME Ship:** **full RBAC** (land B1(a)/B2 — real `resolve-user.ts`, per-user scoped client, role-gated UI+API), **email integrations** (outbound transactional + notification email via Frappe), **push notifications** (web-push transport over the existing Notifications Center), **SME plug-and-play onboarding** (guided company/CoA/first-user/sample-data setup, minimal-training UX), a **confirmed E2E** across all three spines, and **production wiring** against the VPS instance for the pilot.
+
+#### B11(d) — Modules deferred to v4.1
+
+To protect the 2-day ship, these master-doc modules are explicitly **out of v4** (disclosed, not silently dropped): **Quality Inspection** (§9.1), **Product Bundle** (§9.2), and the **Activity Log** doctype as a first-class module (§9.3 — the per-page ActivityTimeline UI stays). **Project** (§3.3) and **HR/Employee** (§8.1) polish are **in v4 only if Phase 2P has runway**; otherwise v4.1. Decision deferred to the 2P live gate.
+
+**Locked for the v4 ship. Re-open only at the v4.1 planning gate.**

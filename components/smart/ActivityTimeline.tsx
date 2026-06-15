@@ -85,7 +85,7 @@ export function ActivityTimeline({
 
   if (isLoading) {
     return (
-      <div className={cn("rounded-xl border bg-card p-4", className)}>
+      <div className={cn("bg-card rounded-2xl shadow-sm shadow-black/5 p-6 border border-border/40", className)}>
         <div className="h-4 w-32 animate-pulse rounded bg-muted mb-4" />
         {Array.from({ length: 3 }).map((_, i) => (
           <div key={i} className="flex items-start gap-3 mb-4">
@@ -104,7 +104,7 @@ export function ActivityTimeline({
     return (
       <div
         className={cn(
-          "flex flex-col items-center justify-center rounded-xl border border-dashed px-4 py-8",
+          "flex flex-col items-center justify-center rounded-2xl shadow-sm shadow-black/5 border border-border/40 px-4 py-8",
           className
         )}
       >
@@ -118,11 +118,11 @@ export function ActivityTimeline({
       initial={prefersReducedMotion ? {} : { opacity: 0 }}
       animate={prefersReducedMotion ? {} : { opacity: 1 }}
       transition={{ duration: 0.3 }}
-      className={cn("rounded-xl border bg-card p-4", className)}
+      className={cn("bg-card rounded-2xl shadow-sm shadow-black/5 p-6 border border-border/40", className)}
     >
       <h4 className="text-sm font-semibold text-foreground mb-4">Activity</h4>
 
-      <div className="space-y-4">
+      <div className="space-y-5">
         {displayItems.map((item, index) => {
           const Icon = ACTIVITY_ICONS[item.type];
           const colorClass = ACTIVITY_COLORS[item.type];

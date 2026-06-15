@@ -54,7 +54,7 @@ export default function CurrenciesPage() {
 
   if (error)
     return (
-      <div className="flex items-center justify-center p-20 bg-destructive/5 rounded-[2rem] border border-destructive/10">
+      <div className="flex items-center justify-center p-20 bg-destructive/5 rounded-2xl border border-destructive/10">
         <p className="text-destructive font-bold text-lg">
           Failed to load currencies
         </p>
@@ -100,7 +100,7 @@ export default function CurrenciesPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
-              className="group relative bg-card p-6 rounded-[2rem] border border-transparent hover:border-primary/10 transition-all duration-300"
+              className="group relative bg-card p-6 rounded-2xl border border-transparent hover:border-primary/10 transition-all duration-300"
             >
               <div className="flex items-center justify-between mb-4">
                 <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary font-bold text-lg">

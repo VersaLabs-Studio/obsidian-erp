@@ -1,6 +1,6 @@
 // app/manufacturing/operation/[name]/edit/page.tsx
 // Obsidian ERP v4.0 - Edit Operation Page with Sub-Operations
-// @ts-nocheck
+// 2N Part 4.1: removed @ts-nocheck.
 
 "use client";
 
@@ -122,7 +122,7 @@ export default function EditOperationPage() {
 
   if (isLoading) {
     return (
-      <LoadingState variant="detail" message="Fetching operation data..." />
+      <LoadingState variant="detail" />
     );
   }
 
@@ -336,7 +336,7 @@ export default function EditOperationPage() {
                 control={form.control}
                 name="description"
                 label="Detailed Description"
-                rows={4}
+                minHeight="120px"
               />
             </div>
           </div>

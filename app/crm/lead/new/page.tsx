@@ -1,246 +1,256 @@
 // app/crm/lead/new/page.tsx
-// Obsidian ERP v4.0 - Create Lead Page
-// @ts-nocheck
+// Obsidian ERP v4.0 — Lead Create (V4 SmartForm Wizard)
+// 2-step FlowWizard with Zod step gating.
+// Premium UI: OKLCH semantic tokens only, Framer Motion via FlowWizard.
 
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { Button } from "@/components/ui/button";
-import { Form } from "@/components/ui/form";
-import { Loader2 } from "lucide-react";
+import { useMemo, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useForm, useWatch } from "react-hook-form";
+import { UserRound, Target } from "lucide-react";
 
-// v3.0 Imports
-import { useFrappeCreate } from "@/hooks/generic";
 import { PageHeader } from "@/components/smart";
 import { InfoCard } from "@/components/ui/info-card";
 import {
-  FormInput,
-  FormTextarea,
-  FormSelect,
-  FormFrappeSelect,
-} from "@/components/form";
-import { LeadCreateSchema, type LeadFormData } from "@/lib/schemas/doctype-schemas";
+  GuidedErrorDialog,
+  useGuidedError,
+} from "@/components/errors/GuidedErrorDialog";
+import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
+import { FormInput, FormTextarea, FormFrappeSelect } from "@/components/form";
+import { Form } from "@/components/ui/form";
+import { FlowWizard } from "@/components/flows/FlowWizard";
+import { useFrappeCreate } from "@/hooks/generic";
+import { validateWizardStep } from "@/lib/flows/flow-validation";
+import type { StepValidationResult } from "@/lib/flows/flow-validation";
+import type { WizardStep } from "@/types/flow-types";
 import type { Lead } from "@/types/doctype-types";
 
-// Status options
-const STATUS_OPTIONS = [
-  { value: "Open", label: "Open" },
-  { value: "Replied", label: "Replied" },
-  { value: "Interested", label: "Interested" },
-  { value: "Opportunity", label: "Opportunity" },
-  { value: "Do Not Contact", label: "Do Not Contact" },
+interface LeadForm {
+  lead_name: string;
+  company_name: string;
+  mobile_no: string;
+  email_id: string;
+  source: string;
+  territory: string;
+  industry: string;
+  notes: string;
+}
+
+const WIZARD_STEPS: WizardStep[] = [
+  {
+    id: "step1",
+    label: "Contact Info",
+    description: "Name and contact details for this lead",
+    schema: null,
+    fields: ["lead_name", "company_name", "mobile_no", "email_id"],
+    icon: "UserRound",
+  },
+  {
+    id: "step2",
+    label: "Qualification",
+    description: "Source, territory, and qualification details",
+    schema: null,
+    fields: ["source", "territory", "industry", "notes"],
+    icon: "Target",
+  },
 ];
 
-const TYPE_OPTIONS = [
-  { value: "Client", label: "Client" },
-  { value: "Channel Partner", label: "Channel Partner" },
-  { value: "Consultant", label: "Consultant" },
-];
-
-const REQUEST_TYPE_OPTIONS = [
-  { value: "Product Enquiry", label: "Product Enquiry" },
-  { value: "Request for Information", label: "Request for Information" },
-  { value: "Suggestions", label: "Suggestions" },
-  { value: "Other", label: "Other" },
-];
-
-export default function CreateLeadPage() {
+export default function NewLeadPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
-  // Create mutation
-  const createMutation = useFrappeCreate<{ data: Lead }, LeadFormData>(
-    "Lead",
-    {
-      onSuccess: (data) => {
-        router.push(`/crm/lead/${encodeURIComponent(data.data.name)}`);
-      },
-      successMessage: "Lead created successfully",
-    }
-  );
-
-  // Form setup
-  const form = useForm<LeadFormData>({
-    resolver: zodResolver(LeadCreateSchema),
+  const form = useForm<LeadForm>({
     defaultValues: {
-      status: "Open",
-      first_name: "",
-      last_name: "",
-      lead_name: "",
-      company_name: "",
-      email_id: "",
-      mobile_no: "",
-      phone: "",
-      source: "",
-      territory: "",
+      lead_name: searchParams.get("lead_name") || "",
+      company_name: searchParams.get("company_name") || "",
+      mobile_no: searchParams.get("mobile_no") || "",
+      email_id: searchParams.get("email_id") || "",
+      source: searchParams.get("source") || "",
+      territory: searchParams.get("territory") || "",
       industry: "",
-      type: undefined,
-      request_type: undefined,
+      notes: "",
     },
   });
 
-  // Submit handler
-  const onSubmit = async (data: LeadFormData) => {
-    // Auto-generate lead_name if not provided
-    const submitData = {
-      ...data,
-      lead_name: data.lead_name || `${data.first_name || ""} ${data.last_name || ""}`.trim() || data.company_name,
+  const { control, getValues } = form;
+  const watchedAll = useWatch({ control });
+
+  const validationResults = useMemo<Record<string, StepValidationResult>>(() => {
+    const values = { ...getValues(), ...watchedAll };
+    return {
+      step1: validateWizardStep("Lead", "step1", values),
+      step2: validateWizardStep("Lead", "step2", values),
     };
-    await createMutation.mutateAsync(submitData);
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchedAll]);
+
+  const { resolution, showError, dismiss } = useGuidedError();
+
+  const createMutation = useFrappeCreate<
+    { data: { name: string } },
+    Record<string, unknown>
+  >("Lead", {
+    successMessage: "Lead created",
+    onSuccess: (res) => {
+      const name = res?.data?.name;
+      if (name) {
+        router.push(`/crm/lead/${encodeURIComponent(name)}`);
+      }
+    },
+    onError: (err) => {
+      const r = resolveFrappeError(err, {
+        doctype: "Lead",
+        values: getValues(),
+      });
+      showError(r);
+    },
+  });
+
+  const handleSubmit = useCallback(() => {
+    const values = getValues();
+    createMutation.mutate({
+      ...values,
+      status: "Lead",
+      naming_series: "CRM-LEAD-.YYYY.-",
+    });
+  }, [createMutation, getValues]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-12">
       <PageHeader
         title="New Lead"
-        subtitle="Capture a new inquiry"
+        subtitle="Capture a new sales inquiry"
         backHref="/crm/lead"
       />
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Main Form - 2 columns */}
-            <div className="lg:col-span-2 space-y-6">
-              {/* Personal Information */}
-              <InfoCard title="Personal Information" icon="user">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FormInput
-                    control={form.control}
-                    name="first_name"
-                    label="First Name"
-                    placeholder="Enter first name..."
-                  />
-                  <FormInput
-                    control={form.control}
-                    name="last_name"
-                    label="Last Name"
-                    placeholder="Enter last name..."
-                  />
-                  <FormInput
-                    control={form.control}
-                    name="email_id"
-                    label="Email"
-                    type="email"
-                    placeholder="email@example.com"
-                  />
-                  <FormInput
-                    control={form.control}
-                    name="mobile_no"
-                    label="Mobile No"
-                    placeholder="+251 9XX XXX XXX"
-                  />
-                  <FormInput
-                    control={form.control}
-                    name="phone"
-                    label="Phone"
-                    placeholder="Office phone..."
-                  />
-                </div>
-              </InfoCard>
+        <InfoCard>
+          <FlowWizard
+            steps={WIZARD_STEPS}
+            formData={watchedAll as unknown as Record<string, unknown>}
+            validationResults={validationResults}
+            isSubmitting={createMutation.isPending}
+            onFormDataChange={() => {}}
+            onStepChange={() => {}}
+            onSubmit={handleSubmit}
+            onCancel={() => router.back()}
+            submitLabel="Create Lead"
+            submittingLabel="Creating..."
+            renderStep={(s) => {
+              if (s.id === "step1") {
+                return (
+                  <div className="space-y-6">
+                    <StepHeading
+                      icon={<UserRound className="h-5 w-5 text-primary" />}
+                      title="Contact Info"
+                      description="Who is this lead? Provide their name and contact details."
+                    />
+                    <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                      <FormInput
+                        control={control}
+                        name="lead_name"
+                        label="Lead Name"
+                        required
+                        placeholder="Full name or company..."
+                      />
+                      <FormInput
+                        control={control}
+                        name="company_name"
+                        label="Company Name"
+                        placeholder="Organization name..."
+                      />
+                      <FormInput
+                        control={control}
+                        name="mobile_no"
+                        label="Mobile No"
+                        placeholder="+251 9XX XXX XXX"
+                      />
+                      <FormInput
+                        control={control}
+                        name="email_id"
+                        label="Email"
+                        type="email"
+                        placeholder="email@example.com"
+                      />
+                    </div>
+                  </div>
+                );
+              }
 
-              {/* Organization */}
-              <InfoCard title="Organization" icon="building">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FormInput
-                    control={form.control}
-                    name="company_name"
-                    label="Company Name"
-                    placeholder="Enter company name..."
-                    className="md:col-span-2"
-                  />
-                  <FormFrappeSelect
-                    control={form.control}
-                    name="industry"
-                    label="Industry"
-                    doctype="Industry Type"
-                    labelField="industry"
-                  />
-                  <FormFrappeSelect
-                    control={form.control}
-                    name="territory"
-                    label="Territory"
-                    doctype="Territory"
-                    labelField="territory_name"
-                  />
-                </div>
-              </InfoCard>
+              if (s.id === "step2") {
+                return (
+                  <div className="space-y-6">
+                    <StepHeading
+                      icon={<Target className="h-5 w-5 text-primary" />}
+                      title="Qualification"
+                      description="How did this lead find you and what are they interested in?"
+                    />
+                    <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                      <FormFrappeSelect
+                        control={control}
+                        name="source"
+                        label="Lead Source"
+                        doctype="Lead Source"
+                        labelField="source_name"
+                        placeholder="Select source..."
+                      />
+                      <FormFrappeSelect
+                        control={control}
+                        name="territory"
+                        label="Territory"
+                        doctype="Territory"
+                        labelField="territory_name"
+                        placeholder="Select territory..."
+                      />
+                      <FormFrappeSelect
+                        control={control}
+                        name="industry"
+                        label="Industry"
+                        doctype="Industry Type"
+                        labelField="industry"
+                        placeholder="Select industry..."
+                      />
+                    </div>
+                    <FormTextarea
+                      control={control}
+                      name="notes"
+                      label="Notes"
+                      placeholder="Any additional context about this lead..."
+                    />
+                  </div>
+                );
+              }
 
-              {/* Classification */}
-              <InfoCard title="Classification" icon="tag">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FormSelect
-                    control={form.control}
-                    name="type"
-                    label="Lead Type"
-                    options={TYPE_OPTIONS}
-                    placeholder="Select type..."
-                  />
-                  <FormSelect
-                    control={form.control}
-                    name="request_type"
-                    label="Request Type"
-                    options={REQUEST_TYPE_OPTIONS}
-                    placeholder="Select request type..."
-                  />
-                  <FormFrappeSelect
-                    control={form.control}
-                    name="source"
-                    label="Source"
-                    doctype="Lead Source"
-                    labelField="source_name"
-                  />
-                </div>
-              </InfoCard>
-            </div>
-
-            {/* Sidebar - 1 column */}
-            <div className="space-y-6">
-              {/* Status & Actions */}
-              <InfoCard title="Status" variant="gradient">
-                <div className="space-y-4">
-                  <FormSelect
-                    control={form.control}
-                    name="status"
-                    label="Lead Status"
-                    required
-                    options={STATUS_OPTIONS}
-                  />
-                </div>
-              </InfoCard>
-
-              {/* Actions */}
-              <InfoCard title="Actions">
-                <div className="space-y-3">
-                  <Button
-                    type="submit"
-                    className="w-full rounded-xl"
-                    disabled={createMutation.isPending}
-                  >
-                    {createMutation.isPending ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Creating...
-                      </>
-                    ) : (
-                      "Create Lead"
-                    )}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full rounded-xl"
-                    onClick={() => router.push("/crm/lead")}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </InfoCard>
-            </div>
-          </div>
-        </form>
+              return null;
+            }}
+          />
+        </InfoCard>
       </Form>
+
+      <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
+    </div>
+  );
+}
+
+function StepHeading({
+  icon,
+  title,
+  description,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="flex items-start gap-3">
+      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+        {icon}
+      </div>
+      <div>
+        <h3 className="text-base font-semibold text-foreground">{title}</h3>
+        <p className="text-sm text-muted-foreground">{description}</p>
+      </div>
     </div>
   );
 }

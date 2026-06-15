@@ -1,5 +1,7 @@
-// @ts-nocheck
 "use client";
+
+// app/manufacturing/work-order/page.tsx
+// Work Order List — KPICard + StatusBadge + card grid. OKLCH semantic tokens only.
 
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
@@ -10,265 +12,207 @@ import {
   MoreVertical,
   Pencil,
   Trash2,
-  Search,
-  ClipboardList,
-  Play,
-  Pause,
-  CheckCircle2,
-  Clock,
-  XCircle,
-  Archive,
   Eye,
+  ClipboardList,
   Package,
   Calendar,
   Factory,
-  AlertTriangle,
+  Play,
+  CheckCircle2,
+  Clock,
+  ArrowRight,
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useFrappeList, useFrappeDelete } from "@/hooks/generic";
 import {
   PageHeader,
-  LoadingState,
   EmptyState,
+  LoadingState,
   ConfirmDialog,
 } from "@/components/smart";
+import { KPICard } from "@/components/dashboard/KPICard";
+import { StatusBadge } from "@/components/smart/status-badge";
 import type { WorkOrder } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
-import { format, parseISO, isPast } from "date-fns";
 
-// Status configuration
-const STATUS_CONFIG = {
-  Draft: {
-    color: "text-slate-600",
-    bg: "bg-slate-50 dark:bg-slate-800/50",
-    border: "border-slate-200 dark:border-slate-700",
-    icon: Pencil,
-  },
-  "Not Started": {
-    color: "text-amber-600",
-    bg: "bg-amber-50 dark:bg-amber-900/10",
-    border: "border-amber-200 dark:border-amber-800/50",
-    icon: Clock,
-  },
-  "In Process": {
-    color: "text-blue-600",
-    bg: "bg-blue-50 dark:bg-blue-900/10",
-    border: "border-blue-200 dark:border-blue-800/50",
-    icon: Play,
-  },
-  Completed: {
-    color: "text-emerald-600",
-    bg: "bg-emerald-50 dark:bg-emerald-900/10",
-    border: "border-emerald-200 dark:border-emerald-800/50",
-    icon: CheckCircle2,
-  },
-  Stopped: {
-    color: "text-red-600",
-    bg: "bg-red-50 dark:bg-red-900/10",
-    border: "border-red-200 dark:border-red-800/50",
-    icon: Pause,
-  },
-  Closed: {
-    color: "text-gray-500",
-    bg: "bg-gray-50 dark:bg-gray-800/50",
-    border: "border-gray-200 dark:border-gray-700",
-    icon: Archive,
-  },
-  Cancelled: {
-    color: "text-gray-400",
-    bg: "bg-gray-50 dark:bg-gray-800/50",
-    border: "border-gray-200 dark:border-gray-700",
-    icon: XCircle,
-  },
-};
+function getDisplayStatus(wo: WorkOrder): string {
+  if (wo.docstatus === 2) return "Cancelled";
+  return wo.status || "Draft";
+}
 
-function WorkOrderCard({ wo, index, onView, onEdit, onDelete }) {
-  const statusConfig = STATUS_CONFIG[wo.status] || STATUS_CONFIG.Draft;
-  const StatusIcon = statusConfig.icon;
-  const isOverdue =
-    wo.expected_delivery_date &&
-    isPast(parseISO(wo.expected_delivery_date)) &&
-    !["Completed", "Closed", "Cancelled"].includes(wo.status);
+function formatDate(dateStr: string | undefined): string {
+  if (!dateStr) return "—";
+  return new Date(dateStr).toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function WorkOrderCard({
+  wo,
+  index,
+  onView,
+  onEdit,
+  onDelete,
+}: {
+  wo: WorkOrder;
+  index: number;
+  onView: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const displayStatus = getDisplayStatus(wo);
+  const isDraft = wo.docstatus === 0;
   const progress = wo.qty > 0 ? ((wo.produced_qty || 0) / wo.qty) * 100 : 0;
 
   return (
     <div
       className={cn(
-        "group relative bg-card rounded-2xl border p-6",
-        "hover:shadow-xl hover:shadow-primary/5 hover:border-primary/20",
-        "transition-all duration-300 cursor-pointer animate-in fade-in slide-in-from-bottom-4",
-        isOverdue
-          ? "border-red-300 dark:border-red-800 shadow-[0_0_15px_rgba(239,68,68,0.05)]"
-          : "border-border/50",
+        "group relative bg-card rounded-2xl border border-border/50",
+        "hover:border-primary/20 hover:shadow-xl hover:shadow-primary/5",
+        "transition-all duration-300 cursor-pointer overflow-hidden",
+        "animate-slide-up",
       )}
-      style={{ animationDelay: `${index * 50}ms` }}
+      style={{ animationDelay: `${index * 40}ms` }}
       onClick={onView}
     >
-      {/* Overdue Badge */}
-      {isOverdue && (
-        <div className="absolute -top-2 -right-2 px-3 py-1 bg-red-500 text-white text-[10px] font-black rounded-full shadow-lg shadow-red-500/20 tracking-wider">
-          OVERDUE
-        </div>
-      )}
-
-      {/* Header */}
-      <div className="flex items-start justify-between mb-5">
-        <div className="flex items-center gap-3">
-          <div
-            className={cn(
-              "h-12 w-12 rounded-xl flex items-center justify-center transition-all group-hover:scale-110 border",
-              statusConfig.bg,
-              statusConfig.color,
-              statusConfig.border,
-            )}
-          >
-            <StatusIcon className="h-6 w-6" />
-          </div>
-          <div className="space-y-0.5">
-            <h3 className="font-black text-foreground group-hover:text-primary transition-colors tracking-tight">
-              {wo.name}
-            </h3>
+      <div className="p-5">
+        <div className="flex items-start justify-between mb-4">
+          <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <p className="text-xs font-bold text-muted-foreground line-clamp-1 uppercase tracking-widest">
-                {wo.production_item}
-              </p>
+              <h3 className="font-bold text-lg text-foreground tracking-tight">
+                {wo.name}
+              </h3>
+              <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
+            <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+              <Package className="h-3 w-3" />
+              {wo.item_name || wo.production_item}
+            </p>
           </div>
+          <StatusBadge status={displayStatus} size="sm" />
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 rounded-full"
-            >
-              <MoreVertical className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="end"
-            className="w-44 rounded-xl shadow-xl border-border/50"
-          >
-            <DropdownMenuItem
-              onClick={(e) => {
-                e.stopPropagation();
-                onView();
-              }}
-              className="rounded-lg"
-            >
-              <Eye className="h-4 w-4 mr-2" /> View Details
-            </DropdownMenuItem>
-            {wo.status === "Draft" && (
-              <DropdownMenuItem
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onEdit();
-                }}
-                className="rounded-lg"
-              >
-                <Pencil className="h-4 w-4 mr-2" /> Edit
-              </DropdownMenuItem>
-            )}
-            {wo.status === "Draft" && (
-              <DropdownMenuItem
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete();
-                }}
-                className="text-destructive rounded-lg focus:bg-destructive/10 focus:text-destructive"
-              >
-                <Trash2 className="h-4 w-4 mr-2" /> Delete
-              </DropdownMenuItem>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
 
-      <div className="mb-4">
-        <p className="text-sm font-semibold text-foreground line-clamp-1 mb-1">
-          {wo.item_name || wo.production_item}
-        </p>
-        <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed opacity-70">
-          {wo.description ||
-            "No additional description provided for this production job."}
-        </p>
-      </div>
-
-      {/* Progress Bar */}
-      <div className="mb-5 p-3 bg-secondary/20 rounded-xl border border-border/10">
-        <div className="flex justify-between items-baseline mb-2">
-          <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-            Production Progress
-          </span>
-          <span className="text-xs font-bold text-primary">
-            {Math.round(progress)}%
-          </span>
-        </div>
-        <div className="h-2 bg-secondary rounded-full overflow-hidden">
-          <div
-            className={cn(
-              "h-full rounded-full transition-all duration-500",
-              progress >= 100 ? "bg-emerald-500" : "bg-primary",
-            )}
-            style={{ width: `${Math.min(progress, 100)}%` }}
-          />
-        </div>
-        <div className="flex justify-between mt-1.5 text-[10px] font-bold">
-          <span className="text-muted-foreground">
-            Produced: {wo.produced_qty || 0}
-          </span>
-          <span className="text-foreground">Total: {wo.qty}</span>
-        </div>
-      </div>
-
-      {/* Info Grid */}
-      <div className="grid grid-cols-2 gap-y-3 gap-x-4 text-[11px]">
-        <div className="flex items-center gap-2 text-muted-foreground font-medium truncate">
-          <Package className="h-3.5 w-3.5 text-emerald-500" />
-          <span className="truncate">{wo.bom_no}</span>
-        </div>
-        <div className="flex items-center gap-2 text-muted-foreground font-medium truncate">
-          <Factory className="h-3.5 w-3.5 text-amber-500" />
-          <span className="truncate">{wo.fg_warehouse}</span>
-        </div>
-        {wo.planned_start_date && (
-          <div className="flex items-center gap-2 text-muted-foreground font-medium">
-            <Calendar className="h-3.5 w-3.5 text-blue-500" />
-            <span>
-              {format(parseISO(wo.planned_start_date), "MMM d, yyyy")}
+        {/* Progress Bar */}
+        <div className="mb-4 p-3 bg-secondary/20 rounded-xl border border-border/10">
+          <div className="flex justify-between items-baseline mb-2">
+            <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+              Progress
+            </span>
+            <span className="text-xs font-bold text-primary">
+              {Math.round(progress)}%
             </span>
           </div>
-        )}
+          <div className="h-2 bg-secondary rounded-full overflow-hidden">
+            <div
+              className={cn(
+                "h-full rounded-full transition-all duration-500",
+                progress >= 100 ? "bg-emerald-500" : "bg-primary",
+              )}
+              style={{ width: `${Math.min(progress, 100)}%` }}
+            />
+          </div>
+          <div className="flex justify-between mt-1.5 text-[10px] font-bold">
+            <span className="text-muted-foreground">
+              Produced: {wo.produced_qty || 0}
+            </span>
+            <span className="text-foreground">Target: {wo.qty}</span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <div className="space-y-1">
+            <p className="text-[10px] font-bold uppercase text-muted-foreground/70 tracking-wider">
+              Planned Start
+            </p>
+            <p className="text-sm font-medium text-foreground flex items-center gap-1">
+              <Calendar className="h-3 w-3 text-muted-foreground" />
+              {formatDate(wo.planned_start_date)}
+            </p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-[10px] font-bold uppercase text-muted-foreground/70 tracking-wider">
+              FG Warehouse
+            </p>
+            <p className="text-sm font-medium text-foreground flex items-center gap-1 truncate">
+              <Factory className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+              <span className="truncate">{wo.fg_warehouse || "—"}</span>
+            </p>
+          </div>
+        </div>
+
         {wo.sales_order && (
-          <div className="flex items-center gap-2 text-indigo-600 font-bold truncate">
+          <div className="flex items-center gap-2 text-xs text-indigo-600 font-bold mb-4">
             <ClipboardList className="h-3.5 w-3.5" />
             <span className="truncate">{wo.sales_order}</span>
           </div>
         )}
-      </div>
 
-      {/* Status & Company Footer */}
-      <div className="mt-5 pt-4 border-t border-border/50 flex items-center justify-between">
-        <Badge
-          className={cn(
-            "rounded-full text-[10px] font-bold px-3 py-0.5 border shadow-sm",
-            statusConfig.bg,
-            statusConfig.color,
-            statusConfig.border,
-          )}
-        >
-          {wo.status}
-        </Badge>
-        <div className="text-[10px] font-black uppercase tracking-tighter text-muted-foreground/50">
-          {wo.company}
+        <div className="flex items-center justify-between pt-4 border-t border-border/50">
+          <div className="text-[10px] font-black uppercase tracking-tighter text-muted-foreground/50">
+            {wo.company}
+          </div>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 rounded-xl opacity-0 group-hover:opacity-100 transition-all"
+              >
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              className="rounded-xl border-border/50 shadow-xl bg-popover/95 backdrop-blur-xl p-1.5 min-w-[160px]"
+            >
+              <DropdownMenuItem
+                className="rounded-lg cursor-pointer"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onView();
+                }}
+              >
+                <Eye className="h-4 w-4 mr-2" />
+                View Details
+              </DropdownMenuItem>
+              {isDraft && (
+                <DropdownMenuItem
+                  className="rounded-lg cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit();
+                  }}
+                >
+                  <Pencil className="h-4 w-4 mr-2" />
+                  Edit
+                </DropdownMenuItem>
+              )}
+              {isDraft && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="rounded-lg cursor-pointer text-destructive focus:text-destructive"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete();
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     </div>
@@ -277,9 +221,9 @@ function WorkOrderCard({ wo, index, onView, onEdit, onDelete }) {
 
 export default function WorkOrderListPage() {
   const router = useRouter();
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [deleteTarget, setDeleteTarget] = useState<WorkOrder | null>(null);
 
   const {
     data: workOrders,
@@ -291,7 +235,6 @@ export default function WorkOrderListPage() {
       "status",
       "production_item",
       "item_name",
-      "description",
       "bom_no",
       "company",
       "sales_order",
@@ -303,118 +246,149 @@ export default function WorkOrderListPage() {
       "docstatus",
     ],
     orderBy: { field: "creation", order: "desc" },
+    search,
     limit: 100,
   });
 
   const deleteMutation = useFrappeDelete("Work Order", {
     onSuccess: () => {
-      toast.success("Work Order deleted");
-      refetch();
       setDeleteTarget(null);
+      refetch();
     },
   });
 
-  const filtered = useMemo(() => {
+  const filteredOrders = useMemo(() => {
     if (!workOrders) return [];
-    return workOrders.filter((wo) => {
-      const matchesSearch =
-        !searchTerm ||
-        wo.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        wo.item_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        wo.production_item?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        wo.sales_order?.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesStatus =
-        statusFilter === "all" || wo.status === statusFilter;
-      return matchesSearch && matchesStatus;
-    });
-  }, [workOrders, searchTerm, statusFilter]);
+    if (statusFilter === "all") return workOrders;
+    return workOrders.filter((wo) => getDisplayStatus(wo) === statusFilter);
+  }, [workOrders, statusFilter]);
 
-  // Count by status
   const statusCounts = useMemo(() => {
-    const counts: Record<string, number> = { all: workOrders?.length || 0 };
-    workOrders?.forEach((wo) => {
-      counts[wo.status] = (counts[wo.status] || 0) + 1;
-    });
-    return counts;
+    if (!workOrders) return {} as Record<string, number>;
+    return workOrders.reduce(
+      (acc, wo) => {
+        const s = getDisplayStatus(wo);
+        acc[s] = (acc[s] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
   }, [workOrders]);
 
-  if (isLoading) return <LoadingState message="Loading work orders..." />;
+  const kpis = useMemo(() => {
+    if (!workOrders) return { total: 0, notStarted: 0, inProcess: 0, completed: 0 };
+    return {
+      total: workOrders.length,
+      notStarted: workOrders.filter((wo) => wo.status === "Not Started").length,
+      inProcess: workOrders.filter((wo) => wo.status === "In Process").length,
+      completed: workOrders.filter((wo) => wo.status === "Completed").length,
+    };
+  }, [workOrders]);
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    await deleteMutation.mutateAsync(deleteTarget.name);
+  };
+
+  if (isLoading) return <LoadingState type="cards" count={6} />;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Work Orders"
-        subtitle="Manage production commands and track manufacturing progress"
-        primaryAction={{
-          label: "Create Work Order",
-          onClick: () => router.push("/manufacturing/work-order/new"),
-          icon: <Plus className="h-4 w-4" />,
-        }}
+        subtitle={`${filteredOrders.length} order${filteredOrders.length !== 1 ? "s" : ""}`}
+        showSearch
+        searchValue={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search by ID, item, SO..."
+        actions={
+          <Button
+            className="rounded-full shadow-lg shadow-primary/20"
+            onClick={() => router.push("/manufacturing/work-order/new")}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            New Work Order
+          </Button>
+        }
       />
 
-      {/* Filters */}
-      <div className="flex flex-col lg:flex-row gap-4">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search work orders..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10 rounded-full"
-          />
-        </div>
-
-        <Tabs
-          value={statusFilter}
-          onValueChange={setStatusFilter}
-          className="w-full lg:w-auto"
-        >
-          <TabsList className="bg-secondary/30 p-1 rounded-full flex-wrap h-auto">
-            {["all", "Not Started", "In Process", "Completed", "Stopped"].map(
-              (s) => (
-                <TabsTrigger
-                  key={s}
-                  value={s}
-                  className="rounded-full capitalize data-[state=active]:shadow-sm"
-                >
-                  {s === "all" ? "All" : s}{" "}
-                  {statusCounts[s] ? `(${statusCounts[s]})` : ""}
-                </TabsTrigger>
-              ),
-            )}
-          </TabsList>
-        </Tabs>
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <KPICard title="Total" value={kpis.total} icon={ClipboardList} isLoading={isLoading} />
+        <KPICard title="Not Started" value={kpis.notStarted} icon={Clock} variant="warning" isLoading={isLoading} />
+        <KPICard title="In Process" value={kpis.inProcess} icon={Play} variant="default" isLoading={isLoading} />
+        <KPICard title="Completed" value={kpis.completed} icon={CheckCircle2} variant="success" isLoading={isLoading} />
       </div>
 
-      {/* Grid */}
-      {filtered.length === 0 ? (
+      <div className="flex gap-2 flex-wrap">
+        {[
+          { key: "all", label: "All", count: workOrders?.length || 0 },
+          { key: "Draft", label: "Draft", count: statusCounts.Draft || 0 },
+          { key: "Not Started", label: "Not Started", count: statusCounts["Not Started"] || 0 },
+          { key: "In Process", label: "In Process", count: statusCounts["In Process"] || 0 },
+          { key: "Completed", label: "Completed", count: statusCounts.Completed || 0 },
+        ].map((s) => (
+          <Button
+            key={s.key}
+            variant={statusFilter === s.key ? "default" : "outline"}
+            size="sm"
+            className={cn(
+              "rounded-full gap-2 transition-all",
+              statusFilter === s.key
+                ? "shadow-lg shadow-primary/20"
+                : "hover:bg-secondary/80",
+            )}
+            onClick={() => setStatusFilter(s.key)}
+          >
+            {s.label}
+            <Badge
+              variant="secondary"
+              className={cn(
+                "h-5 min-w-[20px] px-1.5 text-[10px] font-bold",
+                statusFilter === s.key
+                  ? "bg-primary-foreground/20 text-primary-foreground"
+                  : "bg-secondary",
+              )}
+            >
+              {s.count}
+            </Badge>
+          </Button>
+        ))}
+      </div>
+
+      {!workOrders || workOrders.length === 0 ? (
         <EmptyState
-          icon={ClipboardList}
           title="No work orders found"
-          description={
-            searchTerm
-              ? "Try different search terms"
-              : "Create your first work order"
+          description="Create your first work order to start production"
+          action={
+            <Button
+              onClick={() => router.push("/manufacturing/work-order/new")}
+              className="rounded-full"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Create Work Order
+            </Button>
           }
         />
+      ) : filteredOrders.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">
+          <ClipboardList className="h-12 w-12 mx-auto mb-4 opacity-30" />
+          <p className="font-medium">No work orders match this filter</p>
+          <p className="text-sm mt-1">Try selecting a different status</p>
+        </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {filtered.map((wo, idx) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {filteredOrders.map((wo, index) => (
             <WorkOrderCard
               key={wo.name}
               wo={wo}
-              index={idx}
+              index={index}
               onView={() =>
-                router.push(
-                  `/manufacturing/work-order/${encodeURIComponent(wo.name)}`,
-                )
+                router.push(`/manufacturing/work-order/${encodeURIComponent(wo.name)}`)
               }
               onEdit={() =>
-                router.push(
-                  `/manufacturing/work-order/${encodeURIComponent(wo.name)}/edit`,
-                )
+                router.push(`/manufacturing/work-order/${encodeURIComponent(wo.name)}/edit`)
               }
-              onDelete={() => setDeleteTarget(wo.name)}
+              onDelete={() => setDeleteTarget(wo)}
             />
           ))}
         </div>
@@ -422,12 +396,13 @@ export default function WorkOrderListPage() {
 
       <ConfirmDialog
         open={!!deleteTarget}
-        onOpenChange={() => setDeleteTarget(null)}
-        title="Delete Work Order?"
-        description="This cannot be undone."
-        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget)}
-        isLoading={deleteMutation.isPending}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title="Delete Work Order"
+        description={`Are you sure you want to delete "${deleteTarget?.name}"? This action cannot be undone.`}
+        confirmText="Delete"
         variant="destructive"
+        onConfirm={handleDeleteConfirm}
+        loading={deleteMutation.isPending}
       />
     </div>
   );

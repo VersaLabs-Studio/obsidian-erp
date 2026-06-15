@@ -1,6 +1,5 @@
 // app/crm/customer/[name]/edit/page.tsx
 // Obsidian ERP v4.0 - Edit Customer Page
-// @ts-nocheck
 
 "use client";
 
@@ -11,9 +10,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Form } from "@/components/ui/form";
-import { Loader2 } from "lucide-react";
+import { Loader2, User, PhoneCall, Info } from "lucide-react";
 
-// v3.0 Imports
 import { useFrappeDoc, useFrappeUpdate } from "@/hooks/generic";
 import { PageHeader, LoadingState } from "@/components/smart";
 import { InfoCard } from "@/components/ui/info-card";
@@ -23,9 +21,10 @@ import {
   FormFrappeSelect,
   FormSelect,
 } from "@/components/form";
+import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
+import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
 import type { Customer } from "@/types/doctype-types";
 
-// Form Schema (Update allows partials)
 const customerUpdateSchema = z.object({
   customer_name: z.string().min(1, "Customer name is required"),
   customer_type: z.enum(["Company", "Individual", "Partnership"]).optional(),
@@ -45,22 +44,10 @@ export default function EditCustomerPage() {
   const params = useParams();
   const router = useRouter();
   const name = decodeURIComponent(params.name as string);
+  const { resolution, showError, dismiss } = useGuidedError();
 
-  // Fetch existing customer
   const { data: customer, isLoading: isLoadingCustomer, error } = useFrappeDoc<Customer>("Customer", name);
 
-  // Update mutation
-  const updateMutation = useFrappeUpdate<{ data: Customer }, Partial<Customer>>(
-    "Customer",
-    {
-      onSuccess: () => {
-        router.push(`/crm/customer/${encodeURIComponent(name)}`);
-      },
-      successMessage: "Customer updated successfully",
-    }
-  );
-
-  // Form setup
   const form = useForm<CustomerUpdateFormData>({
     resolver: zodResolver(customerUpdateSchema),
     defaultValues: {
@@ -77,12 +64,11 @@ export default function EditCustomerPage() {
     },
   });
 
-  // Populate form when data loads
   useEffect(() => {
     if (customer) {
       form.reset({
-        customer_name: customer.customer_name,
-        customer_type: customer.customer_type,
+        customer_name: customer.customer_name || "",
+        customer_type: customer.customer_type || "Company",
         customer_group: customer.customer_group || "",
         territory: customer.territory || "",
         email_id: customer.email_id || "",
@@ -95,7 +81,19 @@ export default function EditCustomerPage() {
     }
   }, [customer, form]);
 
-  // Submit handler
+  const updateMutation = useFrappeUpdate<{ data: Customer }, { name: string; data: Partial<Customer> }>(
+    "Customer",
+    {
+      onSuccess: () => {
+        router.push(`/crm/customer/${encodeURIComponent(name)}`);
+      },
+      successMessage: "Customer updated successfully",
+      onError: (err) => {
+        showError(resolveFrappeError(err, { doctype: "Customer", values: form.getValues() }));
+      }
+    }
+  );
+
   const onSubmit = async (data: CustomerUpdateFormData) => {
     const submitData: Partial<Customer> = {
       ...data,
@@ -108,15 +106,13 @@ export default function EditCustomerPage() {
     await updateMutation.mutateAsync({ name, data: submitData });
   };
 
-  // Loading state
   if (isLoadingCustomer) {
     return <LoadingState type="detail" />;
   }
 
-  // Error state
   if (error || !customer) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex items-center justify-center h-64 bg-destructive/5 rounded-xl border border-destructive/20 p-6">
         <p className="text-destructive">Customer not found</p>
       </div>
     );
@@ -135,7 +131,7 @@ export default function EditCustomerPage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Main Form */}
             <div className="lg:col-span-2 space-y-6">
-              <InfoCard title="Basic Information" icon="user">
+              <InfoCard title="Basic Information" icon={<User className="h-4 w-4 text-primary" />}>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="col-span-2">
                     <FormInput
@@ -180,7 +176,7 @@ export default function EditCustomerPage() {
                 </div>
               </InfoCard>
 
-              <InfoCard title="Contact Information" icon="contact">
+              <InfoCard title="Contact Information" icon={<PhoneCall className="h-4 w-4 text-primary" />}>
                 <div className="grid grid-cols-2 gap-4">
                   <FormInput
                     control={form.control}
@@ -206,13 +202,13 @@ export default function EditCustomerPage() {
                 </div>
               </InfoCard>
 
-              <InfoCard title="Additional Details" icon="info">
+              <InfoCard title="Additional Details" icon={<Info className="h-4 w-4 text-primary" />}>
                 <FormTextarea
                   control={form.control}
                   name="customer_details"
                   label="Notes"
                   placeholder="Additional information about this customer..."
-                  rows={4}
+                  minHeight="120px"
                 />
               </InfoCard>
             </div>
@@ -249,6 +245,8 @@ export default function EditCustomerPage() {
           </div>
         </form>
       </Form>
+
+      <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
     </div>
   );
 }

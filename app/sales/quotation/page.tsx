@@ -1,6 +1,5 @@
 // app/sales/quotation/page.tsx
 // Obsidian ERP v4.0 - Quotations List Page (Premium Card Design)
-// @ts-nocheck
 
 "use client";
 
@@ -16,14 +15,12 @@ import {
   Eye,
   CalendarDays,
   Clock,
-  User,
   Building2,
   DollarSign,
-  AlertTriangle,
-  CheckCircle2,
-  XCircle,
-  FileText,
+  User,
   ArrowRight,
+  FileText,
+  CheckCircle2,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -39,51 +36,14 @@ import {
   LoadingState,
   ConfirmDialog,
 } from "@/components/smart";
+import { StatusBadge } from "@/components/smart/status-badge";
+import { KPICard } from "@/components/dashboard/KPICard";
+import { CommandPalette } from "@/components/command/CommandPalette";
 import type { Quotation } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
 
-// Enhanced status configuration with colors and icons
-const STATUS_CONFIG: Record<
-  string,
-  { color: string; bgColor: string; icon: React.ElementType; label: string }
-> = {
-  Draft: {
-    color: "text-slate-700 dark:text-slate-300",
-    bgColor: "bg-slate-100 dark:bg-slate-800",
-    icon: FileText,
-    label: "Draft",
-  },
-  Open: {
-    color: "text-blue-700 dark:text-blue-300",
-    bgColor: "bg-blue-100 dark:bg-blue-900/50",
-    icon: Clock,
-    label: "Awaiting Response",
-  },
-  Ordered: {
-    color: "text-emerald-700 dark:text-emerald-300",
-    bgColor: "bg-emerald-100 dark:bg-emerald-900/50",
-    icon: CheckCircle2,
-    label: "Ordered",
-  },
-  Expired: {
-    color: "text-amber-700 dark:text-amber-300",
-    bgColor: "bg-amber-100 dark:bg-amber-900/50",
-    icon: AlertTriangle,
-    label: "Expired",
-  },
-  Cancelled: {
-    color: "text-muted-foreground",
-    bgColor: "bg-muted",
-    icon: XCircle,
-    label: "Cancelled",
-  },
-};
-
-// Get display status (handles expired logic)
 function getDisplayStatus(quotation: Quotation): string {
-  // Check if cancelled
   if (quotation.docstatus === 2) return "Cancelled";
-  // Check if expired (only for Open status)
   if (
     quotation.status === "Open" &&
     quotation.valid_till &&
@@ -94,7 +54,6 @@ function getDisplayStatus(quotation: Quotation): string {
   return quotation.status || "Draft";
 }
 
-// Quotation Card Component - Premium v3.0 Design
 function QuotationCard({
   quotation,
   index,
@@ -109,8 +68,6 @@ function QuotationCard({
   onDelete: () => void;
 }) {
   const displayStatus = getDisplayStatus(quotation);
-  const statusConfig = STATUS_CONFIG[displayStatus] || STATUS_CONFIG.Draft;
-  const StatusIcon = statusConfig.icon;
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ET", {
@@ -144,18 +101,6 @@ function QuotationCard({
       style={{ animationDelay: `${index * 40}ms` }}
       onClick={onView}
     >
-      {/* Status Indicator Bar */}
-      <div
-        className={cn(
-          "absolute top-0 left-0 right-0 h-1",
-          displayStatus === "Draft" && "bg-slate-400",
-          displayStatus === "Open" && "bg-blue-500",
-          displayStatus === "Ordered" && "bg-emerald-500",
-          displayStatus === "Expired" && "bg-amber-500",
-          displayStatus === "Cancelled" && "bg-muted-foreground/50"
-        )}
-      />
-
       <div className="p-5">
         {/* Header Row */}
         <div className="flex items-start justify-between mb-4">
@@ -172,17 +117,7 @@ function QuotationCard({
             </p>
           </div>
 
-          {/* Status Badge */}
-          <div
-            className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold",
-              statusConfig.bgColor,
-              statusConfig.color
-            )}
-          >
-            <StatusIcon className="h-3.5 w-3.5" />
-            {statusConfig.label}
-          </div>
+          <StatusBadge status={displayStatus} size="sm" />
         </div>
 
         {/* Info Grid */}
@@ -200,16 +135,9 @@ function QuotationCard({
             <p className="text-[10px] font-bold uppercase text-muted-foreground/70 tracking-wider">
               Valid Till
             </p>
-            <p
-              className={cn(
-                "text-sm font-medium flex items-center gap-1",
-                displayStatus === "Expired"
-                  ? "text-amber-600 dark:text-amber-400"
-                  : "text-foreground"
-              )}
-            >
+            <p className="text-sm font-medium text-foreground flex items-center gap-1">
               <Clock className="h-3 w-3 text-muted-foreground" />
-              {formatDate(quotation.valid_till)}
+              {formatDate(quotation.valid_till || "")}
             </p>
           </div>
           <div className="space-y-1">
@@ -225,7 +153,6 @@ function QuotationCard({
 
         {/* Footer with Amount and Actions */}
         <div className="flex items-center justify-between pt-4 border-t border-border/50">
-          {/* Grand Total */}
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
               <DollarSign className="h-5 w-5 text-primary" />
@@ -235,12 +162,11 @@ function QuotationCard({
                 Grand Total
               </p>
               <p className="text-lg font-bold text-foreground tracking-tight">
-                {formatCurrency(quotation.grand_total)}
+                {formatCurrency(quotation.grand_total ?? 0)}
               </p>
             </div>
           </div>
 
-          {/* Actions */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
               <Button
@@ -300,7 +226,6 @@ function QuotationCard({
   );
 }
 
-// Main Page Component
 export default function QuotationsListPage() {
   const router = useRouter();
   const [search, setSearch] = useState("");
@@ -332,22 +257,17 @@ export default function QuotationsListPage() {
     onSuccess: () => setDeleteTarget(null),
   });
 
-  // Filter quotations
   const filteredQuotations = useMemo(() => {
     if (!quotations) return [];
     let result = quotations;
 
     if (statusFilter !== "all") {
-      result = result.filter((q) => {
-        const displayStatus = getDisplayStatus(q);
-        return displayStatus === statusFilter;
-      });
+      result = result.filter((q) => getDisplayStatus(q) === statusFilter);
     }
 
     return result;
   }, [quotations, statusFilter]);
 
-  // Status counts for filter badges
   const statusCounts = useMemo(() => {
     if (!quotations) return {};
     return quotations.reduce((acc, q) => {
@@ -357,21 +277,33 @@ export default function QuotationsListPage() {
     }, {} as Record<string, number>);
   }, [quotations]);
 
+  const kpis = useMemo(() => {
+    if (!quotations) return { total: 0, draft: 0, open: 0, ordered: 0 };
+    return {
+      total: quotations.length,
+      draft: quotations.filter((q) => q.status === "Draft").length,
+      open: quotations.filter((q) => q.status === "Open").length,
+      ordered: quotations.filter((q) => q.status === "Ordered").length,
+    };
+  }, [quotations]);
+
   const handleDeleteConfirm = async () => {
     if (!deleteTarget) return;
     await deleteMutation.mutateAsync(deleteTarget.name);
   };
 
-  if (isLoading) return <LoadingState type="grid" count={6} />;
+  if (isLoading) return <LoadingState type="cards" count={6} />;
   if (error)
     return (
-      <div className="p-8 text-center text-destructive">
+      <div className="p-8 text-center text-destructive bg-destructive/5 rounded-xl border border-destructive/20">
         Failed to load quotations
       </div>
     );
 
   return (
     <div className="space-y-6">
+      <CommandPalette />
+
       <PageHeader
         title="Quotations"
         subtitle={`${filteredQuotations.length} quotation${
@@ -392,22 +324,45 @@ export default function QuotationsListPage() {
         }
       />
 
-      {/* Status Filter Pills - Removed Lost */}
+      {/* KPI Bar */}
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <KPICard
+          title="Total Quotations"
+          value={kpis.total}
+          icon={FileText}
+          isLoading={isLoading}
+        />
+        <KPICard
+          title="Draft"
+          value={kpis.draft}
+          icon={Clock}
+          variant="warning"
+          isLoading={isLoading}
+        />
+        <KPICard
+          title="Open / Active"
+          value={kpis.open}
+          icon={Eye}
+          variant="default"
+          isLoading={isLoading}
+        />
+        <KPICard
+          title="Ordered"
+          value={kpis.ordered}
+          icon={CheckCircle2}
+          variant="success"
+          isLoading={isLoading}
+        />
+      </div>
+
+      {/* Status Filter Pills */}
       <div className="flex gap-2 flex-wrap">
         {[
           { key: "all", label: "All", count: quotations?.length || 0 },
           { key: "Draft", label: "Draft", count: statusCounts.Draft || 0 },
           { key: "Open", label: "Open", count: statusCounts.Open || 0 },
-          {
-            key: "Ordered",
-            label: "Ordered",
-            count: statusCounts.Ordered || 0,
-          },
-          {
-            key: "Expired",
-            label: "Expired",
-            count: statusCounts.Expired || 0,
-          },
+          { key: "Ordered", label: "Ordered", count: statusCounts.Ordered || 0 },
+          { key: "Expired", label: "Expired", count: statusCounts.Expired || 0 },
         ].map((status) => (
           <Button
             key={status.key}
@@ -453,9 +408,9 @@ export default function QuotationsListPage() {
           }
         />
       ) : filteredQuotations.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
+        <div className="text-center py-12 text-muted-foreground bg-card rounded-2xl border border-border/40">
           <FileText className="h-12 w-12 mx-auto mb-4 opacity-30" />
-          <p className="font-medium">No quotations match this filter</p>
+          <p className="font-medium text-foreground">No quotations match this filter</p>
           <p className="text-sm mt-1">Try selecting a different status</p>
         </div>
       ) : (

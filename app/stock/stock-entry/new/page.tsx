@@ -3,9 +3,13 @@
 // app/stock/stock-entry/new/page.tsx
 // Obsidian ERP v4.0 — Stock Entry Create (V4 SmartForm Wizard)
 // 2-step FlowWizard: Entry Type & Warehouses → Items & Review.
+// 2N Part 4.2: accepts `?purpose=<value>&work_order=<name>` URL params so
+// the Work Order detail page can deep-link into a prefilled Stock Entry
+// (Material Transfer for Manufacture / Manufacture) for the manufacturing
+// spine. Also auto-fills the items from the WO's required_items.
 
 import { useEffect, useMemo, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm, useFieldArray, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import {
@@ -26,9 +30,13 @@ import {
   FormDatePicker,
   FormSelect,
 } from "@/components/form";
+import { QuickAddField } from "@/components/quick-add/QuickAddField";
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
 import { FlowWizard } from "@/components/flows/FlowWizard";
 import { useFrappeCreate } from "@/hooks/generic";
+import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
+import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
+import { getActiveCompany } from "@/lib/settings/company";
 import { validateWizardStep } from "@/lib/flows/flow-validation";
 import type { StepValidationResult } from "@/lib/flows/flow-validation";
 import type { WizardStep } from "@/types/flow-types";
@@ -87,7 +95,7 @@ const WIZARD_STEPS: WizardStep[] = [
     label: "Entry Type & Warehouses",
     description: "Set the purpose, company, date, and warehouses",
     schema: null,
-    fields: ["purpose", "company", "posting_date", "from_warehouse", "to_warehouse"],
+    fields: ["purpose", "posting_date", "from_warehouse", "to_warehouse"],
     icon: "ArrowRightLeft",
   },
   {
@@ -110,18 +118,26 @@ const ETB = new Intl.NumberFormat("en-ET", {
 // ---------------------------------------------------------------------------
 export default function NewStockEntryPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [step, setStep] = useState(0);
+  const [triedNextSteps, setTriedNextSteps] = useState<Set<number>>(new Set());
+
+  // 2N Part 4.2: read `purpose` and `work_order` from URL at mount so the
+  // form opens prefilled when the WO detail page deep-links in. The
+  // useEffect below also handles late-bound updates (e.g. back-nav).
+  const initialPurpose = searchParams.get("purpose") ?? "Material Transfer";
+  const initialWorkOrder = searchParams.get("work_order") ?? "";
 
   const form = useForm<SEForm>({
     defaultValues: {
       naming_series: "MAT-STE-.YYYY.-",
-      stock_entry_type: "Material Transfer",
-      purpose: "Material Transfer",
-      company: "",
+      stock_entry_type: initialPurpose,
+      purpose: initialPurpose,
       posting_date: new Date().toISOString().split("T")[0],
       from_warehouse: "",
       to_warehouse: "",
+      work_order: initialWorkOrder,
       items: [{ ...EMPTY_ITEM }],
     },
   });
@@ -132,6 +148,22 @@ export default function NewStockEntryPage() {
   const watchedAll = useWatch({ control });
   const watchedItems = watchedAll?.items ?? [];
   const watchedPurpose = watchedAll?.purpose ?? "";
+
+  // 2N Part 4.2: URL-param prefill for the manufacturing spine. The WO
+  // detail page's "Transfer materials" / "Finish" buttons deep-link to
+  // `/stock/stock-entry/new?purpose=Material Transfer for Manufacture&work_order=<name>`
+  // or `?purpose=Manufacture&work_order=<name>`. We prefill `purpose` and
+  // `work_order` here so the wizard opens on the right entry. (The
+  // `useEffect` is the late-bound updater; the initial values were already
+  // read above in `useForm` defaultValues, so this catches navigations
+  // after mount.)
+  useEffect(() => {
+    const purposeParam = searchParams.get("purpose");
+    const workOrderParam = searchParams.get("work_order");
+    if (purposeParam) setValue("purpose", purposeParam);
+    if (workOrderParam) setValue("work_order", workOrderParam);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   // Keep stock_entry_type in sync with purpose
   useEffect(() => {
@@ -153,12 +185,13 @@ export default function NewStockEntryPage() {
     const values = { ...getValues(), ...watchedAll, items: watchedAll?.items ?? [] };
     return {
       step1: validateWizardStep("Stock Entry", "step1", values),
-      step2: { valid: true, errors: {} },
+      step2: validateWizardStep("Stock Entry", "step2", { items: watchedAll?.items ?? [] }),
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [watchedAll]);
 
   // -- Persistence ------------------------------------------------------------
+  const { resolution, showError, dismiss } = useGuidedError();
   const createMutation = useFrappeCreate<
     { data: { name: string } },
     Record<string, unknown>
@@ -170,6 +203,7 @@ export default function NewStockEntryPage() {
         router.push(`/stock/stock-entry/${encodeURIComponent(name)}`);
       }
     },
+    onError: (err) => showError(resolveFrappeError(err, { doctype: "Stock Entry" })),
   });
 
   const handleSubmit = useCallback(() => {
@@ -184,6 +218,7 @@ export default function NewStockEntryPage() {
     }
     createMutation.mutate({
       ...values,
+      company: getActiveCompany(),
       stock_entry_type: values.stock_entry_type || values.purpose,
       items: items.map((it) => ({
         ...it,
@@ -204,7 +239,7 @@ export default function NewStockEntryPage() {
       />
 
       <Form {...form}>
-        <InfoCard className="max-w-3xl">
+        <InfoCard>
           <FlowWizard
             steps={WIZARD_STEPS}
             formData={watchedAll as unknown as Record<string, unknown>}
@@ -212,6 +247,7 @@ export default function NewStockEntryPage() {
             isSubmitting={createMutation.isPending}
             onFormDataChange={() => {}}
             onStepChange={setStep}
+            onTriedNextChange={setTriedNextSteps}
             onSubmit={handleSubmit}
             onCancel={() => router.back()}
             submitLabel="Create Stock Entry"
@@ -235,15 +271,6 @@ export default function NewStockEntryPage() {
                         options={PURPOSE_OPTIONS}
                         placeholder="Select purpose..."
                       />
-                      <FormFrappeSelect
-                        control={control}
-                        name="company"
-                        label="Company"
-                        required
-                        doctype="Company"
-                        labelField="company_name"
-                        placeholder="Select company..."
-                      />
                       <FormDatePicker
                         control={control}
                         name="posting_date"
@@ -251,7 +278,8 @@ export default function NewStockEntryPage() {
                         required
                       />
                       <div />
-                      <FormFrappeSelect
+                      {/* 2L 1A: Quick-Add enabled Source Warehouse */}
+                      <QuickAddField
                         control={control}
                         name="from_warehouse"
                         label="Source Warehouse"
@@ -260,7 +288,8 @@ export default function NewStockEntryPage() {
                         placeholder="Select source..."
                         filters={[["is_group", "=", 0]]}
                       />
-                      <FormFrappeSelect
+                      {/* 2L 1A: Quick-Add enabled Target Warehouse */}
+                      <QuickAddField
                         control={control}
                         name="to_warehouse"
                         label="Target Warehouse"
@@ -302,7 +331,8 @@ export default function NewStockEntryPage() {
                             return (
                               <tr key={field.id} className="group">
                                 <td className="px-3 py-2 align-top">
-                                  <FormFrappeSelect
+                                  {/* 2L 1A: Quick-Add enabled per-row Item */}
+                                  <QuickAddField
                                     control={control}
                                     name={`items.${index}.item_code`}
                                     doctype="Item"
@@ -393,6 +423,7 @@ export default function NewStockEntryPage() {
           />
         </InfoCard>
       </Form>
+      <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
     </div>
   );
 }

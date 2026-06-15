@@ -376,7 +376,7 @@ export default function PaymentEntryListPage() {
           }
         />
       ) : filteredEntries.length === 0 ? (
-        <div className="text-center py-24 border-2 border-dashed border-border rounded-[2.5rem]">
+        <div className="text-center py-24 border-2 border-dashed border-border rounded-2xl">
           <DollarSign className="h-16 w-16 mx-auto mb-4 opacity-10" />
           <p className="text-muted-foreground font-black uppercase tracking-widest text-sm">
             No transactions match this category

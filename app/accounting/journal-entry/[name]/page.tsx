@@ -36,9 +36,13 @@ import {
 import { PageHeader, LoadingState, ConfirmDialog, StatusBadge } from "@/components/smart";
 import { InfoCard, DataPoint } from "@/components/ui/info-card";
 import { Card } from "@/components/ui/card";
+import { FlowRail } from "@/components/flows/FlowRail";
+import type { FlowChainResult } from "@/types/flow-types";
 import type { JournalEntry } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
+import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
 
 interface JournalEntryAccount {
   account: string;
@@ -58,6 +62,7 @@ export default function JournalEntryDetailPage() {
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const { resolution, showError, dismiss } = useGuidedError();
 
   const {
     data: entry,
@@ -116,6 +121,22 @@ export default function JournalEntryDetailPage() {
   const isCancelled = entry.docstatus === 2;
 
   const accounts = (entry.accounts || []) as unknown as JournalEntryAccount[];
+
+  const chain: FlowChainResult = {
+    flowId: "journal-entry",
+    stages: [{
+      id: "journal-entry",
+      label: "Journal Entry",
+      doctype: "Journal Entry",
+      status: entry.docstatus === 1 ? "completed" : entry.docstatus === 0 ? "current" : "blocked",
+      documentName: entry.name,
+      documentUrl: `/accounting/journal-entry/${encodeURIComponent(entry.name)}`,
+    }],
+    currentIndex: 0,
+    completedCount: entry.docstatus === 1 ? 1 : 0,
+    pendingCount: entry.docstatus === 0 ? 1 : 0,
+    isComplete: entry.docstatus === 1,
+  };
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto pb-20">
@@ -196,7 +217,7 @@ export default function JournalEntryDetailPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         <div className="lg:col-span-8 space-y-8">
-          <div className="bg-card rounded-[2.5rem] border border-border shadow-2xl overflow-hidden relative">
+          <div className="bg-card rounded-2xl border border-border shadow-xl overflow-hidden relative">
             <div className="absolute top-0 right-0 p-10 opacity-5 select-none text-primary">
               <BookOpen className="w-40 h-40" />
             </div>
@@ -303,7 +324,7 @@ export default function JournalEntryDetailPage() {
                 <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground mb-3">
                   Voucher Narration
                 </h4>
-                <p className="text-xs text-muted-foreground font-medium leading-relaxed bg-card p-6 rounded-[2rem] border border-border/50 italic">
+                <p className="text-xs text-muted-foreground font-medium leading-relaxed bg-card p-6 rounded-2xl border border-border/50 italic">
                   {entry.user_remark}
                 </p>
               </div>
@@ -312,7 +333,7 @@ export default function JournalEntryDetailPage() {
         </div>
 
         <div className="lg:col-span-4 space-y-6">
-          <Card className="rounded-[2.5rem] p-8 border-border/50 bg-card/30 backdrop-blur-sm space-y-6 shadow-sm">
+          <Card className="rounded-2xl p-8 border-border/50 bg-card/30 backdrop-blur-sm space-y-6 shadow-sm">
             <h3 className="font-black text-sm uppercase tracking-widest flex items-center gap-3 border-b border-border pb-4">
               <HistoryIcon className="w-4 h-4 text-primary" /> Audit Trail
             </h3>
@@ -335,25 +356,29 @@ export default function JournalEntryDetailPage() {
             </div>
           </Card>
 
-          <Card className="rounded-[2.5rem] p-8 bg-black text-white relative overflow-hidden group shadow-2xl">
+          <Card className="rounded-2xl p-8 bg-primary text-primary-foreground relative overflow-hidden group shadow-xl">
             <div className="absolute -left-10 -bottom-10 opacity-10 group-hover:scale-110 transition-transform duration-500">
               <BookOpen className="w-40 h-40" />
             </div>
-            <h3 className="text-xs font-black uppercase tracking-[0.3em] text-white/40 mb-2">
+            <h3 className="text-xs font-black uppercase tracking-[0.3em] text-primary-foreground/40 mb-2">
               Internal Consistency
             </h3>
             <h2 className="text-xl font-black mb-4">GL Impact</h2>
-            <p className="text-xs text-white/60 leading-relaxed mb-6">
+            <p className="text-xs text-primary-foreground/60 leading-relaxed mb-6">
               This journal entry has finalized its impact on the General Ledger.
               All balances are updated in real-time.
             </p>
             <Button
               variant="outline"
-              className="w-full rounded-2xl border-white/20 bg-white/5 hover:bg-white text-white hover:text-black font-black transition-all"
+              className="w-full rounded-2xl border-primary-foreground/20 bg-primary-foreground/5 hover:bg-primary-foreground hover:text-primary font-black transition-all"
             >
               View Ledger
             </Button>
           </Card>
+
+          <InfoCard title="Flow">
+            <FlowRail result={chain} currentDocName={name} sourceDoctype="Journal Entry" />
+          </InfoCard>
         </div>
       </div>
 
@@ -363,11 +388,15 @@ export default function JournalEntryDetailPage() {
         title="Submit Journal Entry"
         description="This will finalize the accounting impact. Proceed?"
         onConfirm={async () => {
-          await updateMutation.mutateAsync({
-            name: entry.name,
-            data: { docstatus: 1 },
-          });
-          toast.success("Entry Submitted");
+          try {
+            await updateMutation.mutateAsync({
+              name: entry.name,
+              data: { docstatus: 1 },
+            });
+            toast.success("Entry Submitted");
+          } catch (err) {
+            showError(resolveFrappeError(err, { doctype: "Journal Entry" }));
+          }
         }}
         loading={updateMutation.isPending}
       />
@@ -379,11 +408,15 @@ export default function JournalEntryDetailPage() {
         description="Reverse the accounting impact of this journal entry?"
         confirmText="Cancel Entry"
         onConfirm={async () => {
-          await updateMutation.mutateAsync({
-            name: entry.name,
-            data: { docstatus: 2 },
-          });
-          toast.success("Entry Cancelled");
+          try {
+            await updateMutation.mutateAsync({
+              name: entry.name,
+              data: { docstatus: 2 },
+            });
+            toast.success("Entry Cancelled");
+          } catch (err) {
+            showError(resolveFrappeError(err, { doctype: "Journal Entry" }));
+          }
         }}
         loading={updateMutation.isPending}
       />
@@ -394,11 +427,16 @@ export default function JournalEntryDetailPage() {
         title="Delete Journal Entry"
         description="Delete this draft entry permanently?"
         onConfirm={async () => {
-          await deleteMutation.mutateAsync(entry.name);
-          toast.success("Entry Deleted");
+          try {
+            await deleteMutation.mutateAsync(entry.name);
+            toast.success("Entry Deleted");
+          } catch (err) {
+            showError(resolveFrappeError(err, { doctype: "Journal Entry" }));
+          }
         }}
         loading={deleteMutation.isPending}
       />
+      <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
     </div>
   );
 }

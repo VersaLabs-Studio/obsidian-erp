@@ -29,9 +29,13 @@ import {
   FormDatePicker,
   FormSelect,
 } from "@/components/form";
+import { QuickAddField } from "@/components/quick-add/QuickAddField";
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
 import { FlowWizard } from "@/components/flows/FlowWizard";
 import { useFrappeCreate, useFrappeDoc, useFrappeList } from "@/hooks/generic";
+import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
+import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
+import { getActiveCompany } from "@/lib/settings/company";
 import {
   getAutoFillMapping,
   applyAutoFill,
@@ -41,6 +45,7 @@ import type { StepValidationResult } from "@/lib/flows/flow-validation";
 import type { WizardStep } from "@/types/flow-types";
 import type { PaymentEntry, SalesInvoice } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
+import { FieldWrap } from "@/components/form/field-wrap";
 
 // ---------------------------------------------------------------------------
 // Form model
@@ -107,22 +112,24 @@ function CreatePaymentEntryForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const salesInvoiceId = searchParams.get("sales_invoice");
+  const partyTypeParam = searchParams.get("party_type");
+  const partyParam = searchParams.get("party");
 
   const [step, setStep] = useState(0);
   const [autoFilledFields, setAutoFilledFields] = useState<Set<string>>(
     new Set(),
   );
+  const [triedNextSteps, setTriedNextSteps] = useState<Set<number>>(new Set());
 
   const form = useForm<PEForm>({
     defaultValues: {
       payment_type: "Receive",
-      party_type: "Customer",
-      party: "",
+      party_type: partyTypeParam || "Customer",
+      party: partyParam || "",
       party_name: "",
       paid_amount: 0,
       received_amount: 0,
       mode_of_payment: "Cash",
-      company: "",
       posting_date: new Date().toISOString().split("T")[0],
       reference_no: "",
       reference_date: "",
@@ -169,11 +176,20 @@ function CreatePaymentEntryForm() {
       outstanding_amount: salesInvoice.outstanding_amount ?? 0,
     };
 
+    // 2M Part 1B: set `paid_amount = Σ allocated_amount` so Frappe doesn't
+    // reject the POST with "Difference Amount must be zero" (paid_amount(0)
+    // − allocated(X) ≠ 0). The received_amount sync effect below mirrors it
+    // for ETB. Also mark paid_from/paid_to as auto-filled so the UI shows
+    // the auto badge.
+    const allocatedTotal = ref.allocated_amount;
+
     reset({
       ...getValues(),
       ...(header as Partial<PEForm>),
       party_type: "Customer",
       payment_type: "Receive",
+      paid_amount: allocatedTotal,
+      received_amount: allocatedTotal,
       references: [ref],
     });
 
@@ -182,6 +198,7 @@ function CreatePaymentEntryForm() {
         .filter((m) => m.isReadOnly)
         .map((m) => m.targetField),
       "references",
+      "paid_amount",
     ]);
     setAutoFilledFields(filled);
 
@@ -214,6 +231,80 @@ function CreatePaymentEntryForm() {
     { enabled: !!watchedParty && watchedPaymentType !== "Internal Transfer" },
   );
 
+  // 2L P1: Auto-resolve default accounts for paid_from / paid_to.
+  // - For "Receive" (Customer) → paid_to = default bank/cash, paid_from = party receivable
+  // - For "Pay" (Supplier)      → paid_from = default bank/cash, paid_to = party payable
+  // The Company default bank/cash account is fetched once on mount; the
+  // party's default receivable/payable is fetched on party selection.
+  const { data: defaultCashAccount } = useFrappeList<{ name: string }>(
+    "Account",
+    {
+      fields: ["name"],
+      filters: [
+        ["account_type", "=", "Cash"],
+        ["is_group", "=", 0],
+        ["company", "=", getActiveCompany()],
+      ],
+      limit: 1,
+    },
+    { enabled: watchedPaymentType !== "Internal Transfer" },
+  );
+  const { data: defaultBankAccount } = useFrappeList<{ name: string }>(
+    "Account",
+    {
+      fields: ["name"],
+      filters: [
+        ["account_type", "=", "Bank"],
+        ["is_group", "=", 0],
+        ["company", "=", getActiveCompany()],
+      ],
+      limit: 1,
+    },
+    { enabled: watchedPaymentType !== "Internal Transfer" },
+  );
+  const partyAccountType = watchedPartyType === "Supplier" ? "Payable" : "Receivable";
+  const { data: partyDefaultAccount } = useFrappeList<{ name: string }>(
+    "Account",
+    {
+      fields: ["name"],
+      filters: [
+        ["account_type", "=", partyAccountType],
+        ["is_group", "=", 0],
+        ["company", "=", getActiveCompany()],
+      ],
+      limit: 1,
+    },
+    { enabled: !!watchedParty && watchedPaymentType !== "Internal Transfer" },
+  );
+
+  // Auto-populate paid_from / paid_to as soon as we have a party + accounts
+  useEffect(() => {
+    if (watchedPaymentType === "Internal Transfer") return;
+    const cashOrBank = defaultBankAccount?.[0]?.name || defaultCashAccount?.[0]?.name || "";
+    const partyAccount = partyDefaultAccount?.[0]?.name || "";
+    if (!cashOrBank || !partyAccount) return;
+    if (watchedPaymentType === "Receive") {
+      // Customer pays us: money comes from customer's Receivable, goes to our bank
+      const current = getValues("paid_from");
+      if (!current) setValue("paid_from", partyAccount);
+      const currentTo = getValues("paid_to");
+      if (!currentTo) setValue("paid_to", cashOrBank);
+    } else if (watchedPaymentType === "Pay") {
+      // We pay a supplier: money leaves our bank, reduces supplier's Payable
+      const current = getValues("paid_from");
+      if (!current) setValue("paid_from", cashOrBank);
+      const currentTo = getValues("paid_to");
+      if (!currentTo) setValue("paid_to", partyAccount);
+    }
+  }, [
+    watchedPaymentType,
+    defaultBankAccount,
+    defaultCashAccount,
+    partyDefaultAccount,
+    setValue,
+    getValues,
+  ]);
+
   const isAuto = useCallback(
     (field: string) => autoFilledFields.has(field),
     [autoFilledFields],
@@ -241,6 +332,7 @@ function CreatePaymentEntryForm() {
   );
 
   // -- Persistence ------------------------------------------------------------
+  const { resolution, showError, dismiss } = useGuidedError();
   const createMutation = useFrappeCreate<
     { data: { name: string } },
     Record<string, unknown>
@@ -252,12 +344,14 @@ function CreatePaymentEntryForm() {
         router.push(`/accounting/payment-entry/${encodeURIComponent(name)}`);
       }
     },
+    onError: (err) => showError(resolveFrappeError(err, { doctype: "Payment Entry" })),
   });
 
   const handleSubmit = useCallback(() => {
     const values = getValues();
     createMutation.mutate({
       ...values,
+      company: getActiveCompany(),
       naming_series: "ACC-PAY-.YYYY.-",
       received_amount: values.paid_amount,
       source_exchange_rate: 1,
@@ -283,7 +377,7 @@ function CreatePaymentEntryForm() {
       />
 
       <Form {...form}>
-        <InfoCard className="max-w-3xl">
+        <InfoCard>
           <FlowWizard
             steps={WIZARD_STEPS}
             formData={watchedAll as unknown as Record<string, unknown>}
@@ -291,6 +385,7 @@ function CreatePaymentEntryForm() {
             isSubmitting={createMutation.isPending}
             onFormDataChange={() => {}}
             onStepChange={setStep}
+            onTriedNextChange={setTriedNextSteps}
             onSubmit={handleSubmit}
             onCancel={() => router.back()}
             submitLabel="Create Payment Entry"
@@ -306,15 +401,6 @@ function CreatePaymentEntryForm() {
                       description="Set the payment type, party, and amount."
                     />
                     <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                      <FormFrappeSelect
-                        control={control}
-                        name="company"
-                        label="Company"
-                        required
-                        doctype="Company"
-                        labelField="company_name"
-                        placeholder="Select company..."
-                      />
                       <FormSelect
                         control={control}
                         name="payment_type"
@@ -329,6 +415,7 @@ function CreatePaymentEntryForm() {
                       <FieldWrap
                         auto={isAuto("party_type")}
                         loading={loadingInvoice}
+                        error={triedNextSteps.has(step) ? validationResults?.step1?.errors?.party_type : undefined}
                       >
                         <FormSelect
                           control={control}
@@ -349,8 +436,16 @@ function CreatePaymentEntryForm() {
                       <FieldWrap
                         auto={isAuto("party")}
                         loading={loadingInvoice}
+                        error={triedNextSteps.has(step) ? validationResults?.step1?.errors?.party : undefined}
                       >
-                        <FormFrappeSelect
+                        {/* 2M Part 4B: Quick-Add enabled Party. Doctype is
+                            Customer/Supplier/Employee/Shareholder per
+                            watchedPartyType; QuickAddField only renders the
+                            "Create new" footer for doctypes in the
+                            QUICK_ADD_REGISTRY (Customer, Supplier). The
+                            Employee/Shareholder cases gracefully fall
+                            through to a plain select. */}
+                        <QuickAddField
                           control={control}
                           name="party"
                           label="Party"
@@ -537,6 +632,43 @@ function CreatePaymentEntryForm() {
                         </div>
                       </div>
                     </div>
+
+                    {/* 2M Part 1B: Difference indicator — paid_amount − Σ allocated.
+                        Success (zero) when paid matches the allocation; warning
+                        (non-zero) tells the user the payment won't be balanced. */}
+                    {(() => {
+                      const diff = Number(watchedPaidAmount || 0) - Number(totalAllocated || 0);
+                      const isZero = Math.abs(diff) < 0.005;
+                      return (
+                        <div
+                          className={cn(
+                            "flex items-center justify-between rounded-xl border px-4 py-3",
+                            isZero
+                              ? "border-success/30 bg-success/5"
+                              : "border-warning/30 bg-warning/5",
+                          )}
+                          aria-live="polite"
+                          data-testid="pe-difference-indicator"
+                        >
+                          <span
+                            className={cn(
+                              "text-xs font-semibold uppercase tracking-wider",
+                              isZero ? "text-success" : "text-warning",
+                            )}
+                          >
+                            {isZero ? "Balanced" : "Difference"}
+                          </span>
+                          <span
+                            className={cn(
+                              "text-lg font-bold tabular-nums",
+                              isZero ? "text-success" : "text-warning",
+                            )}
+                          >
+                            {ETB.format(diff)}
+                          </span>
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               }
@@ -558,6 +690,52 @@ function CreatePaymentEntryForm() {
                       <Summary label="Company" value={v.company} />
                       <Summary label="Mode of Payment" value={v.mode_of_payment} />
                       <Summary label="Posting Date" value={v.posting_date} />
+                    </div>
+
+                    {/* 2L P1: paid_from / paid_to — RENDERED + auto-resolved.
+                        These are Frappe-required for the POST; previously the
+                        wizard never showed them, so the user couldn't satisfy
+                        the validation. The auto-resolve useEffect above fills
+                        them with sensible defaults. The user can override. */}
+                    <div className="grid grid-cols-2 gap-4 mt-4">
+                      <FormFrappeSelect
+                        control={control}
+                        name="paid_from"
+                        label={v.payment_type === "Receive" ? "Paid From (Customer Receivable)" : "Paid From (Bank/Cash)"}
+                        required
+                        doctype="Account"
+                        filters={
+                          v.payment_type === "Receive"
+                            ? [
+                                ["account_type", "=", "Receivable"],
+                                ["is_group", "=", 0],
+                              ]
+                            : [
+                                ["account_type", "in", ["Bank", "Cash"]],
+                                ["is_group", "=", 0],
+                              ]
+                        }
+                        placeholder="Select account..."
+                      />
+                      <FormFrappeSelect
+                        control={control}
+                        name="paid_to"
+                        label={v.payment_type === "Receive" ? "Paid To (Bank/Cash)" : "Paid To (Supplier Payable)"}
+                        required
+                        doctype="Account"
+                        filters={
+                          v.payment_type === "Receive"
+                            ? [
+                                ["account_type", "in", ["Bank", "Cash"]],
+                                ["is_group", "=", 0],
+                              ]
+                            : [
+                                ["account_type", "=", "Payable"],
+                                ["is_group", "=", 0],
+                              ]
+                        }
+                        placeholder="Select account..."
+                      />
                     </div>
 
                     {/* Reference no/date */}
@@ -598,6 +776,7 @@ function CreatePaymentEntryForm() {
           />
         </InfoCard>
       </Form>
+      <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
     </div>
   );
 }
@@ -631,27 +810,6 @@ function StepHeading({
         <h3 className="text-base font-semibold text-foreground">{title}</h3>
         <p className="text-sm text-muted-foreground">{description}</p>
       </div>
-    </div>
-  );
-}
-
-function FieldWrap({
-  auto,
-  loading,
-  children,
-}: {
-  auto?: boolean;
-  loading?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className={cn("relative", loading && "animate-pulse")}>
-      {children}
-      {auto && (
-        <span className="pointer-events-none absolute right-2 top-0 inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-          <Lock className="h-3 w-3" />
-        </span>
-      )}
     </div>
   );
 }

@@ -132,7 +132,7 @@ export default function AccountingDashboardPage() {
 
       {/* Main Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-card rounded-[2.5rem] border border-border/50 p-8 shadow-sm flex flex-col justify-between group hover:shadow-xl transition-all duration-500">
+        <div className="bg-card rounded-2xl border border-border/50 p-8 shadow-sm flex flex-col justify-between group hover:shadow-xl transition-all duration-500">
           <div className="h-12 w-12 rounded-2xl bg-blue-500/10 flex items-center justify-center text-blue-600 mb-6 group-hover:scale-110 transition-transform">
             <ArrowDownLeft className="h-6 w-6" />
           </div>
@@ -146,7 +146,7 @@ export default function AccountingDashboardPage() {
           </div>
         </div>
 
-        <div className="bg-card rounded-[2.5rem] border border-border/50 p-8 shadow-sm flex flex-col justify-between group hover:shadow-xl transition-all duration-500">
+        <div className="bg-card rounded-2xl border border-border/50 p-8 shadow-sm flex flex-col justify-between group hover:shadow-xl transition-all duration-500">
           <div className="h-12 w-12 rounded-2xl bg-rose-500/10 flex items-center justify-center text-rose-600 mb-6 group-hover:scale-110 transition-transform">
             <ArrowUpRight className="h-6 w-6" />
           </div>
@@ -160,7 +160,7 @@ export default function AccountingDashboardPage() {
           </div>
         </div>
 
-        <div className="bg-card rounded-[2.5rem] border border-border/50 p-8 shadow-sm flex flex-col justify-between group hover:shadow-xl transition-all duration-500">
+        <div className="bg-card rounded-2xl border border-border/50 p-8 shadow-sm flex flex-col justify-between group hover:shadow-xl transition-all duration-500">
           <div className="h-12 w-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center text-emerald-600 mb-6 group-hover:scale-110 transition-transform">
             <TrendingUp className="h-6 w-6" />
           </div>
@@ -179,7 +179,7 @@ export default function AccountingDashboardPage() {
           </div>
         </div>
 
-        <div className="bg-card rounded-[2.5rem] border border-border/50 p-8 shadow-sm flex flex-col justify-between group hover:shadow-xl transition-all duration-500">
+        <div className="bg-card rounded-2xl border border-border/50 p-8 shadow-sm flex flex-col justify-between group hover:shadow-xl transition-all duration-500">
           <div className="h-12 w-12 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-600 mb-6 group-hover:scale-110 transition-transform">
             <Clock className="h-6 w-6" />
           </div>
@@ -206,7 +206,7 @@ export default function AccountingDashboardPage() {
                 <button
                   key={s.href}
                   onClick={() => router.push(s.href)}
-                  className="flex flex-col items-center gap-4 p-6 bg-card rounded-[2rem] border border-border/50 hover:border-primary/20 hover:shadow-xl transition-all group active:scale-95"
+                  className="flex flex-col items-center gap-4 p-6 bg-card rounded-2xl border border-border/50 hover:border-primary/20 hover:shadow-xl transition-all group active:scale-95"
                 >
                   <div
                     className={cn(
@@ -237,7 +237,7 @@ export default function AccountingDashboardPage() {
                 View All Activity →
               </Button>
             </div>
-            <div className="bg-card rounded-[2.5rem] border border-border/50 overflow-hidden shadow-sm">
+            <div className="bg-card rounded-2xl border border-border/50 overflow-hidden shadow-sm">
               <div className="divide-y divide-border/50">
                 {payments?.length === 0 ? (
                   <div className="p-12 text-center text-muted-foreground text-xs font-bold uppercase tracking-widest italic opacity-50">
@@ -313,20 +313,20 @@ export default function AccountingDashboardPage() {
 
         {/* Right Column: Insights & Navigation */}
         <div className="lg:col-span-4 space-y-10">
-          <div className="bg-black text-white rounded-[2.5rem] p-10 overflow-hidden relative group shadow-2xl">
+          <div className="bg-primary text-primary-foreground rounded-2xl p-10 overflow-hidden relative group shadow-xl">
             <div className="absolute -right-20 -bottom-20 opacity-10 group-hover:scale-110 transition-transform duration-700">
               <PieChart className="w-64 h-64" />
             </div>
-            <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-white/40 mb-2">
+            <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-primary-foreground/40 mb-2">
               Accounting Setup
             </h3>
             <h2 className="text-2xl font-black mb-4">Centralized Control</h2>
-            <p className="text-xs text-white/60 leading-relaxed mb-8 font-medium">
+            <p className="text-xs text-primary-foreground/60 leading-relaxed mb-8 font-medium">
               Configure your Chart of Accounts, Cost Centers, and Payment Terms
               from a single control point.
             </p>
             <Button
-              className="w-full rounded-2xl bg-white text-black font-black hover:bg-white/90 shadow-xl transition-all active:scale-[0.98]"
+              className="w-full rounded-2xl bg-primary-foreground text-primary font-black hover:bg-primary-foreground/90 shadow-xl transition-all active:scale-[0.98]"
               onClick={() => router.push("/accounting/setup")}
             >
               Go to Settings →
@@ -357,7 +357,7 @@ export default function AccountingDashboardPage() {
               ].map((r, i) => (
                 <button
                   key={i}
-                  className="w-full flex items-center gap-4 p-5 bg-card rounded-[2rem] border border-border/50 hover:border-primary/20 hover:shadow-lg transition-all text-left active:scale-[0.98]"
+                  className="w-full flex items-center gap-4 p-5 bg-card rounded-2xl border border-border/50 hover:border-primary/20 hover:shadow-lg transition-all text-left active:scale-[0.98]"
                 >
                   <div className="h-10 w-10 rounded-xl bg-secondary/30 flex items-center justify-center text-primary shrink-0">
                     <r.icon className="h-5 w-5" />

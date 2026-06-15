@@ -63,7 +63,7 @@ export default function AccountingSettingsPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.1 }}
               onClick={() => router.push(item.href)}
-              className="group relative overflow-hidden rounded-[2.5rem] bg-card p-8 hover:bg-card/80 shadow-sm hover:shadow-xl transition-all duration-500 cursor-pointer border border-transparent hover:border-primary/10"
+              className="group relative overflow-hidden rounded-2xl bg-card p-8 hover:bg-card/80 shadow-sm hover:shadow-xl transition-all duration-500 cursor-pointer border border-transparent hover:border-primary/10"
             >
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-6">

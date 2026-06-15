@@ -1,6 +1,5 @@
 // app/crm/customer/new/page.tsx
 // Obsidian ERP v4.0 - Create Customer Page
-// @ts-nocheck
 
 "use client";
 
@@ -10,9 +9,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Form } from "@/components/ui/form";
-import { Loader2, UserPlus } from "lucide-react";
+import { Loader2, UserPlus, User, PhoneCall, Info } from "lucide-react";
 
-// v3.0 Imports
 import { useFrappeCreate } from "@/hooks/generic";
 import { PageHeader } from "@/components/smart";
 import { InfoCard } from "@/components/ui/info-card";
@@ -22,9 +20,10 @@ import {
   FormFrappeSelect,
   FormSelect,
 } from "@/components/form";
+import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
+import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
 import type { Customer } from "@/types/doctype-types";
 
-// Form Schema
 const customerFormSchema = z.object({
   customer_name: z.string().min(1, "Customer name is required"),
   customer_type: z.enum(["Company", "Individual", "Partnership"]),
@@ -35,7 +34,6 @@ const customerFormSchema = z.object({
   tax_id: z.string().optional(),
   website: z.string().optional(),
   customer_details: z.string().optional(),
-  // Hidden field for Lead conversion tracking
   lead_name: z.string().optional(),
 });
 
@@ -45,22 +43,10 @@ export default function CreateCustomerPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // Check if coming from Lead conversion
   const fromLead = searchParams.get("from_lead");
   const isConversion = Boolean(fromLead);
+  const { resolution, showError, dismiss } = useGuidedError();
 
-  // Create mutation
-  const createMutation = useFrappeCreate<{ data: Customer }, Partial<Customer>>(
-    "Customer",
-    {
-      onSuccess: () => router.push("/crm/customer"),
-      successMessage: isConversion 
-        ? "Lead converted to Customer successfully" 
-        : "Customer created successfully",
-    }
-  );
-
-  // Form with pre-filled values from Lead
   const form = useForm<CustomerFormData>({
     resolver: zodResolver(customerFormSchema),
     defaultValues: {
@@ -77,9 +63,20 @@ export default function CreateCustomerPage() {
     },
   });
 
-  // Submit handler
+  const createMutation = useFrappeCreate<{ data: Customer }, Partial<Customer>>(
+    "Customer",
+    {
+      onSuccess: () => router.push("/crm/customer"),
+      successMessage: isConversion 
+        ? "Lead converted to Customer successfully" 
+        : "Customer created successfully",
+      onError: (err) => {
+        showError(resolveFrappeError(err, { doctype: "Customer", values: form.getValues() }));
+      }
+    }
+  );
+
   const onSubmit = async (data: CustomerFormData) => {
-    // Clean up empty strings
     const submitData: Partial<Customer> = {
       ...data,
       customer_group: data.customer_group || undefined,
@@ -101,7 +98,6 @@ export default function CreateCustomerPage() {
         backHref="/crm/customer"
       />
 
-      {/* Conversion Notice */}
       {isConversion && (
         <div className="flex items-center gap-3 p-4 bg-primary/10 rounded-2xl border border-primary/20">
           <UserPlus className="h-5 w-5 text-primary" />
@@ -119,7 +115,7 @@ export default function CreateCustomerPage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Main Form */}
             <div className="lg:col-span-2 space-y-6">
-              <InfoCard title="Basic Information" icon="user">
+              <InfoCard title="Basic Information" icon={<User className="h-4 w-4 text-primary" />}>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="col-span-2">
                     <FormInput
@@ -164,7 +160,7 @@ export default function CreateCustomerPage() {
                 </div>
               </InfoCard>
 
-              <InfoCard title="Contact Information" icon="contact">
+              <InfoCard title="Contact Information" icon={<PhoneCall className="h-4 w-4 text-primary" />}>
                 <div className="grid grid-cols-2 gap-4">
                   <FormInput
                     control={form.control}
@@ -190,13 +186,13 @@ export default function CreateCustomerPage() {
                 </div>
               </InfoCard>
 
-              <InfoCard title="Additional Details" icon="info">
+              <InfoCard title="Additional Details" icon={<Info className="h-4 w-4 text-primary" />}>
                 <FormTextarea
                   control={form.control}
                   name="customer_details"
                   label="Notes"
                   placeholder="Additional information about this customer..."
-                  rows={4}
+                  minHeight="120px"
                 />
               </InfoCard>
             </div>
@@ -233,6 +229,8 @@ export default function CreateCustomerPage() {
           </div>
         </form>
       </Form>
+
+      <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
     </div>
   );
 }

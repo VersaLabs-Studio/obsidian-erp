@@ -5,10 +5,12 @@
 // Action-oriented detail per Architecture V4 Part 2 §3.2 + §6 (Flow Tracker).
 // Real persistence, OKLCH semantic tokens only.
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
+import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
+import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
 import {
   Send,
   Trash2,
@@ -27,10 +29,10 @@ import { FlowRail } from "@/components/flows/FlowRail";
 import { isModuleBuilt } from "@/lib/flows/module-availability";
 import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
-import { resolveFlowChain } from "@/lib/flows/flow-chain-resolver";
+import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
+import { useFlowChain } from "@/hooks/flows/use-flow-chain";
 import { useFrappeDoc, useFrappeUpdate, useFrappeDelete } from "@/hooks/generic";
 import type { StockEntry } from "@/types/doctype-types";
-import type { FlowStageStatus } from "@/types/flow-types";
 
 const ETB = new Intl.NumberFormat("en-ET", { style: "currency", currency: "ETB" });
 
@@ -52,6 +54,7 @@ export default function StockEntryDetailPage() {
 
   const [confirmSubmit, setConfirmSubmit] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const { resolution, showError, dismiss } = useGuidedError();
 
   const { data: se, isLoading, error } = useFrappeDoc<StockEntry>(
     "Stock Entry",
@@ -69,23 +72,8 @@ export default function StockEntryDetailPage() {
   const isDraft = se?.docstatus === 0;
   const isSubmitted = se?.docstatus === 1;
 
-  // -- Build the flow chain from real linked documents -----------------------
-  const chain = useMemo(() => {
-    const stageStatuses: Record<
-      string,
-      { status: FlowStageStatus; documentName?: string; documentUrl?: string }
-    > = {};
-
-    if (se?.work_order) {
-      stageStatuses["Work Order"] = {
-        status: "completed",
-        documentName: se.work_order,
-        documentUrl: `/manufacturing/work-order/${encodeURIComponent(se.work_order)}`,
-      };
-    }
-
-    return resolveFlowChain("Stock Entry", name, stageStatuses);
-  }, [se, name]);
+  // 2N Part 1.1: unified flow resolution.
+  const { result: chain, isLoading: chainLoading } = useFlowChain("Stock Entry", name);
 
   // -- Status actions --------------------------------------------------------
   const handleSubmit = () => {
@@ -94,8 +82,8 @@ export default function StockEntryDetailPage() {
       { name, data: { docstatus: 1 } },
       {
         onSuccess: () => toast.success(`Stock Entry ${name} submitted`),
-        onError: (e) =>
-          toast.error("Submit failed", { description: e.message }),
+        onError: (err) =>
+          showError(resolveFrappeError(err, { doctype: "Stock Entry" })),
       },
     );
   };
@@ -107,8 +95,8 @@ export default function StockEntryDetailPage() {
         toast.success(`Stock Entry ${name} deleted`);
         router.push("/stock/stock-entry");
       },
-      onError: (e) =>
-        toast.error("Delete failed", { description: e.message }),
+      onError: (err) =>
+        showError(resolveFrappeError(err, { doctype: "Stock Entry" })),
     });
   };
 
@@ -142,7 +130,7 @@ export default function StockEntryDetailPage() {
       description: "Create fulfillment from this entry",
       onClick: () => router.push(`/stock/delivery-note/new?stock_entry=${encodeURIComponent(name)}`),
       disabled: !isModuleBuilt("Delivery Note"),
-      disabledReason: "Coming in Phase 2",
+      disabledReason: "Module not available",
     },
   ].filter(Boolean) as React.ComponentProps<typeof WhatsNext>["actions"];
 
@@ -214,7 +202,7 @@ export default function StockEntryDetailPage() {
       {/* Flow Tracker — upstream Work Order link */}
       {se.work_order && (
         <InfoCard title="Manufacturing Flow" className="overflow-hidden">
-          <FlowRail result={chain} isLoading={false} />
+          <FlowRail result={chain} currentDocName={name} sourceDoctype="Stock Entry" isLoading={chainLoading} />
         </InfoCard>
       )}
 
@@ -232,12 +220,18 @@ export default function StockEntryDetailPage() {
                 label="Work Order"
                 value={
                   se.work_order ? (
-                    <Link
-                      href={`/manufacturing/work-order/${encodeURIComponent(se.work_order)}`}
-                      className="text-primary underline underline-offset-2 hover:text-primary/80"
-                    >
-                      {se.work_order}
-                    </Link>
+                    isModuleBuilt("Work Order") ? (
+                      <Link
+                        href={`/manufacturing/work-order/${encodeURIComponent(se.work_order)}`}
+                        className="text-primary underline underline-offset-2 hover:text-primary/80"
+                      >
+                        {se.work_order}
+                      </Link>
+                    ) : (
+                      <span className="text-muted-foreground text-sm" title="Work Order module not yet built">
+                        {se.work_order}
+                      </span>
+                    )
                   ) : (
                     "—"
                   )
@@ -318,6 +312,9 @@ export default function StockEntryDetailPage() {
             </div>
           </InfoCard>
 
+          {/* 2L 1B: Universal cross-flow actions menu */}
+          <CrossFlowActionsMenu doctype="Stock Entry" name={name} />
+
           <WhatsNext actions={whatsNext} />
 
           <ActivityTimeline
@@ -362,6 +359,7 @@ export default function StockEntryDetailPage() {
         variant="destructive"
         onConfirm={handleDelete}
       />
+      <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
     </div>
   );
 }

@@ -97,7 +97,7 @@ export const UserSchema = z.object({
 export const UserCreateSchema = UserSchema.pick({
   email: true,
   first_name: true,
-}).extend({});
+}).extend({}).partial();
 
 export const UserUpdateSchema = UserSchema.partial().omit({
   name: true,
@@ -229,7 +229,7 @@ export const CompanyCreateSchema = CompanySchema.pick({
   country: true,
 }).extend({
   is_group: z.union([z.literal(0), z.literal(1)]).optional(),
-});
+}).partial();
 
 export const CompanyUpdateSchema = CompanySchema.partial().omit({
   name: true,
@@ -277,7 +277,7 @@ export const CurrencySchema = z.object({
 
 export const CurrencyCreateSchema = CurrencySchema.pick({
   currency_name: true,
-}).extend({});
+}).extend({}).partial();
 
 export const CurrencyUpdateSchema = CurrencySchema.partial().omit({
   name: true,
@@ -309,7 +309,7 @@ export const CountrySchema = z.object({
 
 export const CountryCreateSchema = CountrySchema.pick({
   country_name: true,
-}).extend({});
+}).extend({}).partial();
 
 export const CountryUpdateSchema = CountrySchema.partial().omit({
   name: true,
@@ -347,7 +347,7 @@ export const TerritoryCreateSchema = TerritorySchema.pick({
   parent_territory: true,
 }).extend({
   is_group: z.union([z.literal(0), z.literal(1)]).optional(),
-});
+}).partial();
 
 export const TerritoryUpdateSchema = TerritorySchema.partial().omit({
   name: true,
@@ -386,7 +386,7 @@ export const DepartmentCreateSchema = DepartmentSchema.pick({
 }).extend({
   disabled: z.union([z.literal(0), z.literal(1)]).optional(),
   is_group: z.union([z.literal(0), z.literal(1)]).optional(),
-});
+}).partial();
 
 export const DepartmentUpdateSchema = DepartmentSchema.partial().omit({
   name: true,
@@ -417,7 +417,7 @@ export const DesignationCreateSchema = DesignationSchema.pick({
   designation_name: true,
 }).extend({
   description: z.string().optional(),
-});
+}).partial();
 
 export const DesignationUpdateSchema = DesignationSchema.partial().omit({
   name: true,
@@ -445,7 +445,7 @@ export const BranchSchema = z.object({
 
 export const BranchCreateSchema = BranchSchema.pick({
   branch: true,
-}).extend({});
+}).extend({}).partial();
 
 export const BranchUpdateSchema = BranchSchema.partial().omit({
   name: true,
@@ -557,7 +557,7 @@ export const EmployeeCreateSchema = EmployeeSchema.pick({
   company: true,
   department: true,
   designation: true,
-}).extend({});
+}).extend({}).partial();
 
 export const EmployeeUpdateSchema = EmployeeSchema.partial().omit({
   name: true,
@@ -652,7 +652,7 @@ export const LetterHeadCreateSchema = LetterHeadSchema.pick({
   letter_head_name: true,
 }).extend({
   disabled: z.union([z.literal(0), z.literal(1)]).optional(),
-});
+}).partial();
 
 export const LetterHeadUpdateSchema = LetterHeadSchema.partial().omit({
   name: true,
@@ -683,7 +683,7 @@ export const PrintHeadingCreateSchema = PrintHeadingSchema.pick({
   print_heading: true,
 }).extend({
   description: z.string().optional(),
-});
+}).partial();
 
 export const PrintHeadingUpdateSchema = PrintHeadingSchema.partial().omit({
   name: true,
@@ -722,7 +722,7 @@ export const TermsAndConditionsCreateSchema = TermsAndConditionsSchema.pick({
   selling: z.union([z.literal(0), z.literal(1)]).optional(),
   buying: z.union([z.literal(0), z.literal(1)]).optional(),
   terms: z.string().optional(),
-});
+}).partial();
 
 export const TermsAndConditionsUpdateSchema =
   TermsAndConditionsSchema.partial().omit({
@@ -824,7 +824,7 @@ export const LeadCreateSchema = LeadSchema.pick({
   request_type: true,
 }).extend({
   disabled: z.union([z.literal(0), z.literal(1)]).optional(),
-});
+}).partial();
 
 export const LeadUpdateSchema = LeadSchema.partial().omit({
   name: true,
@@ -853,7 +853,7 @@ export const LeadSourceSchema = z.object({
 
 export const LeadSourceCreateSchema = LeadSourceSchema.pick({
   source_name: true,
-}).extend({});
+}).extend({}).partial();
 
 export const LeadSourceUpdateSchema = LeadSourceSchema.partial().omit({
   name: true,
@@ -881,7 +881,7 @@ export const IndustryTypeSchema = z.object({
 
 export const IndustryTypeCreateSchema = IndustryTypeSchema.pick({
   industry: true,
-}).extend({});
+}).extend({}).partial();
 
 export const IndustryTypeUpdateSchema = IndustryTypeSchema.partial().omit({
   name: true,
@@ -969,7 +969,7 @@ export const OpportunityCreateSchema = OpportunitySchema.pick({
   status: true,
   company: true,
   transaction_date: true,
-}).extend({});
+}).extend({}).partial();
 
 export const OpportunityUpdateSchema = OpportunitySchema.partial().omit({
   name: true,
@@ -1009,7 +1009,7 @@ export const CustomerGroupCreateSchema = CustomerGroupSchema.pick({
   parent_customer_group: true,
 }).extend({
   is_group: z.union([z.literal(0), z.literal(1)]).optional(),
-});
+}).partial();
 
 export const CustomerGroupUpdateSchema = CustomerGroupSchema.partial().omit({
   name: true,
@@ -1115,7 +1115,7 @@ export const AddressCreateSchema = AddressSchema.pick({
   links: true,
 }).extend({
   disabled: z.union([z.literal(0), z.literal(1)]).optional(),
-});
+}).partial();
 
 export const AddressUpdateSchema = AddressSchema.partial().omit({
   name: true,
@@ -1259,7 +1259,7 @@ export const QuotationCreateSchema = QuotationSchema.pick({
   taxes: z.array(z.unknown()).optional(),
   tc_name: z.string().optional(),
   terms: z.string().optional(),
-});
+}).partial();
 
 export const QuotationUpdateSchema = QuotationSchema.partial().omit({
   name: true,
@@ -1432,7 +1432,7 @@ export const SalesOrderCreateSchema = SalesOrderSchema.pick({
   po_date: z.string().optional(),
   // Project linking
   project: z.string().optional(),
-});
+}).partial();
 
 export const SalesOrderUpdateSchema = SalesOrderSchema.partial().omit({
   name: true,
@@ -1480,7 +1480,7 @@ export const SalesPartnerCreateSchema = SalesPartnerSchema.pick({
   partner_type: z.string().optional(),
   territory: z.string().optional(),
   description: z.string().optional(),
-});
+}).partial();
 
 export const SalesPartnerUpdateSchema = SalesPartnerSchema.partial().omit({
   name: true,
@@ -1529,7 +1529,7 @@ export const SalesPersonCreateSchema = SalesPersonSchema.pick({
     .default(1),
   parent_sales_person: z.string().optional(),
   employee: z.string().optional(),
-});
+}).partial();
 
 export const SalesPersonUpdateSchema = SalesPersonSchema.partial().omit({
   name: true,
@@ -1576,7 +1576,7 @@ export const BlanketOrderCreateSchema = BlanketOrderSchema.pick({
   to_date: true,
   company: true,
   items: true,
-}).extend({});
+}).extend({}).partial();
 
 export const BlanketOrderUpdateSchema = BlanketOrderSchema.partial().omit({
   name: true,
@@ -1627,7 +1627,7 @@ export const InstallationNoteCreateSchema = InstallationNoteSchema.pick({
   status: true,
   company: true,
   items: true,
-}).extend({});
+}).extend({}).partial();
 
 export const InstallationNoteUpdateSchema =
   InstallationNoteSchema.partial().omit({
@@ -1702,7 +1702,7 @@ export const SupplierCreateSchema = SupplierSchema.pick({
   supplier_type: true,
 }).extend({
   disabled: z.union([z.literal(0), z.literal(1)]).optional(),
-});
+}).partial();
 
 export const SupplierUpdateSchema = SupplierSchema.partial().omit({
   name: true,
@@ -1739,7 +1739,7 @@ export const SupplierGroupCreateSchema = SupplierGroupSchema.pick({
   supplier_group_name: true,
 }).extend({
   is_group: z.union([z.literal(0), z.literal(1)]).optional(),
-});
+}).partial();
 
 export const SupplierGroupUpdateSchema = SupplierGroupSchema.partial().omit({
   name: true,
@@ -1810,7 +1810,7 @@ export const MaterialRequestCreateSchema = MaterialRequestSchema.pick({
   company: true,
   transaction_date: true,
   items: true,
-}).extend({});
+}).extend({}).partial();
 
 export const MaterialRequestUpdateSchema = MaterialRequestSchema.partial().omit(
   {
@@ -1870,7 +1870,7 @@ export const RequestForQuotationCreateSchema = RequestForQuotationSchema.pick({
   suppliers: true,
   items: true,
   message_for_supplier: true,
-}).extend({});
+}).extend({}).partial();
 
 export const RequestForQuotationUpdateSchema =
   RequestForQuotationSchema.partial().omit({
@@ -1980,7 +1980,7 @@ export const SupplierQuotationCreateSchema = SupplierQuotationSchema.pick({
   currency: true,
   conversion_rate: true,
   items: true,
-}).extend({});
+}).extend({}).partial();
 
 export const SupplierQuotationUpdateSchema =
   SupplierQuotationSchema.partial().omit({
@@ -2124,7 +2124,7 @@ export const PurchaseOrderCreateSchema = PurchaseOrderSchema.pick({
   conversion_rate: true,
   items: true,
   status: true,
-}).extend({});
+}).extend({}).partial();
 
 export const PurchaseOrderUpdateSchema = PurchaseOrderSchema.partial().omit({
   name: true,
@@ -2260,7 +2260,7 @@ export const PurchaseReceiptCreateSchema = PurchaseReceiptSchema.pick({
   items: true,
   base_net_total: true,
   status: true,
-}).extend({});
+}).extend({}).partial();
 
 export const PurchaseReceiptUpdateSchema = PurchaseReceiptSchema.partial().omit(
   {
@@ -2388,7 +2388,7 @@ export const ItemCreateSchema = ItemSchema.pick({
 }).extend({
   description: z.string().optional(),
   disabled: z.union([z.literal(0), z.literal(1)]).optional(),
-});
+}).partial();
 
 export const ItemUpdateSchema = ItemSchema.partial().omit({
   name: true,
@@ -2426,7 +2426,7 @@ export const ItemGroupCreateSchema = ItemGroupSchema.pick({
   item_group_name: true,
 }).extend({
   is_group: z.union([z.literal(0), z.literal(1)]).optional(),
-});
+}).partial();
 
 export const ItemGroupUpdateSchema = ItemGroupSchema.partial().omit({
   name: true,
@@ -2475,7 +2475,12 @@ export const ItemPriceCreateSchema = ItemPriceSchema.pick({
   uom: true,
   price_list: true,
   price_list_rate: true,
-}).extend({});
+  currency: true,
+  valid_from: true,
+  valid_upto: true,
+  buying: true,
+  selling: true,
+}).extend({}).partial();
 
 export const ItemPriceUpdateSchema = ItemPriceSchema.partial().omit({
   name: true,
@@ -2485,6 +2490,41 @@ export const ItemPriceUpdateSchema = ItemPriceSchema.partial().omit({
 });
 
 export type ItemPriceSchemaType = z.infer<typeof ItemPriceSchema>;
+
+/**
+ * Price List Zod Schema
+ * @doctype Price List
+ */
+export const PriceListSchema = z.object({
+  price_list_name: z.string().min(1, "Price List Name is required"),
+  currency: z.string().min(1, "Currency is required"),
+  buying: z.union([z.literal(0), z.literal(1)]).optional(),
+  selling: z.union([z.literal(0), z.literal(1)]).optional(),
+  enabled: z.union([z.literal(0), z.literal(1)]).optional(),
+  name: z.string().min(1, "ID is required"),
+  owner: z.string().optional(),
+  creation: z.string().optional(),
+  modified: z.string().optional(),
+  modified_by: z.string().optional(),
+  docstatus: z.union([z.literal(0), z.literal(1), z.literal(2)]).optional(),
+});
+
+export const PriceListCreateSchema = PriceListSchema.pick({
+  price_list_name: true,
+  currency: true,
+  buying: true,
+  selling: true,
+  enabled: true,
+}).extend({}).partial();
+
+export const PriceListUpdateSchema = PriceListSchema.partial().omit({
+  name: true,
+  creation: true,
+  owner: true,
+  docstatus: true,
+});
+
+export type PriceListSchemaType = z.infer<typeof PriceListSchema>;
 
 /**
  * Product Bundle Zod Schema
@@ -2511,7 +2551,7 @@ export const ProductBundleCreateSchema = ProductBundleSchema.pick({
 }).extend({
   description: z.string().optional(),
   disabled: z.union([z.literal(0), z.literal(1)]).optional(),
-});
+}).partial();
 
 export const ProductBundleUpdateSchema = ProductBundleSchema.partial().omit({
   name: true,
@@ -2573,7 +2613,7 @@ export const UomSchema = z.object({
 
 export const UomCreateSchema = UomSchema.pick({
   uom_name: true,
-}).extend({});
+}).extend({}).partial();
 
 export const UomUpdateSchema = UomSchema.partial().omit({
   name: true,
@@ -2606,7 +2646,7 @@ export const BrandCreateSchema = BrandSchema.pick({
   brand: true,
 }).extend({
   description: z.string().optional(),
-});
+}).partial();
 
 export const BrandUpdateSchema = BrandSchema.partial().omit({
   name: true,
@@ -2729,7 +2769,7 @@ export const StockEntryCreateSchema = StockEntrySchema.pick({
   fg_completed_qty: z.number().optional(),
   remarks: z.string().optional(),
   docstatus: z.union([z.literal(0), z.literal(1), z.literal(2)]).optional(),
-});
+}).partial();
 
 export const StockEntryUpdateSchema = StockEntrySchema.partial().omit({
   name: true,
@@ -2740,6 +2780,19 @@ export const StockEntryUpdateSchema = StockEntrySchema.partial().omit({
 
 export type StockEntrySchemaType = z.infer<typeof StockEntrySchema>;
 export type StockEntryFormData = z.infer<typeof StockEntryCreateSchema>;
+
+/**
+ * Bin Zod Schema (read-only, for Stock Balance)
+ */
+export const BinSchema = z.object({
+  item_code: z.string(),
+  warehouse: z.string(),
+  actual_qty: z.number().optional(),
+  projected_qty: z.number().optional(),
+  reserved_qty: z.number().optional(),
+  ordered_qty: z.number().optional(),
+  valuation_rate: z.number().optional(),
+});
 
 /**
  * Delivery Note Zod Schema
@@ -2924,7 +2977,7 @@ export const DeliveryNoteCreateSchema = z.object({
   // Reference
   po_no: z.string().optional(),
   project: z.string().optional(),
-});
+}).partial();
 
 export const DeliveryNoteUpdateSchema = DeliveryNoteCreateSchema.partial();
 export type DeliveryNoteFormData = z.input<typeof DeliveryNoteCreateSchema>;
@@ -2967,7 +3020,7 @@ export const StockReconciliationCreateSchema = StockReconciliationSchema.pick({
   posting_date: true,
   posting_time: true,
   items: true,
-}).extend({});
+}).extend({}).partial();
 
 export const StockReconciliationUpdateSchema =
   StockReconciliationSchema.partial().omit({
@@ -3018,7 +3071,7 @@ export const BatchCreateSchema = BatchSchema.pick({
 }).extend({
   description: z.string().optional(),
   disabled: z.union([z.literal(0), z.literal(1)]).optional(),
-});
+}).partial();
 
 export const BatchUpdateSchema = BatchSchema.partial().omit({
   name: true,
@@ -3075,7 +3128,7 @@ export const SerialNoCreateSchema = SerialNoSchema.pick({
   company: true,
 }).extend({
   description: z.string().optional(),
-});
+}).partial();
 
 export const SerialNoUpdateSchema = SerialNoSchema.partial().omit({
   name: true,
@@ -3135,7 +3188,7 @@ export const QualityInspectionCreateSchema = QualityInspectionSchema.pick({
   inspected_by: true,
 }).extend({
   description: z.string().optional(),
-});
+}).partial();
 
 export const QualityInspectionUpdateSchema =
   QualityInspectionSchema.partial().omit({
@@ -3185,7 +3238,7 @@ export const LandedCostVoucherCreateSchema = LandedCostVoucherSchema.pick({
   taxes: true,
   total_taxes_and_charges: true,
   distribute_charges_based_on: true,
-}).extend({});
+}).extend({}).partial();
 
 export const LandedCostVoucherUpdateSchema =
   LandedCostVoucherSchema.partial().omit({
@@ -3380,7 +3433,7 @@ export const FiscalYearCreateSchema = FiscalYearSchema.pick({
   year_end_date: true,
 }).extend({
   disabled: z.union([z.literal(0), z.literal(1)]).optional(),
-});
+}).partial();
 
 export const FiscalYearUpdateSchema = FiscalYearSchema.partial().omit({
   name: true,
@@ -3532,7 +3585,7 @@ export const AssetCreateSchema = AssetSchema.pick({
   asset_name: true,
   location: true,
   purchase_date: true,
-}).extend({});
+}).extend({}).partial();
 
 export const AssetUpdateSchema = AssetSchema.partial().omit({
   name: true,
@@ -3565,7 +3618,7 @@ export const AssetCategorySchema = z.object({
 export const AssetCategoryCreateSchema = AssetCategorySchema.pick({
   asset_category_name: true,
   accounts: true,
-}).extend({});
+}).extend({}).partial();
 
 export const AssetCategoryUpdateSchema = AssetCategorySchema.partial().omit({
   name: true,
@@ -3602,7 +3655,7 @@ export const AssetMovementCreateSchema = AssetMovementSchema.pick({
   purpose: true,
   transaction_date: true,
   assets: true,
-}).extend({});
+}).extend({}).partial();
 
 export const AssetMovementUpdateSchema = AssetMovementSchema.partial().omit({
   name: true,
@@ -3736,7 +3789,7 @@ export const BOMCreateSchema = z.object({
   items: z.array(BOMItemSchema).min(1, "At least one material is required"),
   operations: z.array(BOMOperationSchema).optional(),
   scrap_items: z.array(BOMScrapItemSchema).optional(),
-});
+}).partial();
 
 export const BOMUpdateSchema = BOMCreateSchema.partial();
 
@@ -3798,7 +3851,7 @@ export const WorkOrderCreateSchema = z.object({
   // Child tables (auto-populated from BOM)
   required_items: z.array(WorkOrderItemSchema).optional(),
   operations: z.array(WorkOrderOperationSchema).optional(),
-});
+}).partial();
 
 export const WorkOrderUpdateSchema = WorkOrderCreateSchema.partial().extend({
   status: z
@@ -3883,7 +3936,7 @@ export const OperationCreateSchema = z.object({
   description: z.string().optional(),
   // Sub-operations child table - required for time calculation
   sub_operations: z.array(SubOperationSchema).optional().default([]),
-});
+}).partial();
 
 export const OperationUpdateSchema = z.object({
   workstation: z.string().optional(),
@@ -3972,7 +4025,7 @@ export const ProductionPlanCreateSchema = ProductionPlanSchema.pick({
   company: true,
   posting_date: true,
   po_items: true,
-}).extend({});
+}).extend({}).partial();
 
 export const ProductionPlanUpdateSchema = ProductionPlanSchema.partial().omit({
   name: true,
@@ -4062,7 +4115,7 @@ export const JobCardCreateSchema = JobCardSchema.pick({
   operation: true,
   wip_warehouse: true,
   workstation: true,
-}).extend({});
+}).extend({}).partial();
 
 export const JobCardUpdateSchema = JobCardSchema.partial().omit({
   name: true,
@@ -4102,7 +4155,7 @@ export const DowntimeEntryCreateSchema = DowntimeEntrySchema.pick({
   from_time: true,
   to_time: true,
   stop_reason: true,
-}).extend({});
+}).extend({}).partial();
 
 export const DowntimeEntryUpdateSchema = DowntimeEntrySchema.partial().omit({
   name: true,
@@ -4178,7 +4231,7 @@ export const TaskCreateSchema = TaskSchema.pick({
 }).extend({
   description: z.string().optional(),
   is_group: z.union([z.literal(0), z.literal(1)]).optional(),
-});
+}).partial();
 
 export const TaskUpdateSchema = TaskSchema.partial().omit({
   name: true,
@@ -4211,7 +4264,7 @@ export const ActivityTypeCreateSchema = ActivityTypeSchema.pick({
   activity_type: true,
 }).extend({
   disabled: z.union([z.literal(0), z.literal(1)]).optional(),
-});
+}).partial();
 
 export const ActivityTypeUpdateSchema = ActivityTypeSchema.partial().omit({
   name: true,
@@ -4269,7 +4322,7 @@ export const TimesheetSchema = z.object({
 export const TimesheetCreateSchema = TimesheetSchema.pick({
   naming_series: true,
   time_logs: true,
-}).extend({});
+}).extend({}).partial();
 
 export const TimesheetUpdateSchema = TimesheetSchema.partial().omit({
   name: true,
@@ -4300,7 +4353,7 @@ export const ProjectTypeCreateSchema = ProjectTypeSchema.pick({
   project_type: true,
 }).extend({
   description: z.string().optional(),
-});
+}).partial();
 
 export const ProjectTypeUpdateSchema = ProjectTypeSchema.partial().omit({
   name: true,
@@ -4368,7 +4421,7 @@ export const IssueCreateSchema = IssueSchema.pick({
   subject: true,
 }).extend({
   description: z.string().optional(),
-});
+}).partial();
 
 export const IssueUpdateSchema = IssueSchema.partial().omit({
   name: true,
@@ -4433,7 +4486,7 @@ export const WarrantyClaimCreateSchema = WarrantyClaimSchema.pick({
   company: true,
 }).extend({
   description: z.string().optional(),
-});
+}).partial();
 
 export const WarrantyClaimUpdateSchema = WarrantyClaimSchema.partial().omit({
   name: true,
@@ -4488,7 +4541,7 @@ export const MaintenanceVisitCreateSchema = MaintenanceVisitSchema.pick({
   maintenance_type: true,
   status: true,
   company: true,
-}).extend({});
+}).extend({}).partial();
 
 export const MaintenanceVisitUpdateSchema =
   MaintenanceVisitSchema.partial().omit({
@@ -4538,7 +4591,7 @@ export const MaintenanceScheduleCreateSchema = MaintenanceScheduleSchema.pick({
   transaction_date: true,
   items: true,
   company: true,
-}).extend({});
+}).extend({}).partial();
 
 export const MaintenanceScheduleUpdateSchema =
   MaintenanceScheduleSchema.partial().omit({
@@ -4620,7 +4673,7 @@ export const CustomerCreateSchema = CustomerSchema.pick({
   customer_type: true,
 }).extend({
   disabled: z.union([z.literal(0), z.literal(1)]).optional(),
-});
+}).partial();
 
 export const CustomerUpdateSchema = CustomerSchema.partial().omit({
   name: true,
@@ -4648,7 +4701,7 @@ export const SalesPartnerTypeSchema = z.object({
 
 export const SalesPartnerTypeCreateSchema = SalesPartnerTypeSchema.pick({
   sales_partner_type: true,
-}).extend({});
+}).extend({}).partial();
 
 export const SalesPartnerTypeUpdateSchema =
   SalesPartnerTypeSchema.partial().omit({
@@ -4742,7 +4795,7 @@ export const ProjectCreateSchema = ProjectSchema.pick({
   customer: z.string().optional(),
   expected_start_date: z.string().optional(),
   expected_end_date: z.string().optional(),
-});
+}).partial();
 
 export const ProjectUpdateSchema = ProjectSchema.partial().omit({
   name: true,
@@ -4787,7 +4840,7 @@ export const DriverCreateSchema = z.object({
   expiry_date: z.string().optional(),
   cell_number: z.string().optional(),
   transporter: z.string().optional(),
-});
+}).partial();
 
 export const DriverUpdateSchema = DriverCreateSchema.partial();
 export type DriverFormData = z.input<typeof DriverCreateSchema>;
@@ -4836,7 +4889,7 @@ export const VehicleCreateSchema = z.object({
   location: z.string().optional(),
   insurance_company: z.string().optional(),
   policy_no: z.string().optional(),
-});
+}).partial();
 
 export const VehicleUpdateSchema = VehicleCreateSchema.partial();
 export type VehicleFormData = z.input<typeof VehicleCreateSchema>;
@@ -4941,7 +4994,7 @@ export const SalesInvoiceCreateSchema = z.object({
   // Reference
   project: z.string().optional(),
   remarks: z.string().optional(),
-});
+}).partial();
 
 export const SalesInvoiceUpdateSchema = SalesInvoiceCreateSchema.partial();
 
@@ -4986,7 +5039,7 @@ export const PurchaseInvoiceCreateSchema = z.object({
   return_against: z.string().optional(),
   project: z.string().optional(),
   remarks: z.string().optional(),
-});
+}).partial();
 
 export const PurchaseInvoiceUpdateSchema =
   PurchaseInvoiceCreateSchema.partial();
@@ -5036,7 +5089,7 @@ export const PaymentEntryCreateSchema = z.object({
   project: z.string().optional(),
   cost_center: z.string().optional(),
   remarks: z.string().optional(),
-});
+}).partial();
 
 export const PaymentEntryUpdateSchema = PaymentEntryCreateSchema.partial();
 
@@ -5079,7 +5132,7 @@ export const JournalEntryCreateSchema = z.object({
   cheque_date: z.string().optional(),
   user_remark: z.string().optional(),
   remark: z.string().optional(),
-});
+}).partial();
 
 export const JournalEntryUpdateSchema = JournalEntryCreateSchema.partial();
 

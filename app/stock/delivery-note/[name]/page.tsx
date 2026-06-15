@@ -6,10 +6,12 @@
 // Real flow-chain resolution: upstream SO via items.against_sales_order,
 // downstream Sales Invoice via useFrappeList. OKLCH tokens only.
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
+import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
+import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
 import {
   Edit3,
   Send,
@@ -28,10 +30,10 @@ import { FlowRail } from "@/components/flows/FlowRail";
 import { isModuleBuilt } from "@/lib/flows/module-availability";
 import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
-import { resolveFlowChain } from "@/lib/flows/flow-chain-resolver";
+import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
+import { useFlowChain } from "@/hooks/flows/use-flow-chain";
 import { useFrappeDoc, useFrappeList, useFrappeUpdate, useFrappeDelete } from "@/hooks/generic";
 import type { DeliveryNote } from "@/types/doctype-types";
-import type { FlowStageStatus } from "@/types/flow-types";
 
 const ETB = new Intl.NumberFormat("en-ET", { style: "currency", currency: "ETB" });
 
@@ -54,51 +56,22 @@ export default function DeliveryNoteDetailPage() {
 
   const [confirmSubmit, setConfirmSubmit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
+  const { resolution, showError, dismiss } = useGuidedError();
 
   const { data: dn, isLoading, error } = useFrappeDoc<DeliveryNote>(
     "Delivery Note",
     name,
   );
 
-  // -- Upstream resolution: Sales Order from items.against_sales_order --------
-  const soName = useMemo(() => {
-    const items = ((dn?.items ?? []) as Array<{ against_sales_order?: string }>);
-    return items.find((i) => i?.against_sales_order)?.against_sales_order;
-  }, [dn]);
-
   // -- Downstream resolution: Sales Invoice filtered on this DN ---------------
   const { data: invoices, isLoading: loadingInvoices } = useFrappeList<{ name: string }>(
     "Sales Invoice",
-    { filters: [["Delivery Note Item", "delivery_note", "=", name]] as unknown as [string, string, unknown][], fields: ["name"], limit: 5 },
+    { filters: [["Sales Invoice Item", "delivery_note", "=", name]] as [string, string, string, unknown][], fields: ["name"], limit: 5 },
     { enabled: !isLoading && !!dn },
   );
 
-  // -- Build the flow chain from real linked documents -----------------------
-  const chain = useMemo(() => {
-    const siName = invoices?.[0]?.name;
-
-    const stageStatuses: Record<
-      string,
-      { status: FlowStageStatus; documentName?: string; documentUrl?: string }
-    > = {};
-
-    if (soName) {
-      stageStatuses["Sales Order"] = {
-        status: "completed",
-        documentName: soName,
-        documentUrl: `/sales/sales-order/${encodeURIComponent(soName)}`,
-      };
-    }
-    if (siName) {
-      stageStatuses["Sales Invoice"] = {
-        status: "completed",
-        documentName: siName,
-        documentUrl: `/accounting/sales-invoice/${encodeURIComponent(siName)}`,
-      };
-    }
-
-    return resolveFlowChain("Delivery Note", name, stageStatuses);
-  }, [soName, invoices, name]);
+  // 2N Part 1.1: unified flow resolution.
+  const { result: chain, isLoading: chainLoading } = useFlowChain("Delivery Note", name);
 
   // -- Status actions (real mutations) ----------------------------------------
   const updateMutation = useFrappeUpdate<DeliveryNote>("Delivery Note", {
@@ -121,8 +94,8 @@ export default function DeliveryNoteDetailPage() {
       { name, data: { docstatus: 1 } },
       {
         onSuccess: () => toast.success(`Delivery Note ${name} submitted`),
-        onError: (e) =>
-          toast.error("Submit failed", { description: e.message }),
+        onError: (err) =>
+          showError(resolveFrappeError(err, { doctype: "Delivery Note" })),
       },
     );
   };
@@ -163,7 +136,7 @@ export default function DeliveryNoteDetailPage() {
       description: "Create invoice from this delivery",
       onClick: () => router.push(`/accounting/sales-invoice/new?delivery_note=${encodeURIComponent(name)}`),
       disabled: !isModuleBuilt("Sales Invoice"),
-      disabledReason: "Coming in Phase 2",
+      disabledReason: "Module not available",
     },
   ].filter(Boolean) as React.ComponentProps<typeof WhatsNext>["actions"];
 
@@ -209,7 +182,7 @@ export default function DeliveryNoteDetailPage() {
                 variant="outline"
                 size="sm"
                 disabled={!isModuleBuilt("Sales Invoice")}
-                title={!isModuleBuilt("Sales Invoice") ? "Coming in Phase 2" : undefined}
+                title={!isModuleBuilt("Sales Invoice") ? "Module not available" : undefined}
                 asChild={isModuleBuilt("Sales Invoice")}
               >
                 {isModuleBuilt("Sales Invoice") ? (
@@ -305,12 +278,15 @@ export default function DeliveryNoteDetailPage() {
           </InfoCard>
 
           <InfoCard title="Flow Tracker">
-            <FlowRail result={chain} isLoading={loadingInvoices} />
+            <FlowRail result={chain} currentDocName={name} sourceDoctype="Delivery Note" isLoading={chainLoading} />
           </InfoCard>
 
           <InfoCard title="What's Next">
             <WhatsNext actions={whatsNext} />
           </InfoCard>
+
+          {/* 2L 1B: Universal cross-flow actions menu */}
+          <CrossFlowActionsMenu doctype="Delivery Note" name={name} />
 
           <InfoCard title="Activity">
             <ActivityTimeline
@@ -356,6 +332,7 @@ export default function DeliveryNoteDetailPage() {
         variant="destructive"
         onConfirm={handleDelete}
       />
+      <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
     </div>
   );
 }

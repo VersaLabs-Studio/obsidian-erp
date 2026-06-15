@@ -1,7 +1,6 @@
 // app/crm/customer/[name]/page.tsx
 // Obsidian ERP v4.0 - Customer Master Hub
 // Complete Customer 360° View with all linked transactions
-// @ts-nocheck
 
 "use client";
 
@@ -10,7 +9,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
+import { SkeletonDetail, SkeletonLine } from "@/components/ui/skeleton";
 import {
   Edit,
   Trash2,
@@ -63,7 +62,9 @@ import {
   EmptyState,
 } from "@/components/smart";
 import { InfoCard, DataPoint, StatCard } from "@/components/ui/info-card";
+import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
 import { getApiPath } from "@/lib/doctype-config";
+import { getActiveCompany } from "@/lib/settings/company";
 import type {
   Customer,
   Address,
@@ -167,7 +168,6 @@ function TransactionRow({
   status,
   date,
   href,
-  statusType = "default",
 }: {
   icon: React.ComponentType<{ className?: string }>;
   title: string;
@@ -176,7 +176,6 @@ function TransactionRow({
   status?: string;
   date?: string;
   href: string;
-  statusType?: "quotation" | "order" | "invoice" | "payment" | "delivery";
 }) {
   return (
     <Link
@@ -200,7 +199,7 @@ function TransactionRow({
             {formatDate(date)}
           </span>
         )}
-        {status && <StatusBadge status={status} type={statusType} />}
+        {status && <StatusBadge status={status} />}
         {amount !== undefined && (
           <span className="font-mono text-sm font-medium min-w-[80px] text-right">
             {formatCurrency(amount)}
@@ -582,7 +581,7 @@ export default function CustomerMasterHub() {
   // =========================================================================
 
   if (isLoading) {
-    return <LoadingState type="detail" />;
+    return <SkeletonDetail />;
   }
 
   if (error || !customer) {
@@ -625,7 +624,7 @@ export default function CustomerMasterHub() {
               className="rounded-full"
               onClick={() =>
                 router.push(
-                  `/sales/quotation/new?party_name=${encodeURIComponent(name)}`,
+                  `/sales/quotation/new?customer=${encodeURIComponent(name)}`,
                 )
               }
             >
@@ -923,12 +922,8 @@ export default function CustomerMasterHub() {
                   {[...quotations.slice(0, 2), ...salesOrders.slice(0, 2)]
                     .sort(
                       (a, b) =>
-                        new Date(
-                          b.transaction_date || b.posting_date || 0,
-                        ).getTime() -
-                        new Date(
-                          a.transaction_date || a.posting_date || 0,
-                        ).getTime(),
+                        new Date(b.transaction_date || 0).getTime() -
+                        new Date(a.transaction_date || 0).getTime(),
                     )
                     .slice(0, 4)
                     .map((item) => {
@@ -943,7 +938,6 @@ export default function CustomerMasterHub() {
                           status={item.status}
                           date={item.transaction_date}
                           href={`/${isQuotation ? "sales/quotation" : "sales/sales-order"}/${encodeURIComponent(item.name)}`}
-                          statusType={isQuotation ? "quotation" : "order"}
                         />
                       );
                     })}
@@ -964,7 +958,7 @@ export default function CustomerMasterHub() {
                   <QuickAction
                     icon={FileText}
                     label="Create Quotation"
-                    href={`/sales/quotation/new?party_name=${encodeURIComponent(name)}`}
+                    href={`/sales/quotation/new?customer=${encodeURIComponent(name)}`}
                     variant="default"
                   />
                   <QuickAction
@@ -995,32 +989,45 @@ export default function CustomerMasterHub() {
                 </div>
               </InfoCard>
 
+              {/* 2L 1B: Universal cross-flow actions menu (sits alongside
+                  the existing quick actions) */}
+              <CrossFlowActionsMenu doctype="Customer" name={name} />
+
               {/* Credit & Billing Info */}
               <InfoCard title="Credit & Billing">
-                <div className="space-y-3">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Credit Limit</span>
-                    <span className="font-semibold">
-                      {formatCurrency(customer.credit_limit)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Outstanding</span>
-                    <span
-                      className={`font-semibold ${
-                        stats.totalOutstanding > 0 ? "text-red-600" : ""
-                      }`}
-                    >
-                      {formatCurrency(stats.totalOutstanding)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Payment Terms</span>
-                    <span className="font-semibold">
-                      {customer.payment_terms || "—"}
-                    </span>
-                  </div>
-                </div>
+                {(() => {
+                  const activeCompany = getActiveCompany();
+                  const creditLimitObj = (customer.credit_limits as any[])?.find(
+                    (cl) => cl.company === activeCompany
+                  );
+                  const creditLimit = creditLimitObj?.credit_limit || 0;
+                  return (
+                    <div className="space-y-3">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Credit Limit</span>
+                        <span className="font-semibold">
+                          {formatCurrency(creditLimit)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Outstanding</span>
+                        <span
+                          className={`font-semibold ${
+                            stats.totalOutstanding > 0 ? "text-red-600" : ""
+                          }`}
+                        >
+                          {formatCurrency(stats.totalOutstanding)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Payment Terms</span>
+                        <span className="font-semibold">
+                          {customer.payment_terms || "—"}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
               </InfoCard>
 
               {/* Converted From Lead */}
@@ -1067,7 +1074,7 @@ export default function CustomerMasterHub() {
               {isLoadingQuotations ? (
                 <div className="space-y-3">
                   {[1, 2, 3].map((i) => (
-                    <Skeleton key={i} className="h-16 rounded-2xl" />
+                    <SkeletonLine key={i} className="h-16 rounded-2xl" />
                   ))}
                 </div>
               ) : quotations.length === 0 ? (
@@ -1079,7 +1086,7 @@ export default function CustomerMasterHub() {
                       size="sm"
                       onClick={() =>
                         router.push(
-                          `/sales/quotation/new?party_name=${encodeURIComponent(name)}`,
+                  `/sales/quotation/new?customer=${encodeURIComponent(name)}`,
                         )
                       }
                     >
@@ -1099,7 +1106,6 @@ export default function CustomerMasterHub() {
                       status={q.status}
                       date={q.transaction_date}
                       href={`/sales/quotation/${encodeURIComponent(q.name)}`}
-                      statusType="quotation"
                     />
                   ))}
                 </div>
@@ -1119,7 +1125,7 @@ export default function CustomerMasterHub() {
               {isLoadingSalesOrders ? (
                 <div className="space-y-3">
                   {[1, 2, 3].map((i) => (
-                    <Skeleton key={i} className="h-16 rounded-2xl" />
+                    <SkeletonLine key={i} className="h-16 rounded-2xl" />
                   ))}
                 </div>
               ) : salesOrders.length === 0 ? (
@@ -1151,7 +1157,6 @@ export default function CustomerMasterHub() {
                       status={so.status}
                       date={so.transaction_date}
                       href={`/sales/sales-order/${encodeURIComponent(so.name)}`}
-                      statusType="order"
                     />
                   ))}
                 </div>
@@ -1171,7 +1176,7 @@ export default function CustomerMasterHub() {
               {isLoadingDeliveryNotes ? (
                 <div className="space-y-3">
                   {[1, 2, 3].map((i) => (
-                    <Skeleton key={i} className="h-16 rounded-2xl" />
+                    <SkeletonLine key={i} className="h-16 rounded-2xl" />
                   ))}
                 </div>
               ) : deliveryNotes.length === 0 ? (
@@ -1190,7 +1195,6 @@ export default function CustomerMasterHub() {
                       status={dn.status}
                       date={dn.posting_date}
                       href={`/stock/delivery-note/${encodeURIComponent(dn.name)}`}
-                      statusType="delivery"
                     />
                   ))}
                 </div>
@@ -1267,7 +1271,7 @@ export default function CustomerMasterHub() {
               {isLoadingSalesInvoices ? (
                 <div className="space-y-3">
                   {[1, 2, 3].map((i) => (
-                    <Skeleton key={i} className="h-16 rounded-2xl" />
+                    <SkeletonLine key={i} className="h-16 rounded-2xl" />
                   ))}
                 </div>
               ) : salesInvoices.length === 0 ? (
@@ -1303,7 +1307,6 @@ export default function CustomerMasterHub() {
                       status={inv.status}
                       date={inv.posting_date}
                       href={`/accounting/sales-invoice/${encodeURIComponent(inv.name)}`}
-                      statusType="invoice"
                     />
                   ))}
                 </div>
@@ -1323,7 +1326,7 @@ export default function CustomerMasterHub() {
               {isLoadingPayments ? (
                 <div className="space-y-3">
                   {[1, 2, 3].map((i) => (
-                    <Skeleton key={i} className="h-16 rounded-2xl" />
+                    <SkeletonLine key={i} className="h-16 rounded-2xl" />
                   ))}
                 </div>
               ) : paymentEntries.length === 0 ? (
@@ -1355,7 +1358,6 @@ export default function CustomerMasterHub() {
                       status={pe.status}
                       date={pe.posting_date}
                       href={`/accounting/payment-entry/${encodeURIComponent(pe.name)}`}
-                      statusType="payment"
                     />
                   ))}
                 </div>
@@ -1384,7 +1386,7 @@ export default function CustomerMasterHub() {
           {isLoadingAddresses ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {[1, 2].map((i) => (
-                <Skeleton key={i} className="h-24 rounded-2xl" />
+                <SkeletonLine key={i} className="h-24 rounded-2xl" />
               ))}
             </div>
           ) : linkedAddresses.length === 0 ? (
@@ -1432,7 +1434,7 @@ export default function CustomerMasterHub() {
           {isLoadingContacts ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {[1, 2].map((i) => (
-                <Skeleton key={i} className="h-24 rounded-2xl" />
+                <SkeletonLine key={i} className="h-24 rounded-2xl" />
               ))}
             </div>
           ) : linkedContacts.length === 0 ? (

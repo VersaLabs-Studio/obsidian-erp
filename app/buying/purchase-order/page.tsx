@@ -1,5 +1,8 @@
-// @ts-nocheck
 "use client";
+
+// app/buying/purchase-order/page.tsx
+// Obsidian ERP v4.0 — Purchase Order List (Golden Template)
+// KPI cards, StatusBadge, card grid. OKLCH tokens only.
 
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
@@ -10,60 +13,57 @@ import {
   MoreVertical,
   Pencil,
   Trash2,
-  Search,
-  ShoppingCart,
-  Building2,
-  Calendar,
-  Clock,
-  CheckCircle2,
-  XCircle,
   Eye,
-  ArrowUpRight,
-  TrendingUp,
-  CreditCard,
+  CalendarDays,
   Truck,
-  FileSearch,
+  Building2,
+  DollarSign,
+  Package,
+  CheckCircle2,
+  FileText,
+  ArrowRight,
+  Clock,
+  ShoppingCart,
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useFrappeList, useFrappeDelete } from "@/hooks/generic";
 import {
   PageHeader,
-  LoadingState,
   EmptyState,
+  LoadingState,
   ConfirmDialog,
 } from "@/components/smart";
+import { KPICard } from "@/components/dashboard/KPICard";
+import { StatusBadge } from "@/components/smart/status-badge";
 import type { PurchaseOrder } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
-import { format, parseISO } from "date-fns";
 
-const STATUS_CONFIG = {
-  Draft: { color: "text-slate-600", bg: "bg-slate-100", icon: Pencil },
-  "To Receive and Bill": {
-    color: "text-amber-600",
-    bg: "bg-amber-100",
-    icon: Truck,
-  },
-  "To Receive": { color: "text-blue-600", bg: "bg-blue-100", icon: Truck },
-  "To Bill": {
-    color: "text-indigo-600",
-    bg: "bg-indigo-100",
-    icon: CreditCard,
-  },
-  Completed: {
-    color: "text-emerald-600",
-    bg: "bg-emerald-100",
-    icon: CheckCircle2,
-  },
-  Cancelled: { color: "text-gray-400", bg: "bg-gray-100", icon: XCircle },
-};
+function getDisplayStatus(order: PurchaseOrder): string {
+  if (order.docstatus === 2) return "Cancelled";
+  return order.status || "Draft";
+}
+
+const ETB = new Intl.NumberFormat("en-ET", {
+  style: "currency",
+  currency: "ETB",
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
+});
+
+function formatDate(dateStr: string | undefined): string {
+  if (!dateStr) return "—";
+  return new Date(dateStr).toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
 
 function PurchaseOrderCard({
   order,
@@ -71,150 +71,142 @@ function PurchaseOrderCard({
   onView,
   onEdit,
   onDelete,
-  onReceive,
+}: {
+  order: PurchaseOrder;
+  index: number;
+  onView: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
 }) {
-  const statusConfig = STATUS_CONFIG[order.status] || STATUS_CONFIG.Draft;
-  const StatusIcon = statusConfig.icon;
+  const displayStatus = getDisplayStatus(order);
   const isDraft = order.docstatus === 0;
-  const progress = order.per_received || 0;
 
   return (
     <div
       className={cn(
-        "group relative bg-card rounded-[2rem] border border-border/50 p-6",
-        "hover:shadow-xl hover:shadow-primary/5 hover:border-primary/20",
-        "transition-all duration-300 cursor-pointer animate-in fade-in slide-in-from-bottom-4",
+        "group relative bg-card rounded-2xl border border-border/50",
+        "hover:border-primary/20 hover:shadow-xl hover:shadow-primary/5",
+        "transition-all duration-300 cursor-pointer overflow-hidden",
+        "animate-slide-up",
       )}
-      style={{ animationDelay: `${index * 50}ms` }}
+      style={{ animationDelay: `${index * 40}ms` }}
       onClick={onView}
     >
-      {/* Header */}
-      <div className="flex items-start justify-between mb-4">
-        <div>
-          <h3 className="font-bold text-foreground group-hover:text-primary transition-colors tracking-tight">
-            {order.name}
-          </h3>
-          <p className="text-[10px] text-muted-foreground mt-1 font-mono font-bold uppercase tracking-tight">
-            {order.supplier_name}
-          </p>
-        </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 rounded-full hover:bg-primary/5"
-            >
-              <MoreVertical className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56 rounded-2xl p-2">
-            <DropdownMenuItem
-              onClick={(e) => {
-                e.stopPropagation();
-                onView();
-              }}
-              className="rounded-xl"
-            >
-              <Eye className="h-4 w-4 mr-2" /> View Order
-            </DropdownMenuItem>
-            {isDraft && (
-              <DropdownMenuItem
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onEdit();
-                }}
-                className="rounded-xl"
-              >
-                <Pencil className="h-4 w-4 mr-2" /> Edit Draft
-              </DropdownMenuItem>
-            )}
-            {order.docstatus === 1 && order.per_received < 100 && (
-              <DropdownMenuItem
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onReceive();
-                }}
-                className="rounded-xl text-primary font-bold"
-              >
-                <Truck className="h-4 w-4 mr-2" /> Record Receipt
-              </DropdownMenuItem>
-            )}
-            {isDraft && (
-              <DropdownMenuItem
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete();
-                }}
-                className="rounded-xl text-destructive"
-              >
-                <Trash2 className="h-4 w-4 mr-2" /> Delete
-              </DropdownMenuItem>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
-      {/* Progress */}
-      {progress > 0 && (
-        <div className="mb-5">
-          <div className="flex justify-between text-[10px] mb-1.5 font-bold uppercase tracking-tighter">
-            <span className="text-muted-foreground">Received</span>
-            <span className="text-blue-600">{Math.round(progress)}%</span>
+      <div className="p-5">
+        <div className="flex items-start justify-between mb-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-lg text-foreground tracking-tight">
+                {order.name}
+              </h3>
+              <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
+            <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+              <Truck className="h-3 w-3" />
+              {order.supplier_name || order.supplier || "No supplier"}
+            </p>
           </div>
-          <div className="h-2 bg-secondary/50 rounded-full overflow-hidden">
-            <div
-              className={cn(
-                "h-full rounded-full transition-all duration-1000",
-                progress >= 100 ? "bg-emerald-500" : "bg-blue-500",
+          <StatusBadge status={displayStatus} size="sm" />
+        </div>
+
+        <div className="grid grid-cols-3 gap-4 mb-4">
+          <div className="space-y-1">
+            <p className="text-[10px] font-bold uppercase text-muted-foreground/70 tracking-wider">
+              Order Date
+            </p>
+            <p className="text-sm font-medium text-foreground flex items-center gap-1">
+              <CalendarDays className="h-3 w-3 text-muted-foreground" />
+              {formatDate(order.transaction_date)}
+            </p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-[10px] font-bold uppercase text-muted-foreground/70 tracking-wider">
+              Schedule Date
+            </p>
+            <p className="text-sm font-medium text-foreground flex items-center gap-1">
+              <Clock className="h-3 w-3 text-muted-foreground" />
+              {formatDate(order.schedule_date)}
+            </p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-[10px] font-bold uppercase text-muted-foreground/70 tracking-wider">
+              Company
+            </p>
+            <p className="text-sm font-medium text-foreground flex items-center gap-1 truncate">
+              <Building2 className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+              <span className="truncate">{order.company || "—"}</span>
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between pt-4 border-t border-border/50">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
+              <DollarSign className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase text-muted-foreground/70 tracking-wider">
+                Grand Total
+              </p>
+              <p className="text-lg font-bold text-foreground tracking-tight">
+                {ETB.format(order.grand_total ?? 0)}
+              </p>
+            </div>
+          </div>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 rounded-xl opacity-0 group-hover:opacity-100 transition-all"
+              >
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              className="rounded-xl border-border/50 shadow-xl bg-popover/95 backdrop-blur-xl p-1.5 min-w-[160px]"
+            >
+              <DropdownMenuItem
+                className="rounded-lg cursor-pointer"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onView();
+                }}
+              >
+                <Eye className="h-4 w-4 mr-2" />
+                View Details
+              </DropdownMenuItem>
+              {isDraft && (
+                <DropdownMenuItem
+                  className="rounded-lg cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit();
+                  }}
+                >
+                  <Pencil className="h-4 w-4 mr-2" />
+                  Edit
+                </DropdownMenuItem>
               )}
-              style={{ width: `${Math.min(progress, 100)}%` }}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Data Points */}
-      <div className="space-y-3 mb-5">
-        <div className="flex items-center justify-between text-xs px-1">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Calendar className="h-3.5 w-3.5" />
-            <span>
-              {order.transaction_date
-                ? format(parseISO(order.transaction_date), "MMM d")
-                : "—"}
-            </span>
-          </div>
-          <div className="flex items-center gap-2 text-muted-foreground font-bold">
-            <CreditCard className="h-3.5 w-3.5 rotate-12" />
-            <span>
-              {order.currency} {order.grand_total?.toLocaleString()}
-            </span>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3 p-3 rounded-2xl bg-secondary/30 border border-border/50">
-          <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
-          <span className="text-[11px] font-bold text-muted-foreground uppercase truncate">
-            {order.company}
-          </span>
-        </div>
-      </div>
-
-      {/* Footer */}
-      <div className="pt-4 border-t border-border/50 flex justify-between items-center">
-        <Badge
-          className={cn(
-            "rounded-full text-[10px] font-black px-3 border-0 shadow-sm",
-            statusConfig.bg,
-            statusConfig.color,
-          )}
-        >
-          <StatusIcon className="h-3 w-3 mr-1.5" />
-          {order.status}
-        </Badge>
-        <div className="h-8 w-8 rounded-full flex items-center justify-center bg-secondary/50 text-muted-foreground group-hover:bg-primary group-hover:text-white transition-all">
-          <ArrowUpRight className="h-4 w-4" />
+              {isDraft && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="rounded-lg cursor-pointer text-destructive focus:text-destructive"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete();
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     </div>
@@ -223,9 +215,9 @@ function PurchaseOrderCard({
 
 export default function PurchaseOrderListPage() {
   const router = useRouter();
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [deleteTarget, setDeleteTarget] = useState<PurchaseOrder | null>(null);
 
   const {
     data: orders,
@@ -240,131 +232,159 @@ export default function PurchaseOrderListPage() {
       "grand_total",
       "currency",
       "transaction_date",
+      "schedule_date",
       "per_received",
       "per_billed",
       "docstatus",
       "company",
     ],
     orderBy: { field: "creation", order: "desc" },
+    search,
     limit: 100,
   });
 
   const deleteMutation = useFrappeDelete("Purchase Order", {
     onSuccess: () => {
-      toast.success("Order deleted");
-      refetch();
       setDeleteTarget(null);
+      refetch();
     },
-    onError: (err) => toast.error(err.message),
   });
 
-  const filtered = useMemo(() => {
+  const filteredOrders = useMemo(() => {
     if (!orders) return [];
-    return orders.filter((o) => {
-      const matchesSearch =
-        o.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        o.supplier_name?.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesStatus = statusFilter === "all" || o.status === statusFilter;
-      return matchesSearch && matchesStatus;
-    });
-  }, [orders, searchTerm, statusFilter]);
+    if (statusFilter === "all") return orders;
+    return orders.filter((o) => getDisplayStatus(o) === statusFilter);
+  }, [orders, statusFilter]);
 
-  if (isLoading) return <LoadingState type="list" />;
+  const statusCounts = useMemo(() => {
+    if (!orders) return {} as Record<string, number>;
+    return orders.reduce(
+      (acc, o) => {
+        const s = getDisplayStatus(o);
+        acc[s] = (acc[s] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
+  }, [orders]);
+
+  const kpis = useMemo(() => {
+    if (!orders) return { total: 0, draft: 0, pendingApproval: 0, toReceive: 0 };
+    return {
+      total: orders.length,
+      draft: orders.filter((o) => o.status === "Draft").length,
+      pendingApproval: orders.filter((o) => o.status === "Pending Approval").length,
+      toReceive: orders.filter((o) =>
+        ["To Receive and Bill", "To Receive"].includes(o.status),
+      ).length,
+    };
+  }, [orders]);
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    await deleteMutation.mutateAsync(deleteTarget.name);
+  };
+
+  if (isLoading) return <LoadingState type="cards" count={6} />;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Purchase Orders"
-        subtitle="Manage and track procurement contracts and deliveries"
-        primaryAction={{
-          label: "Create Order",
-          onClick: () => router.push("/buying/purchase-order/new"),
-          icon: <Plus className="h-4 w-4" />,
-        }}
+        subtitle={`${filteredOrders.length} order${filteredOrders.length !== 1 ? "s" : ""}`}
+        showSearch
+        searchValue={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search by ID, supplier..."
+        actions={
+          <Button
+            className="rounded-full shadow-lg shadow-primary/20"
+            onClick={() => router.push("/buying/purchase-order/new")}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            New Purchase Order
+          </Button>
+        }
       />
 
-      {/* Filters */}
-      <div className="bg-card rounded-[2rem] border border-border/50 p-2 shadow-sm flex flex-col xl:flex-row gap-2">
-        <div className="relative flex-1 group">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
-          <Input
-            placeholder="Search by ID or vendor..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-11 h-12 rounded-[1.5rem] bg-transparent border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-          />
-        </div>
-
-        <Tabs
-          value={statusFilter}
-          onValueChange={setStatusFilter}
-          className="xl:w-auto"
-        >
-          <TabsList className="bg-secondary/30 p-1 rounded-[1.5rem] h-12 flex-wrap lg:flex-nowrap">
-            <TabsTrigger
-              value="all"
-              className="rounded-full px-5 h-10 font-bold"
-            >
-              All
-            </TabsTrigger>
-            <TabsTrigger
-              value="To Receive"
-              className="rounded-full px-5 h-10 font-bold"
-            >
-              To Receive
-            </TabsTrigger>
-            <TabsTrigger
-              value="Completed"
-              className="rounded-full px-5 h-10 font-bold"
-            >
-              Completed
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <KPICard title="Total Orders" value={kpis.total} icon={Package} isLoading={isLoading} />
+        <KPICard title="Draft" value={kpis.draft} icon={FileText} variant="warning" isLoading={isLoading} />
+        <KPICard title="Pending Approval" value={kpis.pendingApproval} icon={Clock} variant="default" isLoading={isLoading} />
+        <KPICard title="To Receive" value={kpis.toReceive} icon={Truck} variant="default" isLoading={isLoading} />
       </div>
 
-      {/* Content */}
-      {filtered.length === 0 ? (
+      <div className="flex gap-2 flex-wrap">
+        {[
+          { key: "all", label: "All", count: orders?.length || 0 },
+          { key: "Draft", label: "Draft", count: statusCounts.Draft || 0 },
+          { key: "Pending Approval", label: "Pending Approval", count: statusCounts["Pending Approval"] || 0 },
+          { key: "To Receive and Bill", label: "To Receive & Bill", count: statusCounts["To Receive and Bill"] || 0 },
+          { key: "To Receive", label: "To Receive", count: statusCounts["To Receive"] || 0 },
+          { key: "Completed", label: "Completed", count: statusCounts.Completed || 0 },
+        ].map((s) => (
+          <Button
+            key={s.key}
+            variant={statusFilter === s.key ? "default" : "outline"}
+            size="sm"
+            className={cn(
+              "rounded-full gap-2 transition-all",
+              statusFilter === s.key
+                ? "shadow-lg shadow-primary/20"
+                : "hover:bg-secondary/80",
+            )}
+            onClick={() => setStatusFilter(s.key)}
+          >
+            {s.label}
+            <Badge
+              variant="secondary"
+              className={cn(
+                "h-5 min-w-[20px] px-1.5 text-[10px] font-bold",
+                statusFilter === s.key
+                  ? "bg-primary-foreground/20 text-primary-foreground"
+                  : "bg-secondary",
+              )}
+            >
+              {s.count}
+            </Badge>
+          </Button>
+        ))}
+      </div>
+
+      {!orders || orders.length === 0 ? (
         <EmptyState
-          icon={ShoppingCart}
           title="No purchase orders found"
-          description={
-            searchTerm
-              ? "Try adjusting your filters"
-              : "Generate official orders to your suppliers for needed materials"
-          }
+          description="Create your first purchase order to start procurement"
           action={
-            searchTerm
-              ? undefined
-              : {
-                  label: "New Order",
-                  onClick: () => router.push("/buying/purchase-order/new"),
-                }
+            <Button
+              onClick={() => router.push("/buying/purchase-order/new")}
+              className="rounded-full"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Create Purchase Order
+            </Button>
           }
         />
+      ) : filteredOrders.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">
+          <ShoppingCart className="h-12 w-12 mx-auto mb-4 opacity-30" />
+          <p className="font-medium">No purchase orders match this filter</p>
+          <p className="text-sm mt-1">Try selecting a different status</p>
+        </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {filtered.map((order, idx) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {filteredOrders.map((order, index) => (
             <PurchaseOrderCard
               key={order.name}
               order={order}
-              index={idx}
+              index={index}
               onView={() =>
-                router.push(
-                  `/buying/purchase-order/${encodeURIComponent(order.name)}`,
-                )
+                router.push(`/buying/purchase-order/${encodeURIComponent(order.name)}`)
               }
               onEdit={() =>
-                router.push(
-                  `/buying/purchase-order/${encodeURIComponent(order.name)}/edit`,
-                )
+                router.push(`/buying/purchase-order/${encodeURIComponent(order.name)}/edit`)
               }
-              onDelete={() => setDeleteTarget(order.name)}
-              onReceive={() =>
-                router.push(
-                  `/stock/stock-entry/new?purchase_order=${encodeURIComponent(order.name)}&purpose=Material Receipt`,
-                )
-              }
+              onDelete={() => setDeleteTarget(order)}
             />
           ))}
         </div>
@@ -373,11 +393,12 @@ export default function PurchaseOrderListPage() {
       <ConfirmDialog
         open={!!deleteTarget}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title="Delete Purchase Order?"
-        description="Only draft orders can be deleted. This will permanently remove the record."
-        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget)}
-        isLoading={deleteMutation.isPending}
+        title="Delete Purchase Order"
+        description={`Are you sure you want to delete purchase order "${deleteTarget?.name}"? This action cannot be undone.`}
+        confirmText="Delete"
         variant="destructive"
+        onConfirm={handleDeleteConfirm}
+        loading={deleteMutation.isPending}
       />
     </div>
   );

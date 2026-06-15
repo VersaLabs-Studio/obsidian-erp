@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useMemo, useState, useCallback, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm, useFieldArray, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import {
@@ -22,9 +22,13 @@ import {
   FormDatePicker,
   FormSelect,
 } from "@/components/form";
+import { QuickAddField } from "@/components/quick-add/QuickAddField";
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
 import { FlowWizard } from "@/components/flows/FlowWizard";
 import { useFrappeCreate } from "@/hooks/generic";
+import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
+import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
+import { getActiveCompany } from "@/lib/settings/company";
 import { validateWizardStep } from "@/lib/flows/flow-validation";
 import type { StepValidationResult } from "@/lib/flows/flow-validation";
 import type { WizardStep } from "@/types/flow-types";
@@ -67,7 +71,6 @@ const WIZARD_STEPS: WizardStep[] = [
     schema: null,
     fields: [
       "material_request_type",
-      "company",
       "transaction_date",
       "schedule_date",
     ],
@@ -92,12 +95,12 @@ const REQUEST_TYPE_OPTIONS = [
 export default function NewMaterialRequestPage() {
   const router = useRouter();
   const [step, setStep] = useState(0);
+  const [triedNextSteps, setTriedNextSteps] = useState<Set<number>>(new Set());
 
   const form = useForm<MRForm>({
     defaultValues: {
       naming_series: "MAT-MR-.YYYY.-",
       material_request_type: "Purchase",
-      company: "",
       transaction_date: new Date().toISOString().split("T")[0],
       schedule_date: "",
       set_from_warehouse: "",
@@ -109,6 +112,76 @@ export default function NewMaterialRequestPage() {
   const { control, getValues, setValue } = form;
   const { fields, append, remove } = useFieldArray({ control, name: "items" });
 
+  const searchParams = useSearchParams();
+  const prefillItemCode = searchParams.get("item_code");
+  const prefillItemName = searchParams.get("item_name");
+  const prefillQty = searchParams.get("qty");
+  const prefillWarehouse = searchParams.get("warehouse");
+  // 2P Part 2.4 — accept a structured "shortfall" list from
+  // StartProductionModal. Format: `item:qty,item:qty,…` (URL-encoded
+  // comma). Multiple rows can be pre-populated in one click — replaces
+  // the prior "blank form" experience.
+  const prefillShortfall = searchParams.get("shortfall");
+  const prefillWorkOrder = searchParams.get("work_order");
+
+  useEffect(() => {
+    // Multiple-row shortfall prefill
+    if (prefillShortfall) {
+      const entries = decodeURIComponent(prefillShortfall)
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .map((s) => {
+          const idx = s.indexOf(":");
+          if (idx < 0) return null;
+          const code = s.slice(0, idx);
+          const qty = Number(s.slice(idx + 1)) || 0;
+          if (!code || qty <= 0) return null;
+          return { item_code: code, qty };
+        })
+        .filter((v): v is { item_code: string; qty: number } => v !== null);
+      if (entries.length > 0) {
+        setValue("items.0.item_code", entries[0]!.item_code);
+        setValue("items.0.qty", entries[0]!.qty);
+        if (entries.length > 1) {
+          // Append the rest
+          for (let i = 1; i < entries.length; i++) {
+            append({
+              item_code: entries[i]!.item_code,
+              item_name: "",
+              qty: entries[i]!.qty,
+              uom: "Nos",
+              warehouse: prefillWarehouse ?? "",
+              schedule_date: "",
+            });
+          }
+        }
+        if (prefillWarehouse) {
+          setValue("items.0.warehouse", prefillWarehouse);
+          setValue("set_warehouse", prefillWarehouse);
+        }
+        return;
+      }
+    }
+    // Single-row prefill (existing)
+    if (!prefillItemCode) return;
+    setValue("items.0.item_code", prefillItemCode);
+    if (prefillItemName) setValue("items.0.item_name", prefillItemName);
+    if (prefillQty) setValue("items.0.qty", Number(prefillQty));
+    if (prefillWarehouse) {
+      setValue("items.0.warehouse", prefillWarehouse);
+      setValue("set_warehouse", prefillWarehouse);
+    }
+  }, [
+    prefillShortfall,
+    prefillItemCode,
+    prefillItemName,
+    prefillQty,
+    prefillWarehouse,
+    setValue,
+    append,
+  ]);
+
   const watchedAll = useWatch({ control });
   const watchedItems = watchedAll?.items ?? [];
   const watchedType = watchedAll?.material_request_type ?? "";
@@ -119,10 +192,12 @@ export default function NewMaterialRequestPage() {
     const values = { ...getValues(), ...watchedAll, items: watchedAll?.items ?? [] };
     return {
       step1: validateWizardStep("Material Request", "step1", values),
-      step2: { valid: true, errors: {} },
+      step2: validateWizardStep("Material Request", "step2", { items: watchedAll?.items ?? [] }),
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [watchedAll]);
+
+  const { resolution, showError, dismiss } = useGuidedError();
 
   const createMutation = useFrappeCreate<
     { data: { name: string } },
@@ -135,6 +210,7 @@ export default function NewMaterialRequestPage() {
         router.push(`/stock/material-request/${encodeURIComponent(name)}`);
       }
     },
+    onError: (err) => showError(resolveFrappeError(err, { doctype: "Material Request" })),
   });
 
   const handleSubmit = useCallback(() => {
@@ -149,6 +225,7 @@ export default function NewMaterialRequestPage() {
     }
     createMutation.mutate({
       ...values,
+      company: getActiveCompany(),
       items: items.map((it) => ({
         ...it,
         schedule_date: it.schedule_date || values.schedule_date,
@@ -166,7 +243,7 @@ export default function NewMaterialRequestPage() {
       />
 
       <Form {...form}>
-        <InfoCard className="max-w-3xl">
+        <InfoCard>
           <FlowWizard
             steps={WIZARD_STEPS}
             formData={watchedAll as unknown as Record<string, unknown>}
@@ -174,6 +251,7 @@ export default function NewMaterialRequestPage() {
             isSubmitting={createMutation.isPending}
             onFormDataChange={() => {}}
             onStepChange={setStep}
+            onTriedNextChange={setTriedNextSteps}
             onSubmit={handleSubmit}
             onCancel={() => router.back()}
             submitLabel="Create Material Request"
@@ -195,15 +273,6 @@ export default function NewMaterialRequestPage() {
                         required
                         options={REQUEST_TYPE_OPTIONS}
                       />
-                      <FormFrappeSelect
-                        control={control}
-                        name="company"
-                        label="Company"
-                        required
-                        doctype="Company"
-                        labelField="company_name"
-                        placeholder="Select company..."
-                      />
                       <FormDatePicker
                         control={control}
                         name="transaction_date"
@@ -219,7 +288,8 @@ export default function NewMaterialRequestPage() {
                     </div>
 
                     <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                      <FormFrappeSelect
+                      {/* 2L 1A: Quick-Add enabled Warehouse */}
+                      <QuickAddField
                         control={control}
                         name="set_warehouse"
                         label={isTransfer ? "Target Warehouse" : "Default Warehouse"}
@@ -228,7 +298,8 @@ export default function NewMaterialRequestPage() {
                         filters={[["is_group", "=", 0]]}
                       />
                       {isTransfer && (
-                        <FormFrappeSelect
+                        /* 2L 1A: Quick-Add enabled Source Warehouse */
+                        <QuickAddField
                           control={control}
                           name="set_from_warehouse"
                           label="Source Warehouse"
@@ -280,7 +351,8 @@ export default function NewMaterialRequestPage() {
                           {fields.map((field, index) => (
                             <tr key={field.id} className="group">
                               <td className="px-3 py-2 align-top">
-                                <FormFrappeSelect
+                                {/* 2L 1A: Quick-Add enabled per-row Item */}
+                                <QuickAddField
                                   control={control}
                                   name={`items.${index}.item_code`}
                                   doctype="Item"
@@ -326,7 +398,8 @@ export default function NewMaterialRequestPage() {
                                 />
                               </td>
                               <td className="px-3 py-2 align-top">
-                                <FormFrappeSelect
+                                {/* 2L 1A: Quick-Add enabled per-row UOM */}
+                                <QuickAddField
                                   control={control}
                                   name={`items.${index}.uom`}
                                   doctype="UOM"
@@ -335,7 +408,8 @@ export default function NewMaterialRequestPage() {
                                 />
                               </td>
                               <td className="px-3 py-2 align-top">
-                                <FormFrappeSelect
+                                {/* 2L 1A: Quick-Add enabled per-row Warehouse */}
+                                <QuickAddField
                                   control={control}
                                   name={`items.${index}.warehouse`}
                                   doctype="Warehouse"
@@ -443,6 +517,7 @@ export default function NewMaterialRequestPage() {
           />
         </InfoCard>
       </Form>
+      <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
     </div>
   );
 }

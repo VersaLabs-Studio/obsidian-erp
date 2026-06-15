@@ -127,7 +127,7 @@ function CreateCostCenterForm() {
             </div>
           </InfoCard>
 
-          <div className="flex justify-end gap-3 sticky bottom-6 z-10 glass-card p-4 rounded-[2rem] shadow-2xl">
+          <div className="flex justify-end gap-3 sticky bottom-6 z-10 glass-card p-4 rounded-2xl shadow-xl">
             <Button
               type="button"
               variant="outline"

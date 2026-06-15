@@ -1,30 +1,36 @@
 // app/accounting/settings/price-list/page.tsx
-// Obsidian ERP v4.0 - Price Lists List Page
+// Obsidian ERP v4.0 - Price Lists List Page (Table Format)
 "use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import {
   Plus,
-  ListOrdered,
   MoreVertical,
   Pencil,
   Trash2,
   BadgeDollarSign,
   ShoppingCart,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
-// v3.0 Imports
 import { useFrappeList, useFrappeDelete } from "@/hooks/generic";
 import {
   PageHeader,
   EmptyState,
   LoadingState,
   ConfirmDialog,
+  StatusBadge,
 } from "@/components/smart";
+import { InfoCard, DataPoint } from "@/components/ui/info-card";
 
 interface PriceList {
   name: string;
@@ -37,7 +43,9 @@ interface PriceList {
 
 export default function PriceListsPage() {
   const router = useRouter();
+  const prefersReducedMotion = useReducedMotion();
   const [search, setSearch] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<PriceList | null>(null);
 
   const {
     data: priceLists,
@@ -49,26 +57,29 @@ export default function PriceListsPage() {
     limit: 100,
   });
 
+  const deleteMutation = useFrappeDelete("Price List", {
+    onSuccess: () => setDeleteTarget(null),
+  });
+
   if (isLoading) return <LoadingState type="list" count={5} />;
 
   if (error)
     return (
-      <div className="flex items-center justify-center p-20 bg-destructive/5 rounded-[2rem] border border-destructive/10">
+      <div className="flex items-center justify-center p-20 bg-destructive/5 rounded-2xl border border-destructive/10">
         <p className="text-destructive font-bold text-lg">
           Failed to load price lists
         </p>
       </div>
     );
 
-  const filtered = priceLists?.filter((pl) =>
-    pl.price_list_name.toLowerCase().includes(search.toLowerCase())
-  );
+  const allLists = priceLists ?? [];
+  const enabledCount = allLists.filter((pl) => pl.enabled === 1).length;
 
   return (
     <div className="space-y-8">
       <PageHeader
         title="Price Lists"
-        subtitle={`${filtered?.length || 0} active price lists`}
+        subtitle={`${allLists.length} total · ${enabledCount} enabled`}
         showSearch
         searchValue={search}
         onSearchChange={setSearch}
@@ -77,80 +88,212 @@ export default function PriceListsPage() {
         actions={
           <Button
             className="rounded-full px-6 shadow-xl shadow-primary/20"
-            onClick={() => alert("Create Price List coming soon")}
+            onClick={() =>
+              router.push("/accounting/settings/price-list/new")
+            }
           >
             <Plus className="h-4 w-4 mr-2" /> New Price List
           </Button>
         }
       />
 
-      {!filtered || filtered.length === 0 ? (
+      {/* KPI Bar */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <InfoCard variant="gradient">
+          <DataPoint
+            label="Total"
+            value={<span className="text-2xl font-black">{allLists.length}</span>}
+          />
+        </InfoCard>
+        <InfoCard variant="gradient">
+          <DataPoint
+            label="Enabled"
+            value={
+              <span className="text-2xl font-black text-emerald-600">
+                {enabledCount}
+              </span>
+            }
+          />
+        </InfoCard>
+        <InfoCard variant="gradient">
+          <DataPoint
+            label="Selling"
+            value={
+              <span className="text-2xl font-black text-primary">
+                {allLists.filter((pl) => pl.selling === 1).length}
+              </span>
+            }
+          />
+        </InfoCard>
+        <InfoCard variant="gradient">
+          <DataPoint
+            label="Buying"
+            value={
+              <span className="text-2xl font-black text-blue-600">
+                {allLists.filter((pl) => pl.buying === 1).length}
+              </span>
+            }
+          />
+        </InfoCard>
+      </div>
+
+      {!allLists || allLists.length === 0 ? (
         <EmptyState
           title="No price lists found"
           description="Create price lists to manage buying and selling rates."
+          action={
+            <Button
+              onClick={() =>
+                router.push("/accounting/settings/price-list/new")
+              }
+            >
+              <Plus className="h-4 w-4 mr-2" /> Create Price List
+            </Button>
+          }
         />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filtered.map((pl, i) => (
+        <div className="bg-card rounded-2xl border border-border/40 overflow-hidden">
+          {/* Table Header */}
+          <div className="grid grid-cols-12 gap-4 px-6 py-3 border-b border-border/40 bg-muted/30">
+            <div className="col-span-4 text-xs font-bold text-muted-foreground uppercase tracking-wider">
+              Name
+            </div>
+            <div className="col-span-2 text-xs font-bold text-muted-foreground uppercase tracking-wider">
+              Currency
+            </div>
+            <div className="col-span-2 text-xs font-bold text-muted-foreground uppercase tracking-wider text-center">
+              Type
+            </div>
+            <div className="col-span-2 text-xs font-bold text-muted-foreground uppercase tracking-wider text-center">
+              Status
+            </div>
+            <div className="col-span-2 text-xs font-bold text-muted-foreground uppercase tracking-wider text-right">
+              Actions
+            </div>
+          </div>
+
+          {/* Table Rows */}
+          {allLists.map((pl, i) => (
             <motion.div
               key={pl.name}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05 }}
-              className="group relative bg-card p-8 rounded-[2.5rem] border border-transparent hover:border-primary/10 transition-all duration-300 shadow-sm hover:shadow-xl"
+              initial={prefersReducedMotion ? {} : { opacity: 0, y: 8 }}
+              animate={prefersReducedMotion ? {} : { opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.03, duration: 0.2 }}
+              className="group grid grid-cols-12 gap-4 px-6 py-4 border-b border-border/20 last:border-b-0 hover:bg-muted/30 transition-colors cursor-pointer"
+              onClick={() =>
+                router.push(
+                  `/accounting/settings/price-list/${encodeURIComponent(pl.name)}`
+                )
+              }
             >
-              <div className="flex items-center justify-between mb-6">
-                <div className="h-14 w-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+              {/* Name */}
+              <div className="col-span-4 flex items-center gap-3 min-w-0">
+                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0 group-hover:scale-110 transition-transform">
                   {pl.selling ? (
-                    <BadgeDollarSign className="h-7 w-7" />
+                    <BadgeDollarSign className="h-5 w-5" />
                   ) : (
-                    <ShoppingCart className="h-7 w-7" />
+                    <ShoppingCart className="h-5 w-5" />
                   )}
                 </div>
-                <div className="flex gap-2">
-                  {pl.selling === 1 && (
-                    <Badge variant="default" className="rounded-full">
-                      Selling
-                    </Badge>
-                  )}
-                  {pl.buying === 1 && (
-                    <Badge variant="secondary" className="rounded-full">
-                      Buying
-                    </Badge>
-                  )}
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-foreground truncate">
+                    {pl.price_list_name}
+                  </p>
+                  <p className="text-xs text-muted-foreground font-mono truncate">
+                    {pl.name}
+                  </p>
                 </div>
               </div>
 
-              <div>
-                <h3 className="text-xl font-bold mb-1">{pl.price_list_name}</h3>
-                <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+              {/* Currency */}
+              <div className="col-span-2 flex items-center">
+                <span className="text-sm font-medium text-muted-foreground uppercase">
                   {pl.currency}
-                </p>
+                </span>
               </div>
 
-              <div className="mt-6 pt-6 border-t border-border/50 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div
-                    className={`h-2 w-2 rounded-full ${
-                      pl.enabled ? "bg-green-500" : "bg-red-500"
-                    }`}
-                  />
-                  <span className="text-[10px] uppercase font-bold text-muted-foreground/60">
-                    {pl.enabled ? "Enabled" : "Disabled"}
-                  </span>
-                </div>
-                <Button
-                  variant="ghost"
+              {/* Type Badges */}
+              <div className="col-span-2 flex items-center justify-center gap-2">
+                {pl.selling === 1 && (
+                  <StatusBadge status="active" label="Selling" size="sm" />
+                )}
+                {pl.buying === 1 && (
+                  <StatusBadge status="info" label="Buying" size="sm" />
+                )}
+                {pl.selling !== 1 && pl.buying !== 1 && (
+                  <span className="text-xs text-muted-foreground">—</span>
+                )}
+              </div>
+
+              {/* Enabled Status */}
+              <div className="col-span-2 flex items-center justify-center">
+                <StatusBadge
+                  status={pl.enabled === 1 ? "enabled" : "disabled"}
                   size="sm"
-                  className="rounded-full h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
+                />
+              </div>
+
+              {/* Actions */}
+              <div
+                className="col-span-2 flex items-center justify-end"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="rounded-full h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    className="rounded-2xl border-none shadow-xl bg-popover/95 backdrop-blur-xl p-2 min-w-[160px]"
+                  >
+                    <DropdownMenuItem
+                      className="rounded-xl px-4 py-3 cursor-pointer"
+                      onClick={() =>
+                        router.push(
+                          `/accounting/settings/price-list/${encodeURIComponent(
+                            pl.name
+                          )}/edit`
+                        )
+                      }
+                    >
+                      <Pencil className="h-4 w-4 mr-3" /> Edit
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      className="rounded-xl px-4 py-3 text-destructive focus:text-destructive cursor-pointer"
+                      disabled={pl.enabled === 1}
+                      onClick={() => setDeleteTarget(pl)}
+                    >
+                      <Trash2 className="h-4 w-4 mr-3" /> Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </motion.div>
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(v) => !v && setDeleteTarget(null)}
+        title="Delete Price List"
+        description={`Are you sure you want to delete "${deleteTarget?.price_list_name}"? This action cannot be undone.`}
+        confirmText="Delete"
+        variant="destructive"
+        onConfirm={async () => {
+          if (deleteTarget) {
+            await deleteMutation.mutateAsync(deleteTarget.name);
+          }
+        }}
+        loading={deleteMutation.isPending}
+      />
     </div>
   );
 }

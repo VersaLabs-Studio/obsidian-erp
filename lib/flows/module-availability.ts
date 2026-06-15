@@ -17,6 +17,22 @@ export const BUILT_MODULES = new Set<string>([
   "Payment Entry",
   "Purchase Invoice",
   "Journal Entry",
+  // Phase 3 — Buying module
+  "Request for Quotation",
+  "Supplier Quotation",
+  "Purchase Order",
+  // Phase 4 — Manufacturing module
+  "BOM",
+  "Work Order",
+  // Phase 2f — CRM head
+  "Lead",
+  "Opportunity",
+  // Phase 2g — CRM pivot (Lead → Customer)
+  "Customer",
+  // Phase 2h — Purchase Receipt (procure-to-pay close)
+  "Purchase Receipt",
+  // Phase 2i — Stock Visibility
+  "Stock Reconciliation",
 ]);
 
 export function isModuleBuilt(doctype: string): boolean {

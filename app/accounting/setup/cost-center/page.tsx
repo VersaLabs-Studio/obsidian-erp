@@ -137,7 +137,7 @@ export default function CostCenterPage() {
         </div>
       </div>
 
-      <div className="bg-card rounded-[2.5rem] border border-border/50 shadow-2xl overflow-hidden min-h-[600px]">
+      <div className="bg-card rounded-2xl border border-border/50 shadow-xl overflow-hidden min-h-[600px]">
         <div className="p-8 border-b border-border bg-gradient-to-r from-rose-500/5 to-transparent flex items-center justify-between">
           <h3 className="font-black text-sm uppercase tracking-[0.2em] flex items-center gap-3">
             <BarChart4 className="h-4 w-4 text-rose-600" /> Operational

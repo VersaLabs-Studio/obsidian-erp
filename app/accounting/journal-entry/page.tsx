@@ -352,7 +352,7 @@ export default function JournalEntryListPage() {
           }
         />
       ) : filteredEntries.length === 0 ? (
-        <div className="text-center py-20 border-2 border-dashed border-border rounded-[2.5rem]">
+        <div className="text-center py-20 border border-dashed border-border/40 rounded-2xl">
           <BookOpen className="h-12 w-12 mx-auto mb-4 opacity-20" />
           <p className="text-muted-foreground font-medium">
             No entries match this filter

@@ -1,5 +1,7 @@
-// @ts-nocheck
 "use client";
+
+// app/manufacturing/bom/page.tsx
+// BOM List — KPICard + StatusBadge + card grid. OKLCH semantic tokens only.
 
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
@@ -10,194 +12,196 @@ import {
   MoreVertical,
   Pencil,
   Trash2,
-  Search,
-  Layers as BOMIcon,
+  Eye,
+  Layers,
+  Star,
+  Cog,
   Package,
   DollarSign,
-  CheckCircle2,
-  XCircle,
-  Copy,
-  Star,
+  ArrowRight,
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useFrappeList, useFrappeDelete } from "@/hooks/generic";
 import {
   PageHeader,
-  LoadingState,
   EmptyState,
+  LoadingState,
   ConfirmDialog,
 } from "@/components/smart";
+import { KPICard } from "@/components/dashboard/KPICard";
+import { StatusBadge } from "@/components/smart/status-badge";
 import type { Bom } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
 
-function formatCurrency(amount: number | undefined, currency = "ETB"): string {
-  if (amount === undefined || amount === null) return "—";
-  return `${currency} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+const ETB = new Intl.NumberFormat("en-ET", {
+  style: "currency",
+  currency: "ETB",
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
+});
+
+function getDisplayStatus(bom: Bom): string {
+  if (bom.docstatus === 0) return "Draft";
+  if (bom.docstatus === 2) return "Cancelled";
+  return "Active";
 }
 
-function BOMCard({ bom, index, onView, onEdit, onDelete, onDuplicate }) {
-  const isActive = bom.is_active === 1;
+function BomCard({
+  bom,
+  index,
+  onView,
+  onEdit,
+  onDelete,
+}: {
+  bom: Bom;
+  index: number;
+  onView: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const displayStatus = getDisplayStatus(bom);
+  const isDraft = bom.docstatus === 0;
   const isDefault = bom.is_default === 1;
-  const isSubmitted = bom.docstatus === 1;
 
   return (
     <div
       className={cn(
-        "group relative bg-card rounded-2xl border border-border/50 p-6",
-        "hover:shadow-xl hover:shadow-primary/5 hover:border-primary/20",
-        "transition-all duration-300 cursor-pointer animate-in fade-in slide-in-from-bottom-4",
-        !isActive && "opacity-60",
+        "group relative bg-card rounded-2xl border border-border/50",
+        "hover:border-primary/20 hover:shadow-xl hover:shadow-primary/5",
+        "transition-all duration-300 cursor-pointer overflow-hidden",
+        "animate-slide-up",
       )}
-      style={{ animationDelay: `${index * 50}ms` }}
+      style={{ animationDelay: `${index * 40}ms` }}
       onClick={onView}
     >
-      {/* Default Badge */}
-      {isDefault && (
-        <div className="absolute -top-3 -right-3 h-10 w-10 bg-gradient-to-br from-amber-400 to-amber-600 rounded-full flex items-center justify-center shadow-lg z-10 border-4 border-background">
-          <Star className="h-5 w-5 text-white fill-white" />
-        </div>
-      )}
-
-      {/* Header */}
-      <div className="flex items-start justify-between mb-5">
-        <div className="flex items-center gap-4 min-w-0">
-          <div className="h-14 w-14 shrink-0 rounded-2xl bg-primary/10 text-primary flex items-center justify-center group-hover:bg-primary group-hover:text-primary-foreground transition-all duration-500">
-            <BOMIcon className="h-7 w-7" />
-          </div>
-          <div className="min-w-0">
-            <h3 className="font-bold text-lg text-foreground group-hover:text-primary transition-colors line-clamp-1">
-              {bom.item_name || bom.item}
-            </h3>
-            <div className="flex items-center gap-2 mt-1">
-              <Badge
-                variant="outline"
-                className="text-[10px] font-mono px-1.5 py-0 h-4 border-primary/20 bg-primary/5"
-              >
+      <div className="p-5">
+        <div className="flex items-start justify-between mb-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-lg text-foreground tracking-tight">
                 {bom.name}
-              </Badge>
-              <span className="text-[10px] text-muted-foreground truncate">
-                • {bom.company}
-              </span>
+              </h3>
+              {isDefault && (
+                <Star className="h-4 w-4 text-amber-500 fill-amber-500" />
+              )}
+              <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+            </div>
+            <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+              <Package className="h-3 w-3" />
+              {bom.item_name || bom.item}
+            </p>
+          </div>
+          <StatusBadge status={displayStatus} size="sm" />
+        </div>
+
+        <div className="grid grid-cols-3 gap-4 mb-4">
+          <div className="space-y-1">
+            <p className="text-[10px] font-bold uppercase text-muted-foreground/70 tracking-wider">
+              Quantity
+            </p>
+            <p className="text-sm font-medium text-foreground">
+              {bom.quantity} {bom.uom || "Nos"}
+            </p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-[10px] font-bold uppercase text-muted-foreground/70 tracking-wider">
+              Materials
+            </p>
+            <p className="text-sm font-medium text-foreground">
+              {Array.isArray(bom.items) ? bom.items.length : 0} items
+            </p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-[10px] font-bold uppercase text-muted-foreground/70 tracking-wider">
+              Operations
+            </p>
+            <p className="text-sm font-medium text-foreground flex items-center gap-1">
+              {bom.with_operations === 1 ? (
+                <>
+                  <Cog className="h-3 w-3 text-muted-foreground" />
+                  {Array.isArray(bom.operations) ? bom.operations.length : 0}
+                </>
+              ) : (
+                "—"
+              )}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between pt-4 border-t border-border/50">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
+              <DollarSign className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase text-muted-foreground/70 tracking-wider">
+                Total Cost
+              </p>
+              <p className="text-lg font-bold text-foreground tracking-tight">
+                {ETB.format(bom.total_cost ?? 0)}
+              </p>
             </div>
           </div>
-        </div>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9 rounded-full hover:bg-secondary/80 translate-x-2 -translate-y-2"
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 rounded-xl opacity-0 group-hover:opacity-100 transition-all"
+              >
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              className="rounded-xl border-border/50 shadow-xl bg-popover/95 backdrop-blur-xl p-1.5 min-w-[160px]"
             >
-              <MoreVertical className="h-5 w-5 text-muted-foreground" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="end"
-            className="w-48 rounded-2xl p-2 shadow-2xl border-primary/10"
-          >
-            <DropdownMenuItem
-              disabled={isSubmitted}
-              className="rounded-xl focus:bg-primary/5"
-              onClick={(e) => {
-                e.stopPropagation();
-                onEdit();
-              }}
-            >
-              <Pencil className="h-4 w-4 mr-3 text-blue-500" /> Edit Recipe
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className="rounded-xl focus:bg-primary/5"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDuplicate();
-              }}
-            >
-              <Copy className="h-4 w-4 mr-3 text-emerald-500" /> Duplicate BOM
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              disabled={isSubmitted}
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete();
-              }}
-              className="text-destructive rounded-xl focus:bg-destructive/5"
-            >
-              <Trash2 className="h-4 w-4 mr-3" /> Delete BOM
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
-      {/* Stats Summary */}
-      <div className="grid grid-cols-2 gap-3 mb-6">
-        <div className="bg-secondary/20 rounded-xl p-3 border border-border/30">
-          <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold mb-1">
-            Batch Size
-          </p>
-          <p className="font-semibold text-sm">
-            {bom.quantity}{" "}
-            <span className="text-muted-foreground font-normal">
-              {bom.uom || "Nos"}
-            </span>
-          </p>
-        </div>
-        <div className="bg-secondary/20 rounded-xl p-3 border border-border/30 text-right">
-          <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold mb-1">
-            Status
-          </p>
-          {isSubmitted ? (
-            <span className="text-emerald-600 dark:text-emerald-400 text-xs font-bold inline-flex items-center gap-1">
-              <CheckCircle2 className="h-3.5 w-3.5" /> Submitted
-            </span>
-          ) : (
-            <span className="text-amber-600 dark:text-amber-400 text-xs font-bold">
-              Draft
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Cost Breakdown */}
-      <div className="space-y-4">
-        <div className="flex justify-between items-center text-xs">
-          <span className="text-muted-foreground inline-flex items-center gap-1.5 font-medium">
-            <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />{" "}
-            Materials
-          </span>
-          <span className="font-bold">
-            {formatCurrency(bom.raw_material_cost, bom.currency)}
-          </span>
-        </div>
-
-        {bom.with_operations === 1 && (
-          <div className="flex justify-between items-center text-xs">
-            <span className="text-muted-foreground inline-flex items-center gap-1.5 font-medium">
-              <div className="h-1.5 w-1.5 rounded-full bg-blue-500" />{" "}
-              Operations
-            </span>
-            <span className="font-bold">
-              {formatCurrency(bom.operating_cost, bom.currency)}
-            </span>
-          </div>
-        )}
-
-        <div className="pt-4 border-t border-border/50">
-          <div className="flex justify-between items-baseline">
-            <span className="text-xs font-bold uppercase tracking-tighter text-muted-foreground">
-              Total Cost
-            </span>
-            <span className="text-xl font-black text-primary drop-shadow-sm font-mono tracking-tight">
-              {formatCurrency(bom.total_cost, bom.currency)}
-            </span>
-          </div>
+              <DropdownMenuItem
+                className="rounded-lg cursor-pointer"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onView();
+                }}
+              >
+                <Eye className="h-4 w-4 mr-2" />
+                View Details
+              </DropdownMenuItem>
+              {isDraft && (
+                <DropdownMenuItem
+                  className="rounded-lg cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEdit();
+                  }}
+                >
+                  <Pencil className="h-4 w-4 mr-2" />
+                  Edit
+                </DropdownMenuItem>
+              )}
+              {isDraft && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="rounded-lg cursor-pointer text-destructive focus:text-destructive"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete();
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
     </div>
@@ -206,154 +210,172 @@ function BOMCard({ bom, index, onView, onEdit, onDelete, onDuplicate }) {
 
 export default function BOMListPage() {
   const router = useRouter();
-  const [searchTerm, setSearchTerm] = useState("");
-  const [filterStatus, setFilterStatus] = useState<
-    "all" | "active" | "default"
-  >("all");
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [deleteTarget, setDeleteTarget] = useState<Bom | null>(null);
 
   const {
     data: boms,
     isLoading,
     refetch,
-    error,
   } = useFrappeList<Bom>("BOM", {
     fields: [
       "name",
       "item",
       "item_name",
-      "company",
       "quantity",
       "uom",
+      "currency",
+      "total_cost",
+      "raw_material_cost",
+      "operating_cost",
       "is_active",
       "is_default",
       "with_operations",
-      "raw_material_cost",
-      "operating_cost",
-      "total_cost",
-      "currency",
       "docstatus",
+      "company",
     ],
     orderBy: { field: "creation", order: "desc" },
+    search,
     limit: 100,
   });
 
   const deleteMutation = useFrappeDelete("BOM", {
     onSuccess: () => {
-      toast.success("BOM deleted successfully");
-      refetch();
       setDeleteTarget(null);
-    },
-    onError: (err) => {
-      toast.error("Failed to delete BOM", { description: err.message });
+      refetch();
     },
   });
 
-  const filtered = useMemo(() => {
+  const filteredBoms = useMemo(() => {
     if (!boms) return [];
-    return boms.filter((b) => {
-      const matchesSearch =
-        !searchTerm ||
-        b.item?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        b.item_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        b.name?.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesFilter =
-        filterStatus === "all" ||
-        (filterStatus === "active" && b.is_active === 1) ||
-        (filterStatus === "default" && b.is_default === 1);
-      return matchesSearch && matchesFilter;
-    });
-  }, [boms, searchTerm, filterStatus]);
+    if (statusFilter === "all") return boms;
+    return boms.filter((b) => getDisplayStatus(b) === statusFilter);
+  }, [boms, statusFilter]);
 
-  if (isLoading) return <LoadingState message="Loading BOMs..." />;
+  const statusCounts = useMemo(() => {
+    if (!boms) return {} as Record<string, number>;
+    return boms.reduce(
+      (acc, b) => {
+        const s = getDisplayStatus(b);
+        acc[s] = (acc[s] || 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
+  }, [boms]);
+
+  const kpis = useMemo(() => {
+    if (!boms) return { total: 0, active: 0, defaultBom: 0 };
+    return {
+      total: boms.length,
+      active: boms.filter((b) => b.is_active === 1 && b.docstatus === 1).length,
+      defaultBom: boms.filter((b) => b.is_default === 1).length,
+    };
+  }, [boms]);
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    await deleteMutation.mutateAsync(deleteTarget.name);
+  };
+
+  if (isLoading) return <LoadingState type="cards" count={6} />;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Bill of Materials"
-        subtitle="Define recipes for manufacturing products"
-        primaryAction={{
-          label: "Create BOM",
-          onClick: () => router.push("/manufacturing/bom/new"),
-          icon: <Plus className="h-4 w-4" />,
-        }}
+        subtitle={`${filteredBoms.length} BOM${filteredBoms.length !== 1 ? "s" : ""}`}
+        showSearch
+        searchValue={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search by item, BOM ID..."
+        actions={
+          <Button
+            className="rounded-full shadow-lg shadow-primary/20"
+            onClick={() => router.push("/manufacturing/bom/new")}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            New BOM
+          </Button>
+        }
       />
 
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-4 items-center">
-        <div className="relative flex-1 w-full max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search by item name or code..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10 rounded-full bg-card border-border/50 focus:bg-card transition-all"
-          />
-        </div>
-        <div className="flex gap-2 bg-secondary/20 p-1 rounded-full border border-border/50">
-          {["all", "active", "default"].map((f) => (
-            <Button
-              key={f}
-              variant={filterStatus === f ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setFilterStatus(f as typeof filterStatus)}
-              className={cn(
-                "rounded-full capitalize px-4",
-                filterStatus === f
-                  ? "shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {f}
-            </Button>
-          ))}
-        </div>
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+        <KPICard title="Total BOMs" value={kpis.total} icon={Layers} isLoading={isLoading} />
+        <KPICard title="Active" value={kpis.active} icon={Package} variant="success" isLoading={isLoading} />
+        <KPICard title="Default" value={kpis.defaultBom} icon={Star} variant="default" isLoading={isLoading} />
       </div>
 
-      {/* Grid */}
-      {filtered.length === 0 ? (
+      <div className="flex gap-2 flex-wrap">
+        {[
+          { key: "all", label: "All", count: boms?.length || 0 },
+          { key: "Draft", label: "Draft", count: statusCounts.Draft || 0 },
+          { key: "Active", label: "Active", count: statusCounts.Active || 0 },
+          { key: "Cancelled", label: "Cancelled", count: statusCounts.Cancelled || 0 },
+        ].map((s) => (
+          <Button
+            key={s.key}
+            variant={statusFilter === s.key ? "default" : "outline"}
+            size="sm"
+            className={cn(
+              "rounded-full gap-2 transition-all",
+              statusFilter === s.key
+                ? "shadow-lg shadow-primary/20"
+                : "hover:bg-secondary/80",
+            )}
+            onClick={() => setStatusFilter(s.key)}
+          >
+            {s.label}
+            <Badge
+              variant="secondary"
+              className={cn(
+                "h-5 min-w-[20px] px-1.5 text-[10px] font-bold",
+                statusFilter === s.key
+                  ? "bg-primary-foreground/20 text-primary-foreground"
+                  : "bg-secondary",
+              )}
+            >
+              {s.count}
+            </Badge>
+          </Button>
+        ))}
+      </div>
+
+      {!boms || boms.length === 0 ? (
         <EmptyState
-          icon={BOMIcon}
-          title={searchTerm ? "No results found" : "No BOMs found"}
-          description={
-            searchTerm
-              ? "Try a different search term"
-              : "Create your first recipe to get started"
+          title="No BOMs found"
+          description="Create your first Bill of Materials to define production recipes"
+          action={
+            <Button
+              onClick={() => router.push("/manufacturing/bom/new")}
+              className="rounded-full"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Create BOM
+            </Button>
           }
         />
+      ) : filteredBoms.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">
+          <Layers className="h-12 w-12 mx-auto mb-4 opacity-30" />
+          <p className="font-medium">No BOMs match this filter</p>
+          <p className="text-sm mt-1">Try selecting a different status</p>
+        </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {filtered.map((bom, idx) => (
-            <BOMCard
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {filteredBoms.map((bom, index) => (
+            <BomCard
               key={bom.name}
               bom={bom}
-              index={idx}
+              index={index}
               onView={() =>
-                router.push(
-                  `/manufacturing/bom/${encodeURIComponent(bom.name)}`,
-                )
+                router.push(`/manufacturing/bom/${encodeURIComponent(bom.name)}`)
               }
-              onEdit={() => {
-                if (bom.docstatus === 1) {
-                  toast.error("Submitted BOMs cannot be edited");
-                  return;
-                }
-                router.push(
-                  `/manufacturing/bom/${encodeURIComponent(bom.name)}/edit`,
-                );
-              }}
-              onDelete={() => {
-                if (bom.docstatus === 1) {
-                  toast.error("Submitted BOMs cannot be deleted");
-                  return;
-                }
-                setDeleteTarget(bom.name);
-              }}
-              onDuplicate={() =>
-                router.push(
-                  `/manufacturing/bom/new?copy=${encodeURIComponent(bom.name)}`,
-                )
+              onEdit={() =>
+                router.push(`/manufacturing/bom/${encodeURIComponent(bom.name)}/edit`)
               }
+              onDelete={() => setDeleteTarget(bom)}
             />
           ))}
         </div>
@@ -361,11 +383,12 @@ export default function BOMListPage() {
 
       <ConfirmDialog
         open={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget)}
-        title="Delete Bill of Materials"
-        description="Are you sure you want to delete this BOM? This action cannot be undone."
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title="Delete BOM"
+        description={`Are you sure you want to delete "${deleteTarget?.name}"? This action cannot be undone.`}
+        confirmText="Delete"
         variant="destructive"
+        onConfirm={handleDeleteConfirm}
         loading={deleteMutation.isPending}
       />
     </div>

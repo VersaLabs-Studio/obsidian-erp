@@ -6,10 +6,12 @@
 // Upstream: Purchase Order / Purchase Receipt. Downstream: Payment Entry.
 // OKLCH semantic tokens only. StatusBadge for status display.
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
+import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
+import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
 import {
   Edit3,
   Send,
@@ -28,10 +30,10 @@ import { FlowRail } from "@/components/flows/FlowRail";
 import { isModuleBuilt } from "@/lib/flows/module-availability";
 import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
-import { resolveFlowChain } from "@/lib/flows/flow-chain-resolver";
-import { useFrappeDoc, useFrappeList, useFrappeUpdate } from "@/hooks/generic";
+import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
+import { useFlowChain } from "@/hooks/flows/use-flow-chain";
+import { useFrappeDoc, useFrappeUpdate } from "@/hooks/generic";
 import type { PurchaseInvoice } from "@/types/doctype-types";
-import type { FlowStageStatus } from "@/types/flow-types";
 
 const ETB = new Intl.NumberFormat("en-ET", {
   style: "currency",
@@ -55,6 +57,7 @@ export default function PurchaseInvoiceDetailPage() {
 
   const [confirmSubmit, setConfirmSubmit] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const { resolution, showError, dismiss } = useGuidedError();
 
   const {
     data: invoice,
@@ -63,66 +66,19 @@ export default function PurchaseInvoiceDetailPage() {
   } = useFrappeDoc<PurchaseInvoice>("Purchase Invoice", name);
 
   // -- Upstream resolution: Purchase Orders linked to this PI ----------------
-  const { data: purchaseOrders, isLoading: loadingPO } = useFrappeList<{
-    name: string;
-  }>(
-    "Purchase Order",
-    {
-      filters: [["name", "in", []]], // Placeholder — real resolution via items
-      fields: ["name"],
-      limit: 5,
-    },
-    { enabled: false },
-  );
-
-  // -- Downstream resolution: Payment Entries linked to this PI --------------
-  const { data: paymentEntries, isLoading: loadingPE } = useFrappeList<{
-    name: string;
-  }>(
-    "Payment Entry",
-    {
-      filters: [["reference_name", "=", name]],
-      fields: ["name"],
-      limit: 5,
-    },
-    { enabled: !isLoading && !!invoice },
-  );
-
-  // -- Build the flow chain from real linked documents -----------------------
-  const chain = useMemo(() => {
-    const items = (invoice?.items ?? []) as Array<{
-      purchase_order?: string;
-      purchase_receipt?: string;
-    }>;
-    const poName = items.find((i) => i?.purchase_order)?.purchase_order;
-    const peName = paymentEntries?.[0]?.name;
-
-    const stageStatuses: Record<
-      string,
-      {
-        status: FlowStageStatus;
-        documentName?: string;
-        documentUrl?: string;
-      }
-    > = {};
-
-    if (poName) {
-      stageStatuses["Purchase Order"] = {
-        status: "completed",
-        documentName: poName,
-        documentUrl: `/buying/purchase-order/${encodeURIComponent(poName)}`,
-      };
-    }
-    if (peName) {
-      stageStatuses["Payment Entry"] = {
-        status: "completed",
-        documentName: peName,
-        documentUrl: `/accounting/payment-entry/${encodeURIComponent(peName)}`,
-      };
-    }
-
-    return resolveFlowChain("Purchase Invoice", name, stageStatuses);
-  }, [invoice, paymentEntries, name]);
+  // 2O Part 6.2 — removed the dead `useFrappeList("Purchase Order", ...)`
+  // with `enabled: false` and the unused `purchaseOrders` / `loadingPO`
+  // destructures. The flow-chain resolution via `useFlowChain` handles
+  // PI → PO via the link map (`Purchase Order` ↔ `Purchase Invoice`
+  // child table on `Purchase Invoice Item.purchase_order`).
+  // (PI → Payment Entry is the only remaining direct downstream query
+  // — it's the live one, and `useFlowChain` reads the same canonical
+  // back-link pattern as the rail.)
+  // 2N Part 1.1: unified flow resolution. The Payment stage is resolved here
+  // via the flow-link-map — the old per-page `useFrappeList("Payment Entry",
+  // { filters: [["reference_name", …]] })` filtered the PARENT by a CHILD
+  // field → 417 "Field not permitted in query: reference_name", and was unused.
+  const { result: chain, isLoading: chainLoading } = useFlowChain("Purchase Invoice", name);
 
   // -- Status actions --------------------------------------------------------
   const updateMutation = useFrappeUpdate<PurchaseInvoice>(
@@ -132,6 +88,7 @@ export default function PurchaseInvoiceDetailPage() {
 
   const isDraft = invoice?.docstatus === 0;
   const isSubmitted = invoice?.docstatus === 1;
+  const isUnpaid = isSubmitted && (invoice?.outstanding_amount ?? 0) > 0;
 
   const handleSubmit = () => {
     setConfirmSubmit(false);
@@ -139,8 +96,8 @@ export default function PurchaseInvoiceDetailPage() {
       { name, data: { docstatus: 1 } },
       {
         onSuccess: () => toast.success(`Purchase Invoice ${name} submitted`),
-        onError: (e) =>
-          toast.error("Submit failed", { description: e.message }),
+        onError: (err) =>
+          showError(resolveFrappeError(err, { doctype: "Purchase Invoice" })),
       },
     );
   };
@@ -152,8 +109,8 @@ export default function PurchaseInvoiceDetailPage() {
       {
         onSuccess: () =>
           toast.success(`Purchase Invoice ${name} cancelled`),
-        onError: (e) =>
-          toast.error("Cancel failed", { description: e.message }),
+        onError: (err) =>
+          showError(resolveFrappeError(err, { doctype: "Purchase Invoice" })),
       },
     );
   };
@@ -187,7 +144,7 @@ export default function PurchaseInvoiceDetailPage() {
       isPrimary: true,
       isLoading: updateMutation.isPending,
     },
-    isSubmitted && {
+    isUnpaid && {
       label: "Create Payment Entry",
       description: "Pay this vendor bill",
       onClick: () =>
@@ -249,7 +206,7 @@ export default function PurchaseInvoiceDetailPage() {
 
       {/* Flow Tracker */}
       <InfoCard title="Procure-to-Pay Flow" className="overflow-hidden">
-        <FlowRail result={chain} isLoading={loadingPE} />
+        <FlowRail result={chain} currentDocName={name} sourceDoctype="Purchase Invoice" isLoading={chainLoading} />
       </InfoCard>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -341,6 +298,8 @@ export default function PurchaseInvoiceDetailPage() {
 
         {/* Sidebar */}
         <div className="space-y-6">
+          {/* 2L 1B: Universal cross-flow actions menu */}
+          <CrossFlowActionsMenu doctype="Purchase Invoice" name={name} />
           <WhatsNext actions={whatsNext} />
           <ActivityTimeline
             items={[
@@ -385,6 +344,7 @@ export default function PurchaseInvoiceDetailPage() {
         variant="destructive"
         onConfirm={handleCancel}
       />
+      <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
     </div>
   );
 }

@@ -117,8 +117,8 @@ export default function PaymentTermsListPage() {
               <div
                 key={template.name}
                 className={cn(
-                  "group relative bg-card rounded-[2.5rem] border border-border/50 p-8",
-                  "hover:shadow-2xl hover:border-indigo-500/20 transition-all duration-500",
+                  "group relative bg-card rounded-2xl border border-border/50 p-8",
+                  "hover:shadow-xl hover:border-indigo-500/20 transition-all duration-500",
                   "cursor-pointer shadow-sm overflow-hidden",
                 )}
                 onClick={() =>

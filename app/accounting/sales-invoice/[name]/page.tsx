@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
+import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
+import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
 import {
   Edit3,
   Send,
@@ -21,10 +23,10 @@ import { FlowRail } from "@/components/flows/FlowRail";
 import { isModuleBuilt } from "@/lib/flows/module-availability";
 import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
-import { resolveFlowChain } from "@/lib/flows/flow-chain-resolver";
-import { useFrappeDoc, useFrappeList, useFrappeUpdate } from "@/hooks/generic";
+import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
+import { useFlowChain } from "@/hooks/flows/use-flow-chain";
+import { useFrappeDoc, useFrappeUpdate } from "@/hooks/generic";
 import type { SalesInvoice } from "@/types/doctype-types";
-import type { FlowStageStatus } from "@/types/flow-types";
 import { cn } from "@/lib/utils";
 
 const ETB = new Intl.NumberFormat("en-ET", {
@@ -49,62 +51,18 @@ export default function SalesInvoiceDetailPage() {
 
   const [confirmSubmit, setConfirmSubmit] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const { resolution, showError, dismiss } = useGuidedError();
 
   const { data: invoice, isLoading, error } = useFrappeDoc<SalesInvoice>(
     "Sales Invoice",
     name,
   );
 
-  const { data: paymentEntries, isLoading: loadingPE } = useFrappeList<{
-    name: string;
-  }>(
-    "Payment Entry Reference",
-    {
-      filters: [["reference_name", "=", name]],
-      fields: ["parent"],
-      limit: 5,
-    },
-    { enabled: !isLoading && !!invoice },
-  );
-
-  const chain = useMemo(() => {
-    const items = (invoice?.items ?? []) as Array<{
-      delivery_note?: string;
-      sales_order?: string;
-    }>;
-    const dnName = items.find((i) => i?.delivery_note)?.delivery_note;
-    const soName = items.find((i) => i?.sales_order)?.sales_order;
-    const peName = paymentEntries?.[0]?.name;
-
-    const stageStatuses: Record<
-      string,
-      { status: FlowStageStatus; documentName?: string; documentUrl?: string }
-    > = {};
-
-    if (soName) {
-      stageStatuses["Sales Order"] = {
-        status: "completed",
-        documentName: soName,
-        documentUrl: `/sales/sales-order/${encodeURIComponent(soName)}`,
-      };
-    }
-    if (dnName) {
-      stageStatuses["Delivery Note"] = {
-        status: "completed",
-        documentName: dnName,
-        documentUrl: `/stock/delivery-note/${encodeURIComponent(dnName)}`,
-      };
-    }
-    if (peName) {
-      stageStatuses["Payment Entry"] = {
-        status: "completed",
-        documentName: peName,
-        documentUrl: `/accounting/payment-entry/${encodeURIComponent(peName)}`,
-      };
-    }
-
-    return resolveFlowChain("Sales Invoice", name, stageStatuses);
-  }, [invoice, paymentEntries, name]);
+  // 2N Part 1.1: unified flow resolution. The Payment stage (and whether a
+  // PE already exists) is resolved here via the flow-link-map — we no longer
+  // run a per-page back-link query (the old `useFrappeList("Payment Entry
+  // Reference", …)` hit the routeless child doctype → 404 and was unused).
+  const { result: chain, isLoading: chainLoading } = useFlowChain("Sales Invoice", name);
 
   const updateMutation = useFrappeUpdate<SalesInvoice>("Sales Invoice", {
     showToast: false,
@@ -120,8 +78,8 @@ export default function SalesInvoiceDetailPage() {
       { name, data: { docstatus: 1 } },
       {
         onSuccess: () => toast.success(`Sales Invoice ${name} submitted`),
-        onError: (e) =>
-          toast.error("Submit failed", { description: e.message }),
+        onError: (err) =>
+          showError(resolveFrappeError(err, { doctype: "Sales Invoice" })),
       },
     );
   };
@@ -132,8 +90,8 @@ export default function SalesInvoiceDetailPage() {
       { name, data: { docstatus: 2 } },
       {
         onSuccess: () => toast.success(`Sales Invoice ${name} cancelled`),
-        onError: (e) =>
-          toast.error("Cancel failed", { description: e.message }),
+        onError: (err) =>
+          showError(resolveFrappeError(err, { doctype: "Sales Invoice" })),
       },
     );
   };
@@ -167,7 +125,7 @@ export default function SalesInvoiceDetailPage() {
       isPrimary: true,
       isLoading: updateMutation.isPending,
     },
-    isSubmitted && {
+    isUnpaid && {
       label: "Create Payment Entry",
       description: "Record a payment against this invoice",
       onClick: () =>
@@ -176,13 +134,6 @@ export default function SalesInvoiceDetailPage() {
         ),
       disabled: !isModuleBuilt("Payment Entry"),
       disabledReason: "Payment Entry module not yet available",
-    },
-    isSubmitted && {
-      label: "Print Invoice",
-      description: "Generate a printable PDF",
-      onClick: () => {},
-      disabled: true,
-      disabledReason: "Coming soon",
     },
   ].filter(Boolean) as React.ComponentProps<typeof WhatsNext>["actions"];
 
@@ -349,8 +300,11 @@ export default function SalesInvoiceDetailPage() {
           </InfoCard>
 
           <InfoCard title="Flow Rail">
-            <FlowRail result={chain} isLoading={loadingPE} />
+            <FlowRail result={chain} currentDocName={name} sourceDoctype="Sales Invoice" isLoading={chainLoading} />
           </InfoCard>
+
+          {/* 2L 1B: Universal cross-flow actions menu */}
+          <CrossFlowActionsMenu doctype="Sales Invoice" name={name} />
 
           <WhatsNext actions={whatsNext} />
 
@@ -396,6 +350,7 @@ export default function SalesInvoiceDetailPage() {
         variant="destructive"
         onConfirm={handleCancel}
       />
+      <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
     </div>
   );
 }

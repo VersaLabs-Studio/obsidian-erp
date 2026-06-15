@@ -1,409 +1,455 @@
-// @ts-nocheck
 "use client";
 
-import { use } from "react";
-import { useRouter } from "next/navigation";
-import { useFrappeDoc, useFrappeUpdate } from "@/hooks/generic";
-import { PageHeader, LoadingState, EmptyState } from "@/components/smart";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import {
-  ShoppingCart,
-  Building2,
-  Truck,
-  Calendar,
-  CreditCard,
-  Clock,
-  CheckCircle2,
-  XCircle,
-  Eye,
-  ArrowUpRight,
-  TrendingUp,
-  FileSearch,
-  Plus,
-  Pencil,
-  Trash2,
-  Printer,
-  ChevronRight,
-  Info,
-  Layers,
-  MoreVertical,
-  Briefcase,
-  History,
-  FileCheck,
-} from "lucide-react";
-import { format, parseISO } from "date-fns";
-import { cn } from "@/lib/utils";
+// app/buying/purchase-order/[name]/page.tsx
+// Obsidian ERP v4.0 — Purchase Order Detail (V4 Golden Template)
+// Action-oriented: FlowRail, WhatsNext, ActivityTimeline, ConfirmDialog.
+// OKLCH tokens only. No @ts-nocheck, no any.
+
+import { useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { toast } from "sonner";
+import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
+import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  Send,
+  Ban,
+  Printer,
+  Loader2,
+  Package,
+  CheckCircle2,
+  PackageCheck,
+} from "lucide-react";
 
-const STATUS_CONFIG = {
-  Draft: { color: "text-slate-600", bg: "bg-slate-100", icon: Clock },
-  "To Receive and Bill": {
-    color: "text-amber-600",
-    bg: "bg-amber-100",
-    icon: Truck,
-  },
-  "To Receive": { color: "text-blue-600", bg: "bg-blue-100", icon: Truck },
-  "To Bill": {
-    color: "text-indigo-600",
-    bg: "bg-indigo-100",
-    icon: CreditCard,
-  },
-  Completed: {
-    color: "text-emerald-600",
-    bg: "bg-emerald-100",
-    icon: CheckCircle2,
-  },
-  Cancelled: { color: "text-gray-400", bg: "bg-gray-100", icon: XCircle },
-};
+import { PageHeader, LoadingState, ConfirmDialog } from "@/components/smart";
+import { StatusBadge } from "@/components/smart/status-badge";
+import { InfoCard, DataPoint } from "@/components/ui/info-card";
+import { Button } from "@/components/ui/button";
+import { FlowRail } from "@/components/flows/FlowRail";
+import { isModuleBuilt } from "@/lib/flows/module-availability";
+import { WhatsNext } from "@/components/smart/WhatsNext";
+import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
+import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
+import { ReceiveMaterialsModal } from "@/components/stock/ReceiveMaterialsModal";
+import { useFlowChain } from "@/hooks/flows/use-flow-chain";
+import { useFrappeDoc, useFrappeUpdate } from "@/hooks/generic";
+import type { PurchaseOrder } from "@/types/doctype-types";
 
-export default function PurchaseOrderDetailPage({
-  params,
-}: {
-  params: Promise<{ name: string }>;
-}) {
-  const { name } = use(params);
+const ETB = new Intl.NumberFormat("en-ET", {
+  style: "currency",
+  currency: "ETB",
+});
+
+interface POItem {
+  item_code: string;
+  item_name?: string;
+  description?: string;
+  qty: number;
+  rate: number;
+  amount: number;
+  uom?: string;
+  received_qty?: number;
+  warehouse?: string;
+}
+
+export default function PurchaseOrderDetailPage() {
+  const params = useParams();
   const router = useRouter();
+  const name = decodeURIComponent(String(params.name));
+
+  const [confirmSubmit, setConfirmSubmit] = useState(false);
+  const [confirmApprove, setConfirmApprove] = useState(false);
+  const [confirmReject, setConfirmReject] = useState(false);
+  // 2P Part 2.6 — ReceiveMaterialsModal trigger
+  const [openReceive, setOpenReceive] = useState(false);
+  const { resolution, showError, dismiss } = useGuidedError();
 
   const {
     data: order,
     isLoading,
+    error,
     refetch,
-  } = useFrappeDoc("Purchase Order", name);
-  const updateMutation = useFrappeUpdate("Purchase Order");
+  } = useFrappeDoc<PurchaseOrder>("Purchase Order", name);
 
-  const handleStatusUpdate = async (newDocStatus: number) => {
-    try {
-      await updateMutation.mutateAsync({
-        name,
-        data: { docstatus: newDocStatus },
-      });
-      toast.success(
-        newDocStatus === 1 ? "Order authorized" : "Order cancelled",
-      );
-      refetch();
-    } catch (err) {
-      toast.error(err.message);
-    }
+  // 2N Part 1.1: unified flow resolution.
+  const { result: chain, isLoading: chainLoading } = useFlowChain("Purchase Order", name);
+
+  // -- Status actions ---------------------------------------------------------
+  const updateMutation = useFrappeUpdate<PurchaseOrder>("Purchase Order", {
+    showToast: false,
+  });
+
+  const isDraft = order?.docstatus === 0;
+  const isPendingApproval = order?.status === "Pending Approval";
+  const isApproved = order?.status === "Approved";
+  const isSubmitted = order?.docstatus === 1;
+
+  const handleSubmit = () => {
+    setConfirmSubmit(false);
+    updateMutation.mutate(
+      { name, data: { docstatus: 1, status: "To Receive and Bill" } },
+      {
+        onSuccess: () => {
+          toast.success(`Purchase Order ${name} submitted`);
+          refetch();
+        },
+        onError: (err) =>
+          showError(resolveFrappeError(err, { doctype: "Purchase Order" })),
+      },
+    );
   };
 
-  if (isLoading) return <LoadingState type="detail" />;
-  if (!order) return <EmptyState title="Purchase Order not found" />;
+  const handleApprove = () => {
+    setConfirmApprove(false);
+    updateMutation.mutate(
+      { name, data: { status: "Approved" } },
+      {
+        onSuccess: () => {
+          toast.success(`Purchase Order ${name} approved`);
+          refetch();
+        },
+        onError: (err) =>
+          showError(resolveFrappeError(err, { doctype: "Purchase Order" })),
+      },
+    );
+  };
 
-  const statusConfig = STATUS_CONFIG[order.status] || STATUS_CONFIG.Draft;
-  const StatusIcon = statusConfig.icon;
-  const isDraft = order.docstatus === 0;
-  const isAuthorized = order.docstatus === 1;
+  const handleReject = () => {
+    setConfirmReject(false);
+    updateMutation.mutate(
+      { name, data: { status: "Rejected" } },
+      {
+        onSuccess: () => {
+          toast.success(`Purchase Order ${name} rejected`);
+          refetch();
+        },
+        onError: (err) =>
+          showError(resolveFrappeError(err, { doctype: "Purchase Order" })),
+      },
+    );
+  };
+
+  if (isLoading) return <LoadingState />;
+  if (error || !order) {
+    return (
+      <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6">
+        <p className="text-sm text-destructive">
+          {error?.message ?? "Purchase Order not found."}
+        </p>
+        <Button
+          variant="ghost"
+          className="mt-3"
+          onClick={() => router.push("/buying/purchase-order")}
+        >
+          Back to Purchase Orders
+        </Button>
+      </div>
+    );
+  }
+
+  const items = (order.items ?? []) as unknown as POItem[];
+  const grandTotal = order.grand_total ?? order.total ?? 0;
+
+  const whatsNext = [
+    isDraft && {
+      label: "Submit for Approval",
+      description: "Send this order for approval",
+      onClick: () => setConfirmSubmit(true),
+      isPrimary: true,
+      isLoading: updateMutation.isPending,
+    },
+    isPendingApproval && {
+      label: "Approve Order",
+      description: "Approve this purchase order",
+      onClick: () => setConfirmApprove(true),
+      isPrimary: true,
+      isLoading: updateMutation.isPending,
+    },
+    isPendingApproval && {
+      label: "Reject Order",
+      description: "Reject this purchase order",
+      onClick: () => setConfirmReject(true),
+      isLoading: updateMutation.isPending,
+    },
+    isSubmitted && {
+      label: "Receive items",
+      description: "Record goods receipt from supplier",
+      // 2P Part 2.6 — open the ReceiveMaterialsModal (one-click) instead
+      // of deep-linking to the PR wizard. The modal does the create+submit
+      // and routes to the new PR detail on success.
+      onClick: () => setOpenReceive(true),
+      isPrimary: true,
+      disabled: !isModuleBuilt("Purchase Receipt"),
+      disabledReason: "Module not available",
+    },
+  ].filter(Boolean) as React.ComponentProps<typeof WhatsNext>["actions"];
+
+  const activityItems = [
+    {
+      id: "created",
+      type: "created" as const,
+      description: "Purchase Order created",
+      user: order.owner,
+      timestamp: order.creation ?? new Date().toISOString(),
+    },
+    ...(isSubmitted
+      ? [
+          {
+            id: "submitted",
+            type: "submitted" as const,
+            description: "Order submitted",
+            user: order.modified_by,
+            timestamp: order.modified ?? new Date().toISOString(),
+          },
+        ]
+      : []),
+    ...(isApproved
+      ? [
+          {
+            id: "approved",
+            type: "status_change" as const,
+            description: "Order approved",
+            user: order.modified_by,
+            timestamp: order.modified ?? new Date().toISOString(),
+          },
+        ]
+      : []),
+  ];
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div className="space-y-6 pb-12">
       <PageHeader
         title={order.name}
-        subtitle={order.supplier_name}
+        subtitle={order.supplier_name || order.supplier}
         backHref="/buying/purchase-order"
-        tags={
-          <Badge
-            className={cn(
-              "rounded-full px-4 py-1.5 text-[10px] font-black tracking-widest uppercase border-0 shadow-sm",
-              statusConfig.bg,
-              statusConfig.color,
+        actions={
+          <div className="flex items-center gap-2">
+            {isDraft && (
+              <Button
+                size="sm"
+                onClick={() => setConfirmSubmit(true)}
+                disabled={updateMutation.isPending}
+              >
+                {updateMutation.isPending ? (
+                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="mr-1.5 h-4 w-4" />
+                )}
+                Submit
+              </Button>
             )}
-          >
-            <StatusIcon className="h-3 w-3 mr-2" />
-            {order.status}
-          </Badge>
-        }
-      >
-        <div className="flex gap-3">
-          <Button variant="outline" className="rounded-2xl h-11 px-6 font-bold">
-            <Printer className="h-4 w-4 mr-2" /> Print PO
-          </Button>
-          {isDraft && (
-            <>
+            {isPendingApproval && (
+              <>
+                <Button
+                  size="sm"
+                  onClick={() => setConfirmApprove(true)}
+                  disabled={updateMutation.isPending}
+                >
+                  {updateMutation.isPending ? (
+                    <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="mr-1.5 h-4 w-4" />
+                  )}
+                  Approve
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => setConfirmReject(true)}
+                >
+                  <Ban className="mr-1.5 h-4 w-4" /> Reject
+                </Button>
+              </>
+            )}
+            {isSubmitted && (
               <Button
                 variant="outline"
-                className="rounded-2xl h-11 px-6 font-bold"
-                onClick={() =>
-                  router.push(
-                    `/buying/purchase-order/${encodeURIComponent(name)}/edit`,
-                  )
-                }
+                size="sm"
+                className="text-destructive hover:text-destructive"
+                onClick={() => {
+                  updateMutation.mutate(
+                    { name, data: { docstatus: 2, status: "Cancelled" } },
+                    {
+                      onSuccess: () => {
+                        toast.success(`Purchase Order ${name} cancelled`);
+                        refetch();
+                      },
+                      onError: (err) =>
+                        showError(resolveFrappeError(err, { doctype: "Purchase Order" })),
+                    },
+                  );
+                }}
               >
-                Edit
+                <Ban className="mr-1.5 h-4 w-4" /> Cancel
               </Button>
-              <Button
-                className="rounded-2xl h-11 px-8 font-black uppercase tracking-widest text-[11px] shadow-lg shadow-primary/20"
-                onClick={() => handleStatusUpdate(1)}
-              >
-                Authorize Order
-              </Button>
-            </>
-          )}
-          {isAuthorized && order.per_received < 100 && (
-            <Button
-              className="rounded-2xl h-11 px-8 font-black uppercase tracking-widest text-[11px] shadow-lg shadow-blue-500/20 bg-blue-600 hover:bg-blue-700"
-              onClick={() =>
-                router.push(
-                  `/stock/stock-entry/new?purchase_order=${encodeURIComponent(name)}&purpose=Material Receipt`,
-                )
-              }
-            >
-              <Truck className="h-4 w-4 mr-2" /> Record Receipt
+            )}
+            <Button variant="ghost" size="icon" disabled title="Print (coming soon)">
+              <Printer className="h-4 w-4" />
             </Button>
-          )}
-        </div>
-      </PageHeader>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-8">
-          {/* Timeline Info Card */}
-          <div className="bg-card rounded-[2.5rem] border border-border/50 p-8 shadow-sm">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
-              <div>
-                <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-2 flex items-center gap-2">
-                  <Calendar className="h-3.5 w-3.5" /> Order Placement
-                </p>
-                <p className="font-bold text-sm tracking-tight">
-                  {format(parseISO(order.transaction_date), "MMM d, yyyy")}
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-2 flex items-center gap-2">
-                  <Clock className="h-3.5 w-3.5" /> Expected Arrival
-                </p>
-                <p className="font-bold text-sm tracking-tight text-amber-600">
-                  {format(parseISO(order.schedule_date), "MMM d, yyyy")}
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-2 flex items-center gap-2">
-                  <Building2 className="h-3.5 w-3.5" /> Receipt WH
-                </p>
-                <p className="font-bold text-sm tracking-tight">
-                  {order.set_warehouse?.split(" - ")[0] || "Default"}
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-2 flex items-center gap-2">
-                  <CreditCard className="h-3.5 w-3.5" /> List Price
-                </p>
-                <p className="font-bold text-sm tracking-tight truncate">
-                  {order.buying_price_list || "Standard Buy"}
-                </p>
-              </div>
-            </div>
           </div>
+        }
+      />
 
-          {/* Items Table */}
-          <div className="bg-card rounded-[2.5rem] border border-border/50 overflow-hidden shadow-sm">
-            <div className="p-8 border-b border-border/50 bg-secondary/10 flex justify-between items-center">
-              <h3 className="font-bold text-lg tracking-tight flex items-center gap-2">
-                <ShoppingCart className="h-5 w-5 text-primary" /> Purchase
-                Matrix
-              </h3>
-              <Badge
-                variant="outline"
-                className="rounded-lg h-7 px-3 font-black text-[10px] uppercase"
-              >
-                {order.items?.length || 0} Line Items
-              </Badge>
+      {/* Flow Tracker */}
+      <InfoCard title="Procurement Flow" className="overflow-hidden">
+        <FlowRail result={chain} currentDocName={name} sourceDoctype="Purchase Order" isLoading={chainLoading} />
+      </InfoCard>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+        {/* Center column */}
+        <div className="space-y-6 lg:col-span-8">
+          <InfoCard title="Order Details">
+            <div className="mb-4 flex items-center justify-between">
+              <StatusBadge status={order.status} />
+              <span className="text-2xl font-bold tabular-nums text-primary">
+                {ETB.format(grandTotal)}
+              </span>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="bg-secondary/20 border-b border-border/50">
-                    <th className="p-6 text-[10px] font-black uppercase text-muted-foreground tracking-widest w-1/3">
-                      Item Detail
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+              <DataPoint
+                label="Supplier"
+                value={order.supplier_name || order.supplier}
+              />
+              <DataPoint label="Order Date" value={order.transaction_date} />
+              <DataPoint label="Schedule Date" value={order.schedule_date} />
+              <DataPoint label="Company" value={order.company} />
+              <DataPoint label="Currency" value={order.currency} />
+              <DataPoint
+                label="Receipt Warehouse"
+                value={order.set_warehouse || "—"}
+              />
+            </div>
+          </InfoCard>
+
+          <InfoCard
+            title="Items"
+            icon={<Package className="h-5 w-5 text-primary" />}
+          >
+            <div className="overflow-hidden rounded-xl border border-border/60">
+              <table className="w-full text-sm">
+                <thead className="border-b border-border/60 bg-secondary/20">
+                  <tr className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                    <th className="px-3 py-2.5 text-left font-semibold">
+                      Item
                     </th>
-                    <th className="p-6 text-[10px] font-black uppercase text-muted-foreground tracking-widest text-right">
-                      Quantity
+                    <th className="px-3 py-2.5 text-right font-semibold">
+                      Qty
                     </th>
-                    <th className="p-6 text-[10px] font-black uppercase text-muted-foreground tracking-widest text-right">
-                      Unit Rate
+                    <th className="px-3 py-2.5 text-right font-semibold">
+                      Rate
                     </th>
-                    <th className="p-6 text-[10px] font-black uppercase text-muted-foreground tracking-widest text-right">
-                      Total
+                    <th className="px-3 py-2.5 text-right font-semibold">
+                      Amount
                     </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/50">
-                  {order.items?.map((item, idx) => (
-                    <tr
-                      key={idx}
-                      className="group hover:bg-secondary/10 transition-colors"
-                    >
-                      <td className="p-6">
-                        <p className="font-bold text-sm transition-colors group-hover:text-primary">
-                          {item.item_code}
-                        </p>
-                        <p className="text-[11px] text-muted-foreground font-medium mt-1 truncate max-w-xs">
-                          {item.item_name}
-                        </p>
-                      </td>
-                      <td className="p-6 text-right">
-                        <div className="space-y-1">
-                          <p className="font-black text-sm tabular-nums">
-                            {item.qty}{" "}
-                            <span className="text-[10px] text-muted-foreground">
-                              {item.uom}
-                            </span>
-                          </p>
-                          <div className="flex justify-end gap-1.5 items-center">
-                            <div className="h-1 w-16 bg-secondary rounded-full overflow-hidden">
-                              <div
-                                className="h-full bg-blue-500 rounded-full"
-                                style={{
-                                  width: `${Math.min(((item.received_qty || 0) / item.qty) * 100, 100)}%`,
-                                }}
-                              />
-                            </div>
-                            <span className="text-[9px] font-bold text-muted-foreground">
-                              Rec: {item.received_qty || 0}
-                            </span>
-                          </div>
+                  {items.map((it, i) => (
+                    <tr key={`${it.item_code}-${i}`}>
+                      <td className="px-3 py-2.5">
+                        <div className="font-medium text-foreground">
+                          {it.item_name || it.item_code}
                         </div>
-                      </td>
-                      <td className="p-6 text-right font-bold text-xs tabular-nums text-muted-foreground">
-                        {order.currency}{" "}
-                        {item.rate?.toLocaleString(undefined, {
-                          minimumFractionDigits: 2,
-                        })}
-                      </td>
-                      <td className="p-6 text-right font-black text-sm tabular-nums">
-                        {order.currency}{" "}
-                        {((item.qty || 0) * (item.rate || 0)).toLocaleString(
-                          undefined,
-                          { minimumFractionDigits: 2 },
+                        {it.description && (
+                          <div className="text-xs text-muted-foreground line-clamp-1">
+                            {it.description}
+                          </div>
                         )}
+                      </td>
+                      <td className="px-3 py-2.5 text-right tabular-nums">
+                        {it.qty} {it.uom}
+                      </td>
+                      <td className="px-3 py-2.5 text-right tabular-nums">
+                        {ETB.format(it.rate)}
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-medium tabular-nums">
+                        {ETB.format(it.amount ?? it.qty * it.rate)}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          </div>
-
-          {/* Notes & Terms */}
-          <div className="bg-card rounded-[2.5rem] border border-border/50 p-8 shadow-sm">
-            <h4 className="font-bold text-xs uppercase tracking-widest text-muted-foreground mb-4 flex items-center gap-2">
-              <FileCheck className="h-4 w-4 text-primary" /> Contractual Terms
-            </h4>
-            <p className="text-sm text-foreground/80 leading-relaxed italic whitespace-pre-wrap">
-              {order.terms ||
-                "Standard organizational procurement terms apply. No specific terms recorded for this individual order."}
-            </p>
-          </div>
+          </InfoCard>
         </div>
 
         {/* Sidebar */}
-        <div className="space-y-8">
-          {/* Summary Stats */}
-          <div className="bg-primary shadow-2xl shadow-primary/20 rounded-[3rem] p-10 text-white space-y-8 overflow-hidden relative">
-            <div className="relative z-10 space-y-8">
-              <div className="flex justify-between items-start">
-                <CreditCard className="h-10 w-10 text-white/40" />
-                <div className="text-right">
-                  <p className="text-[10px] font-black text-white/60 uppercase tracking-widest mb-1">
-                    Total Payload
-                  </p>
-                  <p className="text-4xl font-black tabular-nums tracking-tighter">
-                    {order.currency} {order.grand_total?.toLocaleString()}
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-4 pt-8 border-t border-white/10">
-                <div className="flex justify-between text-[11px] font-black uppercase tracking-widest">
-                  <span className="text-white/60">Fulfillment Status</span>
-                  <span>{Math.round(order.per_received || 0)}% Received</span>
-                </div>
-                <div className="h-3 bg-white/10 rounded-full overflow-hidden p-1 shadow-inner">
-                  <div
-                    className="h-full bg-white rounded-full transition-all duration-1000"
-                    style={{
-                      width: `${Math.min(order.per_received || 0, 100)}%`,
-                    }}
-                  />
-                </div>
-                <div className="flex justify-between text-[11px] font-black uppercase tracking-widest">
-                  <span className="text-white/60">Billing Status</span>
-                  <span>{Math.round(order.per_billed || 0)}% Billed</span>
-                </div>
-                <div className="h-3 bg-white/10 rounded-full overflow-hidden p-1 shadow-inner">
-                  <div
-                    className="h-full bg-emerald-400 rounded-full transition-all duration-1000"
-                    style={{
-                      width: `${Math.min(order.per_billed || 0, 100)}%`,
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-            <ShoppingCart className="absolute -bottom-10 -right-10 h-64 w-64 text-white/5 rotate-[-15deg]" />
-          </div>
-
-          {/* References */}
-          <div className="bg-card rounded-[2.5rem] border border-border/50 p-8 shadow-sm space-y-6">
-            <h4 className="font-bold text-xs uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-              <History className="h-4 w-4" /> Traceability
-            </h4>
+        <div className="space-y-6 lg:col-span-4">
+          <InfoCard
+            title="Status"
+            className="bg-gradient-to-br from-primary/5 to-primary/10"
+          >
             <div className="space-y-3">
-              {order.material_request && (
-                <div
-                  className="flex items-center justify-between p-4 rounded-2xl bg-secondary/30 border border-border/50 cursor-pointer active:scale-95 transition-all"
-                  onClick={() =>
-                    router.push(
-                      `/stock/material-request/${encodeURIComponent(order.material_request)}`,
-                    )
-                  }
-                >
-                  <div className="flex items-center gap-3">
-                    <Plus className="h-4 w-4 text-primary" />
-                    <span className="text-xs font-bold truncate max-w-[150px]">
-                      {order.material_request}
-                    </span>
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground/40" />
-                </div>
-              )}
-              {order.project && (
-                <div className="flex items-center justify-between p-4 rounded-2xl bg-secondary/30 border border-border/50">
-                  <div className="flex items-center gap-3">
-                    <Briefcase className="h-4 w-4 text-blue-500" />
-                    <span className="text-xs font-bold truncate max-w-[150px]">
-                      {order.project}
-                    </span>
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground/40" />
-                </div>
-              )}
-              {!order.material_request && !order.project && (
-                <p className="text-[11px] text-muted-foreground font-bold italic px-2">
-                  No linked demand records found.
-                </p>
-              )}
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">
+                  Document Status
+                </span>
+                <StatusBadge status={order.status} />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">
+                  % Received
+                </span>
+                <span className="text-sm font-semibold tabular-nums">
+                  {Math.round(order.per_received ?? 0)}%
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">
+                  % Billed
+                </span>
+                <span className="text-sm font-semibold tabular-nums">
+                  {Math.round(order.per_billed ?? 0)}%
+                </span>
+              </div>
             </div>
-          </div>
+          </InfoCard>
 
-          {/* Procurement Alert */}
-          <div className="p-8 rounded-[2.5rem] bg-indigo-500/5 border border-indigo-500/10 flex gap-4 shadow-sm items-start">
-            <div className="h-10 w-10 rounded-2xl bg-indigo-500/10 flex items-center justify-center shrink-0">
-              <Info className="h-5 w-5 text-indigo-600" />
-            </div>
-            <p className="text-[11px] text-indigo-800 font-medium leading-relaxed">
-              Once authorized, this order will be visible to the warehouse for{" "}
-              <strong>Material Receipt</strong> logs. Partial receipts are
-              tracked via the fulfillment engine.
-            </p>
-          </div>
+          <InfoCard title="Journey">
+            <FlowRail result={chain} currentDocName={name} sourceDoctype="Purchase Order" isLoading={chainLoading} />
+          </InfoCard>
+
+          {/* 2L 1B: Universal cross-flow actions menu */}
+          <CrossFlowActionsMenu doctype="Purchase Order" name={name} />
+
+          <WhatsNext actions={whatsNext} />
+
+          <ActivityTimeline items={activityItems} />
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmSubmit}
+        onOpenChange={setConfirmSubmit}
+        title="Submit this Purchase Order?"
+        description="Submitting will send this order for approval. This cannot be undone without cancelling."
+        confirmText="Submit"
+        onConfirm={handleSubmit}
+      />
+      <ConfirmDialog
+        open={confirmApprove}
+        onOpenChange={setConfirmApprove}
+        title="Approve this Purchase Order?"
+        description="Approving this order will allow it to proceed to receipt and billing."
+        confirmText="Approve"
+        onConfirm={handleApprove}
+      />
+      <ConfirmDialog
+        open={confirmReject}
+        onOpenChange={setConfirmReject}
+        title="Reject this Purchase Order?"
+        description="Rejecting will halt this order. It can be re-submitted later."
+        confirmText="Reject"
+        variant="destructive"
+        onConfirm={handleReject}
+      />
+      <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
+      <ReceiveMaterialsModal
+        open={openReceive}
+        onOpenChange={setOpenReceive}
+        source={{ kind: "po", poName: name }}
+      />
     </div>
   );
 }

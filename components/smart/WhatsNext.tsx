@@ -1,11 +1,15 @@
 // components/smart/WhatsNext.tsx
 // Obsidian ERP v4.0 - Contextual Action Suggestions
+// 2M Part 3D: renders a skeleton that matches the B1 sidebar chrome
+// while `isLoading` is true. Card chrome + SkeletonLine, same language
+// as FlowRailSkeleton / SkeletonDetail.
 
 "use client";
 
 import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { SkeletonLine } from "@/components/ui/skeleton";
 import { ArrowRight, Sparkles } from "lucide-react";
 
 interface WhatsNextAction {
@@ -30,6 +34,8 @@ interface WhatsNextProps {
   actions: WhatsNextAction[];
   /** Additional CSS classes */
   className?: string;
+  /** 2M Part 3D: while true, render the loading skeleton instead of the actions. */
+  isLoading?: boolean;
 }
 
 /**
@@ -45,8 +51,34 @@ interface WhatsNextProps {
  * />
  * ```
  */
-export function WhatsNext({ actions, className }: WhatsNextProps) {
+export function WhatsNext({ actions, className, isLoading = false }: WhatsNextProps) {
   const prefersReducedMotion = useReducedMotion();
+
+  // 2M Part 3D: skeleton matches the B1 sidebar chrome and the action row
+  // count. Render a 2-3 row skeleton by default (most callsites pass 1-2
+  // actions), with the title + icon row to match the header.
+  if (isLoading) {
+    return (
+      <div
+        className={cn(
+          "bg-card rounded-2xl shadow-sm shadow-black/5 p-6 border border-border/40",
+          className,
+        )}
+        aria-busy="true"
+        data-testid="whatsnext-skeleton"
+      >
+        <div className="flex items-center gap-2 mb-4">
+          <SkeletonLine className="h-4 w-4 rounded" />
+          <SkeletonLine className="h-4 w-24" />
+        </div>
+        <div className="space-y-2">
+          <SkeletonLine className="h-11 w-full rounded-xl" />
+          <SkeletonLine className="h-11 w-full rounded-xl" />
+          <SkeletonLine className="h-11 w-3/4 rounded-xl" />
+        </div>
+      </div>
+    );
+  }
 
   if (actions.length === 0) return null;
 
@@ -56,11 +88,11 @@ export function WhatsNext({ actions, className }: WhatsNextProps) {
       animate={prefersReducedMotion ? {} : { opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
       className={cn(
-        "rounded-xl border bg-card p-4",
+        "bg-card rounded-2xl shadow-sm shadow-black/5 p-6 border border-border/40",
         className
       )}
     >
-      <div className="flex items-center gap-2 mb-3">
+      <div className="flex items-center gap-2 mb-4">
         <Sparkles className="h-4 w-4 text-primary" />
         <h4 className="text-sm font-semibold text-foreground">What&apos;s Next?</h4>
       </div>
@@ -73,7 +105,7 @@ export function WhatsNext({ actions, className }: WhatsNextProps) {
               key={action.label}
               variant={action.isPrimary ? "default" : "ghost"}
               size="sm"
-              className="w-full justify-between"
+              className="w-full justify-between h-auto py-3"
               onClick={action.onClick}
               disabled={isDisabled}
             >

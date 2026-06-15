@@ -6,10 +6,12 @@
 // Real flow-chain resolution (no stub): upstream Quotation via prevdoc_docname,
 // downstream Work Orders via the sales_order header link. OKLCH tokens only.
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
+import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
+import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
 import {
   Edit3,
   Send,
@@ -24,13 +26,18 @@ import { StatusBadge } from "@/components/smart/status-badge";
 import { InfoCard, DataPoint } from "@/components/ui/info-card";
 import { Button } from "@/components/ui/button";
 import { FlowRail } from "@/components/flows/FlowRail";
+import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
 import { isModuleBuilt } from "@/lib/flows/module-availability";
 import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
-import { resolveFlowChain } from "@/lib/flows/flow-chain-resolver";
-import { useFrappeDoc, useFrappeList, useFrappeUpdate } from "@/hooks/generic";
+// 2N Part 1.1: replaced the per-page `stageStatuses` block + `resolveFlowChain`
+// call with the unified `useFlowChain` hook. The hook walks outward through
+// the link map and returns the same shape the rail needs.
+import { useFlowChain } from "@/hooks/flows/use-flow-chain";
+import { getAutoFillMapping, applyAutoFill } from "@/lib/flows/flow-auto-fill";
+import { getActiveCompany } from "@/lib/settings/company";
+import { useFrappeDoc, useFrappeList, useFrappeUpdate, useFrappeCreate } from "@/hooks/generic";
 import type { SalesOrder } from "@/types/doctype-types";
-import type { FlowStageStatus } from "@/types/flow-types";
 
 const ETB = new Intl.NumberFormat("en-ET", { style: "currency", currency: "ETB" });
 
@@ -51,6 +58,9 @@ export default function SalesOrderDetailPage() {
 
   const [confirmSubmit, setConfirmSubmit] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [confirmCreateWO, setConfirmCreateWO] = useState(false);
+  const [woToCreate, setWoToCreate] = useState<Array<{ item_code: string; item_name?: string; qty: number; warehouse?: string }>>([]);
+  const { resolution, showError, dismiss } = useGuidedError();
 
   const { data: order, isLoading, error } = useFrappeDoc<SalesOrder>(
     "Sales Order",
@@ -64,34 +74,36 @@ export default function SalesOrderDetailPage() {
     { enabled: !isLoading && !!order },
   );
 
-  // -- Build the flow chain from real linked documents -----------------------
-  const chain = useMemo(() => {
-    const items = ((order?.items ?? []) as Array<{ prevdoc_docname?: string }>);
-    const quotationName = items.find((i) => i?.prevdoc_docname)?.prevdoc_docname;
-    const woName = workOrders?.[0]?.name;
+  // -- BOM lookup for WO creation (default BOM per production item) ----------
+  const soItemCodes = useMemo(() => {
+    const items = (order?.items ?? []) as Array<{ item_code: string }>;
+    return [...new Set(items.map((i) => i.item_code))];
+  }, [order]);
 
-    const stageStatuses: Record<
-      string,
-      { status: FlowStageStatus; documentName?: string; documentUrl?: string }
-    > = {};
+  const { data: defaultBOMs } = useFrappeList<{ item: string; name: string }>(
+    "BOM",
+    {
+      filters: [
+        ["item", "in", soItemCodes.length > 0 ? soItemCodes : ["__none__"]],
+        ["is_default", "=", 1],
+      ],
+      fields: ["item", "name"],
+      limit: soItemCodes.length || 1,
+    },
+    { enabled: soItemCodes.length > 0 },
+  );
 
-    if (quotationName) {
-      stageStatuses["Quotation"] = {
-        status: "completed",
-        documentName: quotationName,
-        documentUrl: `/sales/quotation/${encodeURIComponent(quotationName)}`,
-      };
-    }
-    if (woName) {
-      stageStatuses["Work Order"] = {
-        status: "completed",
-        documentName: woName,
-        documentUrl: `/manufacturing/work-order/${encodeURIComponent(woName)}`,
-      };
-    }
-
-    return resolveFlowChain("Sales Order", name, stageStatuses);
-  }, [order, workOrders, name]);
+  // 2N Part 1.1: unified flow resolution. The hook walks outward through
+  // the canonical link map (Quotation ← Sales Order via header field
+  // `quotation`; Sales Order → Work Order via header `sales_order`;
+  // Sales Order → Delivery Note via DN Item.against_sales_order, etc.) and
+  // returns the full stageStatuses map. Replaces the per-page block that
+  // only resolved Quotation + Work Order and left the rail "disabled" past
+  // those two stages.
+  const { result: chain, isLoading: chainLoading } = useFlowChain(
+    "Sales Order",
+    name,
+  );
 
   // -- Status actions (real mutations, driven by the status machine) ---------
   const updateMutation = useFrappeUpdate<SalesOrder>("Sales Order", {
@@ -108,8 +120,8 @@ export default function SalesOrderDetailPage() {
       { name, data: { docstatus: 1, status: "To Deliver and Bill" } },
       {
         onSuccess: () => toast.success(`Sales Order ${name} submitted`),
-        onError: (e) =>
-          toast.error("Submit failed", { description: e.message }),
+        onError: (err) =>
+          showError(resolveFrappeError(err, { doctype: "Sales Order" })),
       },
     );
   };
@@ -120,11 +132,121 @@ export default function SalesOrderDetailPage() {
       { name, data: { docstatus: 2, status: "Cancelled" } },
       {
         onSuccess: () => toast.success(`Sales Order ${name} cancelled`),
-        onError: (e) =>
-          toast.error("Cancel failed", { description: e.message }),
+        onError: (err) =>
+          showError(resolveFrappeError(err, { doctype: "Sales Order" })),
       },
     );
   };
+
+  // -- Work Order multi-create (B3 idempotency) --------------------------------
+  const createWOMutation = useFrappeCreate("Work Order", {
+    showToast: false,
+    onSuccess: () => {
+      toast.success(`${woToCreate.length} Work Order(s) created`);
+      setConfirmCreateWO(false);
+    },
+    onError: (err) => showError(resolveFrappeError(err, { doctype: "Work Order" })),
+  });
+
+  const handleCreateWorkOrders = useCallback(() => {
+    if (workOrders && workOrders.length > 0) {
+      toast.info("Work Orders already created", {
+        description: `${workOrders.length} Work Order(s) linked to this Sales Order.`,
+      });
+      return;
+    }
+
+    const soItems = (order?.items ?? []) as Array<{ item_code: string; item_name?: string; qty: number; warehouse?: string }>;
+    if (soItems.length === 0) {
+      toast.error("No items on this Sales Order to create Work Orders for.");
+      return;
+    }
+
+    const woItems = soItems.map((item) => ({
+      item_code: item.item_code,
+      item_name: item.item_name,
+      qty: item.qty,
+      warehouse: item.warehouse,
+    }));
+
+    setWoToCreate(woItems);
+    setConfirmCreateWO(true);
+  }, [order, workOrders]);
+
+  const executeCreateWorkOrders = useCallback(() => {
+    const mapping = getAutoFillMapping("Sales Order", "Work Order");
+    if (!mapping) return;
+
+    const soData = order as unknown as Record<string, unknown>;
+    const bomMap = new Map((defaultBOMs ?? []).map((b) => [b.item, b.name]));
+
+    for (const item of woToCreate) {
+      const bomNo = bomMap.get(item.item_code);
+      if (!bomNo) {
+        showError({
+          code: "LINK_VALIDATION",
+          title: "No default BOM found",
+          explanation: `Item ${item.item_code} has no default Bill of Materials. Create a default BOM for this item before creating Work Orders.`,
+          details: [`Item: ${item.item_code}`],
+          severity: "error",
+          actions: [
+            {
+              label: "Create default BOM",
+              kind: "navigate",
+              variant: "default",
+              run: () => router.push(`/manufacturing/bom/new?item=${encodeURIComponent(item.item_code)}`),
+            },
+            {
+              label: "Dismiss",
+              kind: "dismiss",
+              variant: "ghost",
+              run: () => {},
+            },
+          ],
+        });
+        continue;
+      }
+
+      const header = applyAutoFill(soData, mapping);
+
+      // Resolve fg_warehouse: prefer item warehouse, else SO-level set_warehouse
+      const fgWarehouse = item.warehouse || (soData.set_warehouse as string) || "";
+      if (!fgWarehouse) {
+        showError({
+          code: "MANDATORY_MISSING",
+          title: "No warehouse set",
+          explanation: `Item ${item.item_code} has no finished-goods warehouse. Set a warehouse on the Sales Order line or the order header before creating Work Orders.`,
+          details: [`Item: ${item.item_code}`],
+          severity: "warning",
+          actions: [
+            {
+              label: "Dismiss",
+              kind: "dismiss",
+              variant: "ghost",
+              run: () => {},
+            },
+          ],
+        });
+        continue;
+      }
+
+      const woPayload = {
+        ...header,
+        production_item: item.item_code,
+        item_name: item.item_name,
+        qty: item.qty,
+        fg_warehouse: fgWarehouse,
+        sales_order: name,
+        bom_no: bomNo,
+        company: getActiveCompany(),
+        naming_series: "MFG-WO-.YYYY.-",
+        planned_start_date: (order?.delivery_date as string) || new Date().toISOString().split("T")[0],
+        skip_transfer: 1,
+      };
+
+      createWOMutation.mutate(woPayload);
+    }
+  }, [order, name, woToCreate, defaultBOMs, createWOMutation, showError]);
 
   if (isLoading) return <LoadingState />;
   if (error || !order) {
@@ -153,18 +275,26 @@ export default function SalesOrderDetailPage() {
       isLoading: updateMutation.isPending,
     },
     isSubmitted && {
-      label: "Create Work Order(s)",
-      description: "Phase 2 — production automation",
-      onClick: () => {},
-      disabled: !isModuleBuilt("Work Order"),
-      disabledReason: "Coming in Phase 2",
+      label: workOrders && workOrders.length > 0 ? "View Work Orders" : "Create Work Order(s)",
+      description: workOrders && workOrders.length > 0
+        ? `${workOrders.length} Work Order(s) linked`
+        : "Generate production orders for each line item",
+      onClick: () => {
+        if (workOrders && workOrders.length > 0) {
+          router.push(`/manufacturing/work-order/${encodeURIComponent(workOrders[0].name)}`);
+        } else {
+          handleCreateWorkOrders();
+        }
+      },
+      isPrimary: !(workOrders && workOrders.length > 0),
+      isLoading: createWOMutation.isPending,
     },
     isSubmitted && {
       label: "Create Delivery Note",
       description: "Create fulfillment from this order",
       onClick: () => router.push(`/stock/delivery-note/new?sales_order=${encodeURIComponent(name)}`),
       disabled: !isModuleBuilt("Delivery Note"),
-      disabledReason: "Coming in Phase 2",
+      disabledReason: "Delivery Note module not available",
     },
   ].filter(Boolean) as React.ComponentProps<typeof WhatsNext>["actions"];
 
@@ -214,9 +344,9 @@ export default function SalesOrderDetailPage() {
         }
       />
 
-      {/* Flow Tracker — clickable upstream, resolved downstream */}
+      {/* Flow Tracker — unified resolution (2N Part 1.1) */}
       <InfoCard title="Lead-to-Cash Flow" className="overflow-hidden">
-        <FlowRail result={chain} isLoading={loadingWO} />
+        <FlowRail result={chain} currentDocName={name} sourceDoctype="Sales Order" isLoading={chainLoading} />
       </InfoCard>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -282,6 +412,10 @@ export default function SalesOrderDetailPage() {
 
         {/* Sidebar */}
         <div className="space-y-6">
+          {/* 2L 1B: Universal cross-flow actions menu — adjacents from
+              flow-adjacency.ts. Renders "View X" when a linked record
+              already exists, else "Create X" prefilled. */}
+          <CrossFlowActionsMenu doctype="Sales Order" name={name} />
           <WhatsNext actions={whatsNext} />
           <ActivityTimeline
             items={[
@@ -325,6 +459,16 @@ export default function SalesOrderDetailPage() {
         variant="destructive"
         onConfirm={handleCancel}
       />
+      <ConfirmDialog
+        open={confirmCreateWO}
+        onOpenChange={setConfirmCreateWO}
+        title="Create Work Orders"
+        description={`${woToCreate.length} Work Order(s) will be created for Sales Order ${name}. Each line item becomes a separate Work Order.`}
+        confirmText="Create Work Orders"
+        onConfirm={executeCreateWorkOrders}
+        loading={createWOMutation.isPending}
+      />
+      <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
     </div>
   );
 }

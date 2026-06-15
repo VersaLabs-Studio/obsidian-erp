@@ -10,8 +10,8 @@ import { getApiPath } from "@/lib/doctype-config";
 export interface FrappeListOptions {
   /** Fields to fetch (default: all) */
   fields?: string[];
-  /** Frappe filter format: [field, operator, value] */
-  filters?: [string, string, unknown][];
+  /** Frappe filter format: [field, operator, value] or [doctype, field, operator, value] for child tables */
+  filters?: ([string, string, unknown] | [string, string, string, unknown])[];
   /** Order by field and direction */
   orderBy?: { field: string; order: "asc" | "desc" };
   /** Number of records to fetch */

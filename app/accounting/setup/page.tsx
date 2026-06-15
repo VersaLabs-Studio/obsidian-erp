@@ -13,6 +13,7 @@ import {
   Calculator,
   PieChart,
   Network,
+  Tag,
 } from "lucide-react";
 import { PageHeader } from "@/components/smart";
 import { cn } from "@/lib/utils";
@@ -75,6 +76,15 @@ const SETUP_MODULES = [
     bg: "bg-violet-100 dark:bg-violet-900/40",
     borderColor: "border-violet-200 dark:border-violet-800",
   },
+  {
+    title: "Price Lists",
+    description: "Manage selling/buying price lists and currency rules",
+    href: "/accounting/settings/price-list",
+    icon: Tag,
+    color: "text-cyan-600",
+    bg: "bg-cyan-100 dark:bg-cyan-900/40",
+    borderColor: "border-cyan-200 dark:border-cyan-800",
+  },
 ];
 
 export default function AccountingSetupPage() {
@@ -96,8 +106,8 @@ export default function AccountingSetupPage() {
               key={module.href}
               onClick={() => router.push(module.href)}
               className={cn(
-                "group relative bg-card rounded-[2.5rem] border p-8 cursor-pointer overflow-hidden",
-                "hover:shadow-2xl hover:border-primary/20 transition-all duration-500",
+                "group relative bg-card rounded-2xl border p-8 cursor-pointer overflow-hidden",
+                "hover:shadow-xl hover:border-primary/20 transition-all duration-500",
                 "animate-in fade-in slide-in-from-bottom-4 shadow-sm",
                 module.borderColor,
               )}

@@ -27,9 +27,13 @@ import {
   FormFrappeSelect,
   FormDatePicker,
 } from "@/components/form";
+import { QuickAddField } from "@/components/quick-add/QuickAddField";
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
 import { FlowWizard } from "@/components/flows/FlowWizard";
 import { useFrappeCreate } from "@/hooks/generic";
+import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
+import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
+import { getActiveCompany } from "@/lib/settings/company";
 import { validateWizardStep } from "@/lib/flows/flow-validation";
 import type { StepValidationResult } from "@/lib/flows/flow-validation";
 import type { WizardStep } from "@/types/flow-types";
@@ -78,7 +82,7 @@ const WIZARD_STEPS: WizardStep[] = [
     label: "Supplier & Source",
     description: "Set the supplier and billing details",
     schema: null,
-    fields: ["supplier", "company", "posting_date", "bill_no", "bill_date"],
+    fields: ["supplier", "posting_date", "bill_no", "bill_date"],
     icon: "Truck",
   },
   {
@@ -107,12 +111,12 @@ const ETB = new Intl.NumberFormat("en-ET", {
 export default function NewPurchaseInvoicePage() {
   const router = useRouter();
   const [step, setStep] = useState(0);
+  const [triedNextSteps, setTriedNextSteps] = useState<Set<number>>(new Set());
 
   const form = useForm<PIForm>({
     defaultValues: {
       naming_series: "ACC-PINV-.YYYY.-",
       supplier: "",
-      company: "",
       posting_date: new Date().toISOString().split("T")[0],
       due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
         .toISOString()
@@ -162,6 +166,8 @@ export default function NewPurchaseInvoicePage() {
     [watchedAll],
   );
 
+  const { resolution, showError, dismiss } = useGuidedError();
+
   const createMutation = useFrappeCreate<
     { data: { name: string } },
     Record<string, unknown>
@@ -175,6 +181,7 @@ export default function NewPurchaseInvoicePage() {
         );
       }
     },
+    onError: (err) => showError(resolveFrappeError(err, { doctype: "Purchase Invoice" })),
   });
 
   const handleSubmit = useCallback(() => {
@@ -189,6 +196,7 @@ export default function NewPurchaseInvoicePage() {
     }
     createMutation.mutate({
       ...values,
+      company: getActiveCompany(),
       items: items.map((it) => ({
         ...it,
         amount: (Number(it.qty) || 0) * (Number(it.rate) || 0),
@@ -207,7 +215,7 @@ export default function NewPurchaseInvoicePage() {
       />
 
       <Form {...form}>
-        <InfoCard className="max-w-3xl">
+        <InfoCard>
           <FlowWizard
             steps={WIZARD_STEPS}
             formData={watchedAll as unknown as Record<string, unknown>}
@@ -215,6 +223,7 @@ export default function NewPurchaseInvoicePage() {
             isSubmitting={createMutation.isPending}
             onFormDataChange={() => {}}
             onStepChange={setStep}
+            onTriedNextChange={setTriedNextSteps}
             onSubmit={handleSubmit}
             onCancel={() => router.back()}
             submitLabel="Create Purchase Invoice"
@@ -230,7 +239,7 @@ export default function NewPurchaseInvoicePage() {
                       description="Set the supplier and billing details for this invoice."
                     />
                     <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                      <FormFrappeSelect
+                      <QuickAddField
                         control={control}
                         name="supplier"
                         label="Supplier"
@@ -238,15 +247,6 @@ export default function NewPurchaseInvoicePage() {
                         doctype="Supplier"
                         labelField="supplier_name"
                         placeholder="Search supplier..."
-                      />
-                      <FormFrappeSelect
-                        control={control}
-                        name="company"
-                        label="Company"
-                        required
-                        doctype="Company"
-                        labelField="company_name"
-                        placeholder="Select company..."
                       />
                       <FormDatePicker
                         control={control}
@@ -313,7 +313,7 @@ export default function NewPurchaseInvoicePage() {
                             return (
                               <tr key={field.id} className="group">
                                 <td className="px-3 py-2 align-top">
-                                  <FormFrappeSelect
+                                  <QuickAddField
                                     control={control}
                                     name={`items.${index}.item_code`}
                                     doctype="Item"
@@ -442,6 +442,7 @@ export default function NewPurchaseInvoicePage() {
           />
         </InfoCard>
       </Form>
+      <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
     </div>
   );
 }

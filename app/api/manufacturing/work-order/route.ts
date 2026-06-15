@@ -1,4 +1,10 @@
-// @ts-nocheck
+// app/api/manufacturing/work-order/route.ts
+// Obsidian ERP v4.0 — Work Order list/create API route.
+//
+// 2O Part 5 cleanup: removed `@ts-nocheck` — the route only consumes the
+// typed `createListHandler` / `createCreateHandler` factories, so the
+// suppression wasn't needed.
+
 import { createListHandler, createCreateHandler } from "@/lib/api-factory";
 import { WorkOrderCreateSchema } from "@/lib/schemas/doctype-schemas";
 

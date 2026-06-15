@@ -143,7 +143,7 @@ export default function ChartOfAccountsPage() {
         </div>
       </div>
 
-      <div className="bg-card rounded-[2.5rem] border border-border/50 shadow-2xl overflow-hidden min-h-[600px]">
+      <div className="bg-card rounded-2xl border border-border/50 shadow-xl overflow-hidden min-h-[600px]">
         <div className="p-8 border-b border-border bg-secondary/10 flex items-center justify-between">
           <h3 className="font-black text-sm uppercase tracking-[0.2em] flex items-center gap-3">
             <Wallet className="h-4 w-4 text-primary" /> Accounting Hierarchy

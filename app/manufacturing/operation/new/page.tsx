@@ -1,6 +1,7 @@
 // app/manufacturing/operation/new/page.tsx
 // Obsidian ERP v4.0 - Create Operation Page with Sub-Operations
-// @ts-nocheck
+// 2N Part 4.1: removed @ts-nocheck. The form uses Zod resolver, typed
+// fields, and the standard form components.
 
 "use client";
 
@@ -128,7 +129,6 @@ export default function CreateOperationPage() {
                   label="Operation Name"
                   placeholder="e.g., Printing, Cutting, Binding"
                   required
-                  description="Use a clear, unique action name"
                 />
 
                 <FormFrappeSelect
@@ -137,7 +137,6 @@ export default function CreateOperationPage() {
                   label="Default Workstation"
                   doctype="Workstation"
                   placeholder="Select default machine..."
-                  description="Assigns default rates when used in BOMs"
                 />
               </div>
             </div>
@@ -306,7 +305,7 @@ export default function CreateOperationPage() {
                 name="description"
                 label="Operation Description"
                 placeholder="Describe the step-by-step process for this operation..."
-                rows={4}
+                minHeight="120px"
               />
             </div>
           </div>

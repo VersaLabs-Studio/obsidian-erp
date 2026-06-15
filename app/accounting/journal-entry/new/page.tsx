@@ -28,6 +28,9 @@ import {
 } from "lucide-react";
 import { useFrappeCreate } from "@/hooks/generic";
 import { PageHeader } from "@/components/smart";
+import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
+import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
+import { getActiveCompany } from "@/lib/settings/company";
 import { InfoCard } from "@/components/ui/info-card";
 import { FlowWizard } from "@/components/flows/FlowWizard";
 import { validateWizardStep } from "@/lib/flows/flow-validation";
@@ -54,7 +57,7 @@ const WIZARD_STEPS: WizardStep[] = [
     label: "General Info",
     description: "Set company, voucher type, and posting date",
     schema: null,
-    fields: ["company", "voucher_type", "posting_date"],
+    fields: ["voucher_type", "posting_date"],
     icon: "BookOpen",
   },
   {
@@ -70,6 +73,7 @@ const WIZARD_STEPS: WizardStep[] = [
 export default function CreateJournalEntryPage() {
   const router = useRouter();
   const [step, setStep] = useState(0);
+  const [triedNextSteps, setTriedNextSteps] = useState<Set<number>>(new Set());
 
   const form = useForm<JournalEntryFormData>({
     resolver: zodResolver(JournalEntryCreateSchema),
@@ -77,7 +81,6 @@ export default function CreateJournalEntryPage() {
       naming_series: "ACC-JV-.YYYY.-",
       voucher_type: "Journal Entry",
       posting_date: new Date().toISOString().split("T")[0],
-      company: "",
       accounts: [
         { account: "", debit: 0, credit: 0, party_type: "", party: "" },
         { account: "", debit: 0, credit: 0, party_type: "", party: "" },
@@ -121,6 +124,8 @@ export default function CreateJournalEntryPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [watchedAll]);
 
+  const { resolution, showError, dismiss } = useGuidedError();
+
   const createMutation = useFrappeCreate<{ data: JournalEntry }, any>(
     "Journal Entry",
     {
@@ -128,6 +133,7 @@ export default function CreateJournalEntryPage() {
         router.push(
           `/accounting/journal-entry/${encodeURIComponent(data.data.name)}`,
         ),
+      onError: (err) => showError(resolveFrappeError(err, { doctype: "Journal Entry" })),
     },
   );
 
@@ -137,7 +143,7 @@ export default function CreateJournalEntryPage() {
       return;
     }
     const values = getValues();
-    await createMutation.mutateAsync(values);
+    await createMutation.mutateAsync({ ...values, company: getActiveCompany() });
   }, [isBalanced, getValues, createMutation]);
 
   return (
@@ -149,7 +155,7 @@ export default function CreateJournalEntryPage() {
       />
 
       <Form {...form}>
-        <InfoCard className="max-w-4xl">
+        <InfoCard>
           <FlowWizard
             steps={WIZARD_STEPS}
             formData={watchedAll as unknown as Record<string, unknown>}
@@ -157,6 +163,7 @@ export default function CreateJournalEntryPage() {
             isSubmitting={createMutation.isPending}
             onFormDataChange={() => {}}
             onStepChange={setStep}
+            onTriedNextChange={setTriedNextSteps}
             onSubmit={onSubmit}
             onCancel={() => router.back()}
             submitLabel="Create Entry"
@@ -175,15 +182,7 @@ export default function CreateJournalEntryPage() {
                       </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                      <FormFrappeSelect
-                        control={control}
-                        name="company"
-                        label="Company"
-                        required
-                        doctype="Company"
-                        labelField="company_name"
-                      />
-                      <FormSelect
+                       <FormSelect
                         control={control}
                         name="voucher_type"
                         label="Voucher Type"
@@ -218,7 +217,7 @@ export default function CreateJournalEntryPage() {
                     </div>
                   </div>
 
-                  <div className="rounded-[2.5rem] border border-border bg-card/50 backdrop-blur-sm overflow-hidden shadow-sm">
+                  <div className="rounded-2xl border border-border bg-card/50 backdrop-blur-sm overflow-hidden shadow-sm">
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead className="bg-secondary/20 border-b border-border">
@@ -379,7 +378,7 @@ export default function CreateJournalEntryPage() {
 
                   <div
                     className={cn(
-                      "mt-6 p-6 rounded-[1.5rem] border-2 flex items-center justify-between transition-all",
+                      "mt-6 p-6 rounded-2xl border border-border/40 flex items-center justify-between transition-all",
                       isBalanced
                         ? "bg-success/10 border-success/20 text-success"
                         : "bg-destructive/10 border-destructive/20 text-destructive",
@@ -456,6 +455,7 @@ export default function CreateJournalEntryPage() {
           />
         </InfoCard>
       </Form>
+      <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
     </div>
   );
 }

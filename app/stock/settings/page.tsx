@@ -11,6 +11,7 @@ import {
   Warehouse,
   ShieldCheck,
   MapPin,
+  Tag,
 } from "lucide-react";
 import { PageHeader } from "@/components/smart";
 import { InfoCard } from "@/components/ui/info-card";
@@ -127,6 +128,13 @@ export default function StockSettingsPage() {
               href="/stock/warehouse"
               icon={Warehouse}
               color="bg-emerald-500 shadow-emerald-500/20"
+            />
+            <SetupLink
+              title="Item Price"
+              description="Manage standard selling and buying rates"
+              href="/stock/settings/item-price"
+              icon={Tag}
+              color="bg-violet-500 shadow-violet-500/20"
             />
           </div>
         </div>

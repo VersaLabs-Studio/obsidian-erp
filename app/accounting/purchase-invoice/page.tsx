@@ -363,7 +363,7 @@ export default function PurchaseInvoiceListPage() {
           }
         />
       ) : filteredInvoices.length === 0 ? (
-        <div className="text-center py-20 border-2 border-dashed border-border rounded-[2.5rem]">
+        <div className="text-center py-20 border-2 border-dashed border-border rounded-2xl">
           <FileText className="h-12 w-12 mx-auto mb-4 opacity-20" />
           <p className="text-muted-foreground font-medium">
             No invoices match this filter

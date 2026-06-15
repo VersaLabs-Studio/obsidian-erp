@@ -1,156 +1,229 @@
-// @ts-nocheck
 "use client";
 
+// app/manufacturing/bom/[name]/page.tsx
+// BOM Detail — FlowRail, WhatsNext, ActivityTimeline, ConfirmDialog.
+// OKLCH tokens only. No @ts-nocheck, no any.
+
+import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import Link from "next/link";
+import { toast } from "sonner";
 import {
-  Pencil,
+  Send,
+  Play,
+  Copy,
   Trash2,
-  Layers as BOMIcon,
+  Loader2,
   Package,
+  Layers,
+  Star,
   Cog,
   DollarSign,
-  CheckCircle2,
-  Star,
-  Copy,
-  Play,
-  FileText,
-  Clock,
 } from "lucide-react";
-import {
-  useFrappeDoc,
-  useFrappeDelete,
-  useFrappeUpdate,
-} from "@/hooks/generic";
-import {
-  PageHeader,
-  LoadingState,
-  EmptyState,
-  ConfirmDialog,
-} from "@/components/smart";
+
+import { PageHeader, LoadingState, ConfirmDialog, EmptyState } from "@/components/smart";
+import { StatusBadge } from "@/components/smart/status-badge";
 import { InfoCard, DataPoint } from "@/components/ui/info-card";
-import { useState } from "react";
-import { toast } from "sonner";
-import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { FlowRail } from "@/components/flows/FlowRail";
+import { isModuleBuilt } from "@/lib/flows/module-availability";
+import { WhatsNext } from "@/components/smart/WhatsNext";
+import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
+import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
+import { useFlowChain } from "@/hooks/flows/use-flow-chain";
+import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
+import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
+import { useFrappeDoc, useFrappeUpdate } from "@/hooks/generic";
 import type { Bom } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
 
+const ETB = new Intl.NumberFormat("en-ET", {
+  style: "currency",
+  currency: "ETB",
+});
+
 export default function BOMDetailPage() {
-  const { name } = useParams();
+  const params = useParams();
   const router = useRouter();
-  const bomName = decodeURIComponent(name as string);
+  const name = decodeURIComponent(String(params.name));
+
+  const [confirmSubmit, setConfirmSubmit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
+  const { resolution, showError, dismiss } = useGuidedError();
 
   const {
     data: bom,
     isLoading,
-    refetch,
     error,
-  } = useFrappeDoc<Bom>("BOM", bomName);
+    refetch,
+  } = useFrappeDoc<Bom>("BOM", name);
 
-  const deleteMutation = useFrappeDelete("BOM", {
-    onSuccess: () => {
-      toast.success("BOM deleted successfully");
-      router.push("/manufacturing/bom");
-    },
-    onError: (err) =>
-      toast.error("Failed to delete BOM", { description: err.message }),
+  // 2N Part 1.1: unified flow resolution.
+  const { result: chain, isLoading: chainLoading } = useFlowChain("BOM", name);
+
+  // -- Status actions ---------------------------------------------------------
+  const updateMutation = useFrappeUpdate<Bom>("BOM", {
+    showToast: false,
   });
 
-  const submitMutation = useFrappeUpdate("BOM", {
-    onSuccess: () => {
-      toast.success("BOM submitted successfully");
-      refetch();
-    },
-    onError: (err) =>
-      toast.error("Failed to submit BOM", { description: err.message }),
-  });
+  const isDraft = bom?.docstatus === 0;
+  const isSubmitted = bom?.docstatus === 1;
+  const isActive = bom?.is_active === 1;
+  const isDefault = bom?.is_default === 1;
 
-  if (isLoading) return <LoadingState type="detail" />;
-  if (error || !bom)
-    return (
-      <EmptyState
-        icon={BOMIcon}
-        title="BOM not found"
-        description="The requested BOM could not be loaded."
-      />
+  const handleSubmit = () => {
+    setConfirmSubmit(false);
+    updateMutation.mutate(
+      { name, data: { docstatus: 1 } },
+      {
+        onSuccess: () => {
+          toast.success(`BOM ${name} submitted`);
+          refetch();
+        },
+        onError: (err) =>
+          showError(resolveFrappeError(err, { doctype: "BOM" })),
+      },
     );
+  };
 
-  const isSubmitted = bom.docstatus === 1;
-  const isDefault = bom.is_default === 1;
-  const isActive = bom.is_active === 1;
+  const handleDelete = async () => {
+    setShowDelete(false);
+    try {
+      const res = await fetch(`/api/resource/BOM/${encodeURIComponent(name)}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        toast.success("BOM deleted");
+        router.push("/manufacturing/bom");
+      } else {
+        const body = await res.json().catch(() => ({}));
+        showError(resolveFrappeError(body, { doctype: "BOM" }));
+      }
+    } catch (err) {
+      showError(resolveFrappeError(err, { doctype: "BOM" }));
+    }
+  };
+
+  if (isLoading) return <LoadingState />;
+  if (error || !bom) {
+    return (
+      <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6">
+        <p className="text-sm text-destructive">
+          {error?.message ?? "BOM not found."}
+        </p>
+        <Button
+          variant="ghost"
+          className="mt-3"
+          onClick={() => router.push("/manufacturing/bom")}
+        >
+          Back to BOMs
+        </Button>
+      </div>
+    );
+  }
+
+  const whatsNext = [
+    isDraft && {
+      label: "Submit BOM",
+      description: "Submit this BOM to make it available for Work Orders",
+      onClick: () => setConfirmSubmit(true),
+      isPrimary: true,
+      isLoading: updateMutation.isPending,
+    },
+    isActive && {
+      label: "Create Work Order",
+      description: "Start production using this BOM",
+      onClick: () =>
+        router.push(
+          `/manufacturing/work-order/new?bom=${encodeURIComponent(name)}`,
+        ),
+      isPrimary: true,
+      disabled: !isModuleBuilt("Work Order"),
+      disabledReason: "Coming soon",
+    },
+    {
+      label: "Duplicate BOM",
+      description: "Create a copy of this BOM",
+      onClick: () =>
+        router.push(
+          `/manufacturing/bom/new?copy=${encodeURIComponent(name)}`,
+        ),
+    },
+  ].filter(Boolean) as React.ComponentProps<typeof WhatsNext>["actions"];
+
+  const activityItems = [
+    {
+      id: "created",
+      type: "created" as const,
+      description: "BOM created",
+      user: bom.owner,
+      timestamp: bom.creation ?? new Date().toISOString(),
+    },
+    ...(isSubmitted
+      ? [
+          {
+            id: "submitted",
+            type: "submitted" as const,
+            description: "BOM submitted",
+            user: bom.modified_by,
+            timestamp: bom.modified ?? new Date().toISOString(),
+          },
+        ]
+      : []),
+  ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-12">
       <PageHeader
         title={bom.item_name || bom.item}
         subtitle={bom.name}
         backHref="/manufacturing/bom"
-        icon={<BOMIcon className="h-5 w-5 text-primary" />}
         actions={
-          <div className="flex gap-2">
-            {!isSubmitted && (
-              <>
-                <Button
-                  variant="outline"
-                  onClick={() =>
-                    router.push(
-                      `/manufacturing/bom/${encodeURIComponent(bomName)}/edit`,
-                    )
-                  }
-                  className="rounded-full h-9"
-                >
-                  <Pencil className="h-4 w-4 mr-2" /> Edit
-                </Button>
-                <Button
-                  onClick={() =>
-                    submitMutation.mutate({
-                      name: bomName,
-                      data: { docstatus: 1 },
-                    })
-                  }
-                  className="rounded-full h-9 shadow-lg shadow-primary/10"
-                  disabled={submitMutation.isPending}
-                >
-                  {submitMutation.isPending ? (
-                    <Clock className="h-4 w-4 animate-spin mr-2" />
-                  ) : (
-                    <CheckCircle2 className="h-4 w-4 mr-2" />
-                  )}
-                  Submit
-                </Button>
-              </>
+          <div className="flex items-center gap-2">
+            {isDraft && (
+              <Button
+                size="sm"
+                onClick={() => setConfirmSubmit(true)}
+                disabled={updateMutation.isPending}
+              >
+                {updateMutation.isPending ? (
+                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="mr-1.5 h-4 w-4" />
+                )}
+                Submit
+              </Button>
+            )}
+            {isActive && (
+              <Button
+                size="sm"
+                onClick={() =>
+                  router.push(
+                    `/manufacturing/work-order/new?bom=${encodeURIComponent(name)}`,
+                  )
+                }
+              >
+                <Play className="mr-1.5 h-4 w-4" /> Create Work Order
+              </Button>
             )}
             <Button
               variant="outline"
+              size="sm"
               onClick={() =>
                 router.push(
-                  `/manufacturing/bom/new?copy=${encodeURIComponent(bomName)}`,
+                  `/manufacturing/bom/new?copy=${encodeURIComponent(name)}`,
                 )
               }
-              className="rounded-full h-9"
             >
-              <Copy className="h-4 w-4 mr-2" /> Duplicate
+              <Copy className="mr-1.5 h-4 w-4" /> Duplicate
             </Button>
-            {isSubmitted && (
-              <Button
-                onClick={() =>
-                  router.push(
-                    `/manufacturing/work-order/new?bom=${encodeURIComponent(bomName)}`,
-                  )
-                }
-                className="rounded-full h-9 shadow-lg shadow-primary/10"
-              >
-                <Play className="h-4 w-4 mr-2" /> Create Work Order
-              </Button>
-            )}
-            {!isSubmitted && (
+            {isDraft && (
               <Button
                 variant="ghost"
                 size="icon"
+                className="text-destructive hover:bg-destructive/10"
                 onClick={() => setShowDelete(true)}
-                className="rounded-full h-9 w-9 text-destructive hover:bg-destructive/10"
               >
                 <Trash2 className="h-4 w-4" />
               </Button>
@@ -198,20 +271,12 @@ export default function BOMDetailPage() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Product Info */}
-          <InfoCard
-            title="Product Information"
-            icon={<Package className="h-5 w-5" />}
-          >
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-              <DataPoint
-                label="Item"
-                value={bom.item}
-                link={`/stock/item/${encodeURIComponent(bom.item)}`}
-              />
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+        {/* Center column */}
+        <div className="space-y-6 lg:col-span-8">
+          <InfoCard title="Product Information">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <DataPoint label="Item" value={bom.item} />
               <DataPoint label="Item Name" value={bom.item_name || "—"} />
               <DataPoint
                 label="Batch Quantity"
@@ -221,333 +286,166 @@ export default function BOMDetailPage() {
             </div>
           </InfoCard>
 
-          {/* Materials Table */}
           <InfoCard
-            title={`Raw Materials (${bom.items?.length || 0})`}
+            title={`Raw Materials (${Array.isArray(bom.items) ? bom.items.length : 0})`}
             icon={<Package className="h-5 w-5 text-emerald-500" />}
           >
-            {bom.items?.length > 0 ? (
-              <div className="overflow-x-auto -mx-2">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border/50 text-muted-foreground">
-                      <th className="text-left py-3 px-2 font-medium">Item</th>
-                      <th className="text-right py-3 px-2 font-medium">
-                        Quantity
-                      </th>
-                      <th className="text-right py-3 px-2 font-medium">Rate</th>
-                      <th className="text-right py-3 px-2 font-medium">
-                        Amount
-                      </th>
+            <div className="overflow-hidden rounded-xl border border-border/60">
+              <table className="w-full text-sm">
+                <thead className="border-b border-border/60 bg-secondary/20">
+                  <tr className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                    <th className="px-3 py-2.5 text-left font-semibold">Item</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Qty</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Rate</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/50">
+                  {(bom.items as Array<{ item_code: string; item_name?: string; qty: number; rate?: number; amount?: number; uom?: string }>).map((it, i) => (
+                    <tr key={`${it.item_code}-${i}`}>
+                      <td className="px-3 py-2.5">
+                        <div className="font-medium text-foreground">
+                          {it.item_name || it.item_code}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground font-mono">
+                          {it.item_code}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5 text-right tabular-nums">
+                        {it.qty} {it.uom || "Nos"}
+                      </td>
+                      <td className="px-3 py-2.5 text-right tabular-nums">
+                        {ETB.format(it.rate ?? 0)}
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-medium tabular-nums">
+                        {ETB.format(it.amount ?? (it.qty * (it.rate ?? 0)))}
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {bom.items.map((item: any, idx: number) => (
-                      <tr
-                        key={idx}
-                        className="border-b border-border/20 hover:bg-muted/30 transition-colors group"
-                      >
-                        <td className="py-4 px-2">
-                          <Link
-                            href={`/stock/item/${encodeURIComponent(item.item_code)}`}
-                            className="text-primary font-medium hover:underline flex items-center gap-2"
-                          >
-                            {item.item_name || item.item_code}
-                          </Link>
-                          <span className="text-[10px] text-muted-foreground block mt-0.5">
-                            {item.item_code}
-                          </span>
-                        </td>
-                        <td className="text-right py-4 px-2 font-medium">
-                          {item.qty} {item.uom || "Nos"}
-                        </td>
-                        <td className="text-right py-4 px-2 text-muted-foreground">
-                          {bom.currency}{" "}
-                          {item.rate?.toLocaleString(undefined, {
-                            minimumFractionDigits: 2,
-                          })}
-                        </td>
-                        <td className="text-right py-4 px-2 font-bold text-foreground">
-                          {bom.currency}{" "}
-                          {item.amount?.toLocaleString(undefined, {
-                            minimumFractionDigits: 2,
-                          })}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="text-center py-10 opacity-40">
-                <Package className="h-10 w-10 mx-auto mb-2" />
-                <p>No materials defined for this BOM</p>
-              </div>
-            )}
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </InfoCard>
-          {/* Operations Table */}
+
           {bom.with_operations === 1 && (
             <InfoCard
-              title={`Operations (${bom.operations?.length || 0})`}
+              title={`Operations (${Array.isArray(bom.operations) ? bom.operations.length : 0})`}
               icon={<Cog className="h-5 w-5 text-blue-500" />}
             >
-              {bom.operations?.length > 0 ? (
-                <div className="overflow-x-auto -mx-2">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border/50 text-muted-foreground">
-                        <th className="text-left py-3 px-2 font-medium">
-                          Operation
-                        </th>
-                        <th className="text-left py-3 px-2 font-medium">
-                          Workstation
-                        </th>
-                        <th className="text-right py-3 px-2 font-medium">
-                          Time
-                        </th>
-                        <th className="text-right py-3 px-2 font-medium">
-                          Cost
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {bom.operations.map((op: any, idx: number) => (
-                        <tr
-                          key={idx}
-                          className="border-b border-border/20 hover:bg-muted/30 transition-colors"
-                        >
-                          <td className="py-4 px-2 font-medium">
-                            {op.operation}
-                          </td>
-                          <td className="py-4 px-2">
-                            <Link
-                              href={`/manufacturing/workstation/${encodeURIComponent(op.workstation)}`}
-                              className="text-muted-foreground hover:text-primary transition-colors"
-                            >
-                              {op.workstation}
-                            </Link>
-                          </td>
-                          <td className="text-right py-4 px-2 font-medium">
-                            {op.time_in_mins} min
-                          </td>
-                          <td className="text-right py-4 px-2 font-bold text-foreground">
-                            {bom.currency}{" "}
-                            {op.operating_cost?.toLocaleString(undefined, {
-                              minimumFractionDigits: 2,
-                            })}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="text-center py-10 opacity-40">
-                  <Cog className="h-10 w-10 mx-auto mb-2" />
-                  <p>No operations defined for this BOM</p>
-                </div>
-              )}
-            </InfoCard>
-          )}
-
-          {/* Scrap Table */}
-          <InfoCard
-            title={`Scrap & Waste (${bom.scrap_items?.length || 0})`}
-            icon={<Trash2 className="h-5 w-5 text-amber-500" />}
-          >
-            {bom.scrap_items?.length > 0 ? (
-              <div className="overflow-x-auto -mx-2">
+              <div className="overflow-hidden rounded-xl border border-border/60">
                 <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border/50 text-muted-foreground">
-                      <th className="text-left py-3 px-2 font-medium">Item</th>
-                      <th className="text-right py-3 px-2 font-medium">
-                        Quantity
-                      </th>
-                      <th className="text-right py-3 px-2 font-medium">Rate</th>
-                      <th className="text-right py-3 px-2 font-medium">
-                        Amount
-                      </th>
+                  <thead className="border-b border-border/60 bg-secondary/20">
+                    <tr className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                      <th className="px-3 py-2.5 text-left font-semibold">Operation</th>
+                      <th className="px-3 py-2.5 text-left font-semibold">Workstation</th>
+                      <th className="px-3 py-2.5 text-right font-semibold">Time</th>
+                      <th className="px-3 py-2.5 text-right font-semibold">Cost</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {bom.scrap_items.map((item: any, idx: number) => (
-                      <tr
-                        key={idx}
-                        className="border-b border-border/20 hover:bg-muted/30 transition-colors"
-                      >
-                        <td className="py-4 px-2 font-medium">
-                          {item.item_name || item.item_code}
-                          <span className="text-[10px] text-muted-foreground block mt-0.5">
-                            {item.item_code}
-                          </span>
+                  <tbody className="divide-y divide-border/50">
+                    {(bom.operations as Array<{ operation: string; workstation?: string; time_in_mins?: number; operating_cost?: number }>).map((op, i) => (
+                      <tr key={`${op.operation}-${i}`}>
+                        <td className="px-3 py-2.5 font-medium text-foreground">
+                          {op.operation}
                         </td>
-                        <td className="text-right py-4 px-2 font-medium">
-                          {item.qty} {item.uom || "Nos"}
+                        <td className="px-3 py-2.5 text-muted-foreground">
+                          {op.workstation || "—"}
                         </td>
-                        <td className="text-right py-4 px-2 text-muted-foreground">
-                          {bom.currency}{" "}
-                          {item.rate?.toLocaleString(undefined, {
-                            minimumFractionDigits: 2,
-                          })}
+                        <td className="px-3 py-2.5 text-right tabular-nums">
+                          {op.time_in_mins} min
                         </td>
-                        <td className="text-right py-4 px-2 font-bold text-foreground">
-                          {bom.currency}{" "}
-                          {item.amount?.toLocaleString(undefined, {
-                            minimumFractionDigits: 2,
-                          })}
+                        <td className="px-3 py-2.5 text-right font-medium tabular-nums">
+                          {ETB.format(op.operating_cost ?? 0)}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            ) : (
-              <div className="text-center py-10 opacity-40">
-                <Trash2 className="h-10 w-10 mx-auto mb-2" />
-                <p>No scrap or waste items defined</p>
-              </div>
-            )}
-          </InfoCard>
+            </InfoCard>
+          )}
         </div>
 
-        {/* Right Column - Cost Summary / Sticky Sidebar */}
-        <div className="space-y-6 sticky top-24 self-start">
-          <div className="bg-card rounded-2xl border border-border/50 p-6 shadow-lg shadow-primary/5">
-            <div className="flex items-center gap-2 font-semibold text-lg mb-6">
-              <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                <DollarSign className="h-5 w-5 text-primary" />
-              </div>
-              Cost Breakdown
-            </div>
-
-            <div className="space-y-4">
-              <div className="flex justify-between items-center py-2 border-b border-border/30">
-                <div className="flex flex-col">
-                  <span className="text-sm font-medium">Raw Materials</span>
-                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                    Direct Cost
-                  </span>
-                </div>
-                <span className="font-semibold text-sm">
-                  {bom.currency}{" "}
-                  {bom.raw_material_cost?.toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                  })}
+        {/* Sidebar */}
+        <div className="space-y-6 lg:col-span-4">
+          <InfoCard
+            title="Cost Breakdown"
+            className="bg-gradient-to-br from-primary/5 to-primary/10"
+          >
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Raw Material Cost</span>
+                <span className="text-sm font-semibold tabular-nums">
+                  {ETB.format(bom.raw_material_cost ?? 0)}
                 </span>
               </div>
-
               {bom.with_operations === 1 && (
-                <div className="flex justify-between items-center py-2 border-b border-border/30">
-                  <div className="flex flex-col">
-                    <span className="text-sm font-medium">Operations</span>
-                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                      Processing Cost
-                    </span>
-                  </div>
-                  <span className="font-semibold text-sm">
-                    {bom.currency}{" "}
-                    {bom.operating_cost?.toLocaleString(undefined, {
-                      minimumFractionDigits: 2,
-                    })}
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Operating Cost</span>
+                  <span className="text-sm font-semibold tabular-nums">
+                    {ETB.format(bom.operating_cost ?? 0)}
                   </span>
                 </div>
               )}
-
-              <div className="pt-4 space-y-4">
-                <div className="flex justify-between items-end">
-                  <span className="font-bold text-foreground">Total Cost</span>
-                  <div className="text-right">
-                    <span className="text-2xl font-bold font-mono text-primary">
-                      {bom.currency}{" "}
-                      {bom.total_cost?.toLocaleString(undefined, {
-                        minimumFractionDigits: 2,
-                      })}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="p-4 bg-primary/5 rounded-2xl border border-primary/20 space-y-1">
-                  <span className="text-[10px] text-primary/60 uppercase font-bold tracking-widest">
-                    Calculated Cost Per Unit
+              <div className="border-t border-border/60 pt-3 flex items-center justify-between">
+                <span className="font-bold text-foreground">Total Cost</span>
+                <div className="text-right">
+                  <span className="text-2xl font-bold tabular-nums text-primary">
+                    {ETB.format(bom.total_cost ?? 0)}
                   </span>
-                  <div className="flex justify-between items-baseline">
-                    <span className="text-xl font-bold text-primary">
-                      {bom.currency}{" "}
-                      {(
-                        (bom.total_cost || 0) / (bom.quantity || 1)
-                      ).toLocaleString(undefined, { minimumFractionDigits: 4 })}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {!isSubmitted && (isActive || isDefault) && (
-                <div className="mt-6 flex items-start gap-2 p-3 bg-amber-500/5 rounded-xl border border-amber-500/10 text-[11px] text-amber-700">
-                  <Clock className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                  <p>
-                    Changes to material rates or operations won't update until
-                    you re-save or submit the document.
+                  <p className="text-[10px] text-muted-foreground">
+                    {ETB.format((bom.total_cost ?? 0) / (bom.quantity || 1))} / unit
                   </p>
                 </div>
-              )}
+              </div>
             </div>
-          </div>
+          </InfoCard>
 
-          {/* Metadata */}
-          <InfoCard
-            title="Recipe Insights"
-            icon={<FileText className="h-5 w-5" />}
-          >
-            <div className="space-y-4">
-              <div>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">
-                  Source Information
-                </p>
-                <div className="space-y-3">
-                  <DataPoint label="Created by" value={bom.owner} />
-                  <DataPoint
-                    label="Last Modified"
-                    value={
-                      bom.modified
-                        ? new Date(bom.modified).toLocaleString()
-                        : "—"
-                    }
-                  />
-                  <DataPoint
-                    label="Doc Status"
-                    value={
-                      isSubmitted ? "Locked (Submitted)" : "Draft (Editable)"
-                    }
-                  />
-                </div>
-              </div>
+          <InfoCard title="Journey">
+            <FlowRail result={chain} currentDocName={name} sourceDoctype="BOM" isLoading={chainLoading} />
+          </InfoCard>
 
-              {bom.rm_cost_as_per && (
-                <div className="pt-4 border-t border-border/50">
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">
-                    Costing Logic
-                  </p>
-                  <p className="text-xs font-medium bg-secondary/50 p-2 rounded-lg">
-                    Rates based on:{" "}
-                    <span className="text-primary">{bom.rm_cost_as_per}</span>
-                  </p>
-                </div>
-              )}
+          {/* 2L 1B: Universal cross-flow actions menu */}
+          <CrossFlowActionsMenu doctype="BOM" name={name} />
+
+          <WhatsNext actions={whatsNext} />
+
+          <ActivityTimeline items={activityItems} />
+
+          <InfoCard title="Metadata">
+            <div className="space-y-3 text-sm">
+              <DataPoint label="Created By" value={bom.owner} />
+              <DataPoint
+                label="Last Modified"
+                value={bom.modified ? new Date(bom.modified).toLocaleString() : "—"}
+              />
+              <DataPoint
+                label="Costing Method"
+                value={bom.rm_cost_as_per || "Valuation Rate"}
+              />
             </div>
           </InfoCard>
         </div>
       </div>
 
       <ConfirmDialog
+        open={confirmSubmit}
+        onOpenChange={setConfirmSubmit}
+        title="Submit this BOM?"
+        description="Submitting will lock this BOM and make it available for Work Orders."
+        confirmText="Submit"
+        onConfirm={handleSubmit}
+      />
+      <ConfirmDialog
         open={showDelete}
         onOpenChange={setShowDelete}
-        title="Delete Bill of Materials?"
-        description={`Are you sure you want to delete "${bom.name}"? This action cannot be undone and may affect pending Work Orders.`}
-        onConfirm={() => deleteMutation.mutateAsync(bomName)}
-        isLoading={deleteMutation.isPending}
+        title="Delete BOM?"
+        description={`Are you sure you want to delete "${bom.name}"? This action cannot be undone.`}
+        confirmText="Delete"
         variant="destructive"
+        onConfirm={handleDelete}
       />
+      <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
     </div>
   );
 }
