@@ -446,3 +446,59 @@ describe("Settings page + sidebar Preferences wiring", () => {
     expect(src).toMatch(/const router = useRouter\(\)/);
   });
 });
+
+// =============================================================================
+// SessionGuard — post-2P-FINAL UX fix so the no-session case shows a
+// "Sign in to Pana" card instead of an empty dashboard + a wall of 401s
+// in the dev console.
+// =============================================================================
+describe("SessionGuard: layout-level no-session UX guard", () => {
+  it("components/Layout/SessionGuard.tsx exists and exports SessionGuard", async () => {
+    const exists = await fs
+      .stat("components/Layout/SessionGuard.tsx")
+      .then(() => true)
+      .catch(() => false);
+    expect(exists).toBe(true);
+    const src = await fs.readFile(
+      "components/Layout/SessionGuard.tsx",
+      "utf-8",
+      );
+    expect(src).toMatch(/export function SessionGuard/);
+  });
+
+  it("SessionGuard checks /api/auth/me (the same fail-closed route the factory uses)", async () => {
+    const src = await fs.readFile(
+      "components/Layout/SessionGuard.tsx",
+      "utf-8",
+      );
+    expect(src).toMatch(/fetch\(["']\/api\/auth\/me["']/);
+    expect(src).toMatch(/res\.status\s*===\s*401/);
+  });
+
+  it("SessionGuard renders a sign-in card (not the children) when 401", async () => {
+    const src = await fs.readFile(
+      "components/Layout/SessionGuard.tsx",
+      "utf-8",
+      );
+    expect(src).toMatch(/Sign in to Pana/);
+    // The CTA links to the Frappe login page.
+    expect(src).toMatch(/NEXT_PUBLIC_ERP_API_URL/);
+    expect(src).toMatch(/\/login/);
+  });
+
+  it("SessionGuard caches the result in sessionStorage (5-min TTL)", async () => {
+    const src = await fs.readFile(
+      "components/Layout/SessionGuard.tsx",
+      "utf-8",
+      );
+    expect(src).toMatch(/sessionStorage/);
+    expect(src).toMatch(/5\s*\*\s*60\s*\*\s*1000/);
+  });
+
+  it("LayoutClient wraps the children in <SessionGuard>", async () => {
+    const src = await fs.readFile("app/LayoutClient.tsx", "utf-8");
+    expect(src).toMatch(/import\s*\{[^}]*SessionGuard[^}]*\}\s*from\s*["']@\/components\/Layout\/SessionGuard["']/);
+    // The guard wraps the Layout+children (children are inside).
+    expect(src).toMatch(/<SessionGuard>[\s\S]{0,500}<Layout>/);
+  });
+});
