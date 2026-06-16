@@ -191,7 +191,7 @@ export const DOCTYPE_CONFIG: Record<string, DocTypeConfig> = {
     isSettings: true,
   },
   "Purchase Receipt": {
-    apiPath: "stock/purchase-receipts",
+    apiPath: "stock/purchase-receipt",
     module: "Stock",
     labelField: "name",
     searchFields: ["name", "supplier"],
