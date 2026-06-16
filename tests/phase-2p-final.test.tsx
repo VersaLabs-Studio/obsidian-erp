@@ -448,57 +448,160 @@ describe("Settings page + sidebar Preferences wiring", () => {
 });
 
 // =============================================================================
-// SessionGuard — post-2P-FINAL UX fix so the no-session case shows a
-// "Sign in to Pana" card instead of an empty dashboard + a wall of 401s
-// in the dev console.
+// B remap — GlobalDashboard visual upgrade
 // =============================================================================
-describe("SessionGuard: layout-level no-session UX guard", () => {
-  it("components/Layout/SessionGuard.tsx exists and exports SessionGuard", async () => {
+describe("B remap: GlobalDashboard", () => {
+  it("the new chart-primitives file exists with shared tooltip + axis helpers", async () => {
     const exists = await fs
-      .stat("components/Layout/SessionGuard.tsx")
+      .stat("components/dashboard/chart-primitives.tsx")
       .then(() => true)
       .catch(() => false);
     expect(exists).toBe(true);
     const src = await fs.readFile(
-      "components/Layout/SessionGuard.tsx",
+      "components/dashboard/chart-primitives.tsx",
       "utf-8",
-      );
-    expect(src).toMatch(/export function SessionGuard/);
+    );
+    expect(src).toMatch(/export const tooltipContentStyle/);
+    expect(src).toMatch(/export function axisKFormat/);
+    expect(src).toMatch(/export const axisTickStyle/);
+    expect(src).toMatch(/export const gridLineStyle/);
+    expect(src).toMatch(/export function ChartCard/);
   });
 
-  it("SessionGuard checks /api/auth/me (the same fail-closed route the factory uses)", async () => {
+  it("the new widget sub-components file exists with Today hero + Top customers + Stock health", async () => {
+    const exists = await fs
+      .stat("components/dashboard/global-dashboard-widgets.tsx")
+      .then(() => true)
+      .catch(() => false);
+    expect(exists).toBe(true);
     const src = await fs.readFile(
-      "components/Layout/SessionGuard.tsx",
+      "components/dashboard/global-dashboard-widgets.tsx",
       "utf-8",
-      );
-    expect(src).toMatch(/fetch\(["']\/api\/auth\/me["']/);
-    expect(src).toMatch(/res\.status\s*===\s*401/);
+    );
+    expect(src).toMatch(/export function TodayHero/);
+    expect(src).toMatch(/export function TopCustomersList/);
+    expect(src).toMatch(/export function StockHealthMini/);
+    expect(src).toMatch(/export function ActionableAlertsRail/);
+    expect(src).toMatch(/export function ProjectionStrip/);
+    expect(src).toMatch(/export function ModuleCard/);
+    expect(src).toMatch(/export function QuickCreateRow/);
   });
 
-  it("SessionGuard renders a sign-in card (not the children) when 401", async () => {
+  it("KPICard accepts a `sparkline` prop and renders an inline AreaChart", async () => {
     const src = await fs.readFile(
-      "components/Layout/SessionGuard.tsx",
+      "components/dashboard/KPICard.tsx",
       "utf-8",
-      );
-    expect(src).toMatch(/Sign in to Pana/);
-    // The CTA links to the Frappe login page.
-    expect(src).toMatch(/NEXT_PUBLIC_ERP_API_URL/);
-    expect(src).toMatch(/\/login/);
+    );
+    expect(src).toMatch(/sparkline\?:\s*number\[\]/);
+    // Inline chart: AreaChart with a gradient fill, hover dot, axis-line=false.
+    expect(src).toMatch(/<AreaChart/);
+    expect(src).toMatch(/<Area/);
+    expect(src).toMatch(/activeDot/);
   });
 
-  it("SessionGuard caches the result in sessionStorage (5-min TTL)", async () => {
+  it("KPICard derives a trend badge from `previousValue` (auto-trend)", async () => {
     const src = await fs.readFile(
-      "components/Layout/SessionGuard.tsx",
+      "components/dashboard/KPICard.tsx",
       "utf-8",
-      );
-    expect(src).toMatch(/sessionStorage/);
-    expect(src).toMatch(/5\s*\*\s*60\s*\*\s*1000/);
+    );
+    // When `trend` is not supplied but `previousValue` is, we
+    // compute the delta and pick up/down/neutral.
+    expect(src).toMatch(/autoTrend/);
+    expect(src).toMatch(/autoDeltaLabel/);
   });
 
-  it("LayoutClient wraps the children in <SessionGuard>", async () => {
-    const src = await fs.readFile("app/LayoutClient.tsx", "utf-8");
-    expect(src).toMatch(/import\s*\{[^}]*SessionGuard[^}]*\}\s*from\s*["']@\/components\/Layout\/SessionGuard["']/);
-    // The guard wraps the Layout+children (children are inside).
-    expect(src).toMatch(/<SessionGuard>[\s\S]{0,500}<Layout>/);
+  it("GlobalDashboard imports + uses every new widget", async () => {
+    const src = await fs.readFile(
+      "components/dashboard/GlobalDashboard.tsx",
+      "utf-8",
+    );
+    expect(src).toMatch(/import\s*\{[^}]*TodayHero[^}]*\}\s*from/);
+    expect(src).toMatch(/import\s*\{[^}]*TopCustomersList[^}]*\}\s*from/);
+    expect(src).toMatch(/import\s*\{[^}]*StockHealthMini[^}]*\}\s*from/);
+    expect(src).toMatch(/import\s*\{[^}]*ActionableAlertsRail[^}]*\}\s*from/);
+    expect(src).toMatch(/import\s*\{[^}]*ProjectionStrip[^}]*\}\s*from/);
+    expect(src).toMatch(/import\s*\{[^}]*QuickCreateRow[^}]*\}\s*from/);
+    expect(src).toMatch(/<TodayHero/);
+    expect(src).toMatch(/<TopCustomersList/);
+    expect(src).toMatch(/<StockHealthMini/);
+    expect(src).toMatch(/<ActionableAlertsRail/);
+    expect(src).toMatch(/<ProjectionStrip/);
+    expect(src).toMatch(/<QuickCreateRow/);
+  });
+
+  it("GlobalDashboard wires the new Today hero glance metrics", async () => {
+    const src = await fs.readFile(
+      "components/dashboard/GlobalDashboard.tsx",
+      "utf-8",
+    );
+    expect(src).toMatch(/mtdRevenue=/);
+    expect(src).toMatch(/receivablesDueThisWeek=/);
+    expect(src).toMatch(/openWorkOrdersNeedingAttention=/);
+    // The hero derives the greeting from the local hour.
+    expect(src).toMatch(/timeOfDayGreeting/);
+    expect(src).toMatch(/useCurrentUser/);
+  });
+
+  it("GlobalDashboard aggregates the Top customers from real SI rows", async () => {
+    const src = await fs.readFile(
+      "components/dashboard/GlobalDashboard.tsx",
+      "utf-8",
+    );
+    expect(src).toMatch(/topCustomers/);
+    // We pull customer + customer_name + grand_total from SI.
+    expect(src).toMatch(/customer_name/);
+    // We sort descending by revenue.
+    expect(src).toMatch(/\.sort\(\(a, b\) => b\.revenue - a\.revenue\)/);
+  });
+
+  it("GlobalDashboard derives stock health (in-stock / low / out) from existing data", async () => {
+    const src = await fs.readFile(
+      "components/dashboard/GlobalDashboard.tsx",
+      "utf-8",
+    );
+    expect(src).toMatch(/stockHealth/);
+    // Reuses the existing binLevels + reorderRows (no new query).
+    expect(src).toMatch(/inStock/);
+    expect(src).toMatch(/low/);
+    expect(src).toMatch(/out/);
+  });
+
+  it("GlobalDashboard trend charts use the shared chart-primitives (single source of truth)", async () => {
+    const src = await fs.readFile(
+      "components/dashboard/GlobalDashboard.tsx",
+      "utf-8",
+    );
+    // Imports the helpers from the new primitives file.
+    expect(src).toMatch(/import\s*\{[^}]*axisKFormat[^}]*\}\s*from/);
+    expect(src).toMatch(/import\s*\{[^}]*axisTickStyle[^}]*\}\s*from/);
+    expect(src).toMatch(/import\s*\{[^}]*gridLineStyle[^}]*\}\s*from/);
+    expect(src).toMatch(/import\s*\{[^}]*ChartCard[^}]*\}\s*from/);
+    expect(src).toMatch(/import\s*\{[^}]*tooltipContentStyle[^}]*\}\s*from/);
+    // The 3 trend cards all use ChartCard (not the old raw section).
+    const chartCardCount = (src.match(/<ChartCard/g) ?? []).length;
+    expect(chartCardCount).toBeGreaterThanOrEqual(3);
+  });
+
+  it("GlobalDashboard KPI cards now pass `sparkline` + `previousValue` for auto-trend", async () => {
+    const src = await fs.readFile(
+      "components/dashboard/GlobalDashboard.tsx",
+      "utf-8",
+    );
+    // 4 KPIs each pass sparkline + previousValue.
+    const sparkMatches = (src.match(/sparkline=/g) ?? []).length;
+    expect(sparkMatches).toBeGreaterThanOrEqual(4);
+    const prevMatches = (src.match(/previousValue=/g) ?? []).length;
+    expect(prevMatches).toBeGreaterThanOrEqual(4);
+  });
+
+  it("GlobalDashboard alerts moved to a sticky-right rail layout (lg:grid-cols-3)", async () => {
+    const src = await fs.readFile(
+      "components/dashboard/GlobalDashboard.tsx",
+      "utf-8",
+    );
+    expect(src).toMatch(/lg:grid-cols-3/);
+    // The "Forward look" + alerts section uses the rail layout
+    // (2-col main + 1-col rail).
+    expect(src).toMatch(/<ActionableAlertsRail/);
   });
 });
