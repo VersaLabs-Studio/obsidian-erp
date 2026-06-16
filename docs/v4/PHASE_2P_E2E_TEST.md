@@ -58,10 +58,21 @@
 
 **Expected:** the access matrix in §0 holds exactly. Denials are clean ("You do not have permission…"), never a stack trace or a silent empty table that's really a 403. `<Can>`-hidden buttons are also server-denied if forced.
 
-**Findings:**
-- …
+**Findings (live, 2026-06-15 — accounts:`eyob@`, admin:`kidus489@`, inventory:`meklit@`, sales:`hannah@`):**
+- ✅ **Sidebar visibility per role — PASS / signed off.** Each role sees exactly its mapped sections.
+- ✅ **Server enforcement is REAL (data layer secure).** sales `hannah@` hard-URL → Payment Entry list returned **403 PermissionError** ("User hannah@ does not have doctype access via role permission for document Payment Entry"). accounts `eyob@` → New Sales Order **denied on submit** (guided dialog, correct reason). No data leaked, no unauthorized write in either case.
+- 🐛 **F-A1 — read/list failures show a GENERIC message.** The Payment Entry list 403 surfaced only "Failed to load payment entries" in the UI; the rich `_server_messages` reason ("does not have doctype access via role permission…") was swallowed. List/read error states must render the guided, explanatory reason (same quality as the create-submit guided dialog). *(User: "make sure the messaging and the error message explains fully why.")*
+- ⚠️ **F-A2 — create/edit forms deny LATE (UX, not security).** `/sales/sales-order/new` (and by extension all `/new` + `/[name]/edit`) render the full wizard for a user who can't create the doctype; denial only fires at Submit. Secure but wasteful/confusing. Fix = route-level cosmetic `<Can create doctype>` gate that fails fast with an access-denied state, sourced from Frappe boot `can_create`/`can_read`/`can_write` (no hardcoded map drift). Server stays the real boundary.
+- 🐛 **F-A3 — 404 / not-found renders the authenticated app shell + sidebar.** On a 404 redirect the sidebar still shows. Not-found (and unauthenticated-redirect) states should render a bare shell, not the authenticated Layout. *(Confirm exact trigger at fix time.)*
+- ➕ **F-A4 — functional (non-visual) sidebar upgrade requested.** UI is signed off as-is; add FUNCTION only. Candidate set (see chat): type-to-filter nav, pin/favorites (per-user persisted), recents, persist expanded sections + auto-expand current route, role-aware live badge counts (drafts/low-stock/open POs), keyboard jump tied to `useCommandPalette`.
 
-**Sign-off:** ☐ RBAC enforced per role — proceed to §B.
+**§A fix bucket (accumulating for mesh handoff — NOT yet handed off per user):**
+1. F-A1 list/read guided error messaging (surface `_server_messages` reason on fetch failures).
+2. F-A2 route-level create/edit permission gate (cosmetic, Frappe-boot-sourced; server remains enforcement).
+3. F-A3 not-found / unauth bare-shell (no authenticated sidebar on 404).
+4. F-A4 functional sidebar features (scope TBD with user before handoff).
+
+**Sign-off:** ☑ RBAC **security** enforced per role (PASS); ☐ UX/messaging fixes (F-A1…A4) pending mesh — **conditional sign-off, fixes batched.**
 
 ---
 
@@ -81,10 +92,24 @@
 
 **Expected:** every stage of the rail resolves; no `DocType not found` 404 / `Field not permitted` 417 in the network log; SI↔SO are genuinely linked; a paid invoice never re-prompts for payment.
 
-**Findings:**
-- …
+**Findings (live, 2026-06-15 — sales:`hannah@`, accounts:`eyob@`):**
+- ✅ Lead create, Quotation create, Sales Order create, Delivery Note create (prefill works) — all functionally OK.
+- 🐛 **F-B1 (HEADLINE) — Flow rail / Flow Tracker / Cross-flow "Created from" resolve NOTHING.** On Quotation, SO, AND DN every non-current stage shows "Not started"; a doc doesn't even light up its own customer. Root cause = flow-resolution engine defects (NOT the UI): (RC1) `use-flow-chain.ts:122-131` misclassifies header_link edges as `"direct"` → the `header-link` plan is dead code → upstream reads query `to WHERE name=currentName` and never match. (RC2) `flow-link-map.ts:179` assumes a non-existent `Sales Order.quotation` header field (real link = `Sales Order Item.prevdoc_docname`). (RC3) missing direct `SO/DN/SI → Customer` header edges (each has its own `customer` field). (RC4) backward child-table edges (DN→SO) query the wrong parent (F1 systemic). → Detailed fix in the §AB handoff.
+- 🐛 **F-B2 — Customer new/edit is NOT on the V4 golden template** (no FlowWizard, no Lead→Customer prefill — had to type everything). Regression/miss vs the 2h-followups conversion; verify and re-convert.
+- ⚠️ **F-B3 (perf) — Flow rail + Cross-flow actions are slow to load.** Still heavy on first paint even after the 2P query-storm work; profile the 16-slot hook on these pages.
+- ➕ **F-B4 (feature) — global Print & Share** buttons in the document header (all docs, esp. SO + Quotation), with Pana branding + proper formatting. Detailed impl log required in handoff.
+- 🎨 **F-B5 — Flow rail + Cross-flow actions UI redesign** (user upgraded scope: redesign the visuals, not just the data). Standing deferred FlowRail visual debt now in-scope.
+- 🔐 **F-B6 (RBAC role model) — cross-role O2C is blocked.** `hannah@` (Sales) can't create a Sales Invoice; `eyob@` (Accounts) can't open the SO/DN; adding "Accounts User" to hannah over-granted (full accounting up to PE). Need a tailored SME persona-role model, not stock ERPNext roles. → Decision + fix in handoff.
 
-**Sign-off:** ☐ Lead-to-Cash verified — proceed to §C.
+**§B fix bucket (accumulating for mesh handoff):**
+1. F-B1 flow-resolution engine fix (RC1–RC4) + real-ERPNext-field verification + tests — **headline**.
+2. F-B2 Customer V4 golden-template conversion + Lead→Customer prefill.
+3. F-B3 flow-rail/cross-flow perf profile.
+4. F-B4 global Print & Share (branded).
+5. F-B5 FlowRail + CrossFlow visual redesign.
+6. F-B6 SME persona-role model (decision-gated).
+
+**Sign-off:** ☐ Lead-to-Cash — **BLOCKED on F-B1 (doc-to-doc connections); fixes handed to mesh.**
 
 ---
 
