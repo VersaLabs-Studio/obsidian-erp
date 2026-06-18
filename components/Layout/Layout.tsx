@@ -614,15 +614,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       >
         <div className="flex items-center gap-3 group cursor-pointer">
           <div className="h-10 w-10 relative overflow-hidden rounded-xl shadow-lg shadow-primary/20 transition-transform duration-300 group-hover:scale-105 group-hover:rotate-3">
-            <img 
-              src="/logo.png" 
-              alt="Obsidian Logo" 
+            <img
+              src="/pana-logo.png"
+              alt="Pana Logo"
               className="h-full w-full object-contain bg-white p-1"
             />
           </div>
           {(!isSidebarCollapsed || isMobile) && (
             <div className="flex flex-col animate-in fade-in slide-in-from-left-2 duration-300">
-              <span className="font-bold text-lg tracking-tight">Obsidian ERP</span>
+              <span className="font-bold text-lg tracking-tight">Pana Promotion</span>
               <span className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
                 Enterprise
               </span>
