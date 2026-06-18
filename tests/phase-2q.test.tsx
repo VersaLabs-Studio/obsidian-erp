@@ -741,13 +741,33 @@ describe("Part 3 (F-A2): <RequirePermission> fail-FAST capability gate", () => {
     expect(checkUserCan(undefined, "Sales Order", "create")).toBe(false);
   });
 
-  it("checkUserCan: returns false when the perm list is empty (unauthenticated)", async () => {
+  it("checkUserCan: falls OPEN when the perm list is unknown/empty (cosmetic gate denies only on positive evidence)", async () => {
     const { checkUserCan } = await import("@/components/auth/permission-gate");
     const user = {
-      userId: "u@x", userRole: "User", roles: [], tenantId: "default",
-      frappeSession: "x",
+      userId: "u@x", userRole: "Sales User", roles: ["Sales User"],
+      tenantId: "default", frappeSession: "x",
+      // No canCreate payload — e.g. the Frappe boot perm fetch was
+      // unavailable. An absent list must NOT be read as "zero permissions"
+      // and falsely block an authenticated user; the server still enforces.
     } as Parameters<typeof checkUserCan>[0];
-    expect(checkUserCan(user, "Sales Order", "create")).toBe(false);
+    expect(checkUserCan(user, "Sales Order", "create")).toBe(true);
+  });
+
+  it("checkUserCan: System Manager / Administrator bypasses the gate for every doctype", async () => {
+    const { checkUserCan } = await import("@/components/auth/permission-gate");
+    // Even with an EMPTY boot payload, an admin is never falsely blocked.
+    const sysManager = {
+      userId: "admin@x", userRole: "System Manager", roles: ["System Manager"],
+      tenantId: "default", frappeSession: "x", canCreate: [],
+    } as Parameters<typeof checkUserCan>[0];
+    expect(checkUserCan(sysManager, "Sales Order", "create")).toBe(true);
+    expect(checkUserCan(sysManager, "Journal Entry", "create")).toBe(true);
+    // The literal `Administrator` user (special in Frappe) too.
+    const administrator = {
+      userId: "Administrator", userRole: "System Manager", roles: [],
+      tenantId: "default", frappeSession: "x",
+    } as Parameters<typeof checkUserCan>[0];
+    expect(checkUserCan(administrator, "Sales Order", "create")).toBe(true);
   });
 
   it("<RequirePermission> renders the children when useCan returns true", async () => {

@@ -35,9 +35,12 @@ export type PermissionKind = "create" | "read" | "write";
  * enforces". Once the user context resolves, the gate flips to the
  * authoritative answer.
  *
- * Returns `false` when the user is loaded but the perm list is empty
- * (unauthenticated) — i.e. `/api/auth/me` returned 401. The page
- * then renders the denied state.
+ * Falls OPEN when the user is loaded but their capability list is
+ * unknown/empty (e.g. the Frappe boot perms were unavailable) — a
+ * cosmetic gate must not read absence-of-data as denial. It renders the
+ * denied state ONLY on positive evidence (a populated list omitting the
+ * doctype) or for a genuinely unauthenticated request (`user` is null →
+ * `/api/auth/me` 401 → the page falls open and the server enforces).
  */
 export function useCan(doctype: string, perm: PermissionKind): boolean {
   const { user } = useCurrentUser();
@@ -55,13 +58,39 @@ export function checkUserCan(
   perm: PermissionKind,
 ): boolean {
   if (!user) return false;
+
+  // Admin bypass. A System Manager / Administrator can create/read/write
+  // every doctype — Frappe grants this server-side regardless of the boot
+  // perm payload. Surfacing it here stops the COSMETIC gate from ever
+  // falsely denying an admin (the bug: an admin whose boot perms were
+  // empty/unavailable was shown "You don't have access to create Sales
+  // Order"). The literal `Administrator` user is special-cased too.
+  if (
+    user.userId === "Administrator" ||
+    (Array.isArray(user.roles) &&
+      (user.roles.includes("System Manager") ||
+        user.roles.includes("Administrator")))
+  ) {
+    return true;
+  }
+
   const list =
     perm === "create"
       ? user.canCreate
       : perm === "read"
         ? user.canRead
         : user.canWrite;
-  if (!Array.isArray(list) || list.length === 0) return false;
+
+  // Fail OPEN on unknown capability. This gate is cosmetic (the server is
+  // the sole enforcement point), so it must deny ONLY on POSITIVE evidence:
+  // a populated list that omits this doctype. An empty/undefined list means
+  // "we don't have the user's boot perms" (e.g. the boot fetch returned
+  // nothing) — NOT "the user has zero permissions". Reading absence-of-data
+  // as denial is what blocked authenticated users (admins included); a
+  // false "show the form, server rejects" is strictly safer than a false
+  // "you're not allowed" that halts legitimate work.
+  if (!Array.isArray(list) || list.length === 0) return true;
+
   return list.includes(doctype);
 }
 
