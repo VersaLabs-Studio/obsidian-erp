@@ -83,7 +83,7 @@ const WIZARD_STEPS: WizardStep[] = [
     label: "Supplier & Source",
     description: "Set the supplier and billing details",
     schema: null,
-    fields: ["supplier", "posting_date", "bill_no", "bill_date", "credit_to"],
+    fields: ["supplier", "posting_date", "bill_no", "bill_date", "credit_to", "payment_terms_template"],
     icon: "Truck",
   },
   {
@@ -360,6 +360,17 @@ export default function NewPurchaseInvoicePage() {
                           ["company", "=", getActiveCompany()],
                           ["is_group", "=", 0],
                         ]}
+                      />
+                      {/* 2S Part 4 — Payment Terms Template. Allows setting
+                          installment-based payment schedules on the invoice.
+                          ERPNext applies the template's payment_schedule entries
+                          to auto-populate due dates and amounts. */}
+                      <FormFrappeSelect
+                        control={control}
+                        name="payment_terms_template"
+                        label="Payment Terms"
+                        doctype="Payment Terms Template"
+                        placeholder="Select payment terms..."
                       />
                     </div>
                   </div>
