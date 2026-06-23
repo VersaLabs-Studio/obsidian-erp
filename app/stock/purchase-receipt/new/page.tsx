@@ -181,15 +181,23 @@ export default function NewPurchaseReceiptPage() {
       ...d,
       items: Array.isArray(d.items) && d.items.length > 0 ? d.items : [{ ...EMPTY_ITEM }],
     });
+    // 2S Part 2 — bind the header "Link to Purchase Order" field to the
+    // incoming ?purchase_order= param. ERPNext's server mapper may not
+    // include it on the PR header (the canonical link lives on PR Item),
+    // so we set it explicitly to surface the source PO clearly.
+    if (purchaseOrderId) {
+      setValue("purchase_order", purchaseOrderId);
+    }
     const filled = new Set<string>(
       Object.keys(d).filter((k) => k !== "items"),
     );
     filled.add("items");
+    if (purchaseOrderId) filled.add("purchase_order");
     setAutoFilledFields(filled);
     toast.success(`Loaded from Purchase Order ${purchaseOrderId}`, {
       description: "Review items and set warehouse to continue.",
     });
-  }, [poDraft, purchaseOrderId, reset, getValues]);
+  }, [poDraft, purchaseOrderId, reset, getValues, setValue]);
 
   useEffect(() => {
     // 2R Part 2 — skip the hand-mapping fallback when the canonical draft
@@ -214,6 +222,7 @@ export default function NewPurchaseReceiptPage() {
     reset({
       ...getValues(),
       ...(header as Partial<PRForm>),
+      purchase_order: purchaseOrderId ?? "",
       items: items.length ? items : [{ ...EMPTY_ITEM }],
     });
 
@@ -222,6 +231,7 @@ export default function NewPurchaseReceiptPage() {
         .filter((m) => m.isReadOnly)
         .map((m) => m.targetField),
       "items",
+      "purchase_order",
     ]);
     setAutoFilledFields(filled);
 
