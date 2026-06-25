@@ -573,6 +573,14 @@ export const DOCTYPE_CONFIG: Record<string, DocTypeConfig> = {
     labelField: "operation",
     isSettings: true,
   },
+  "Job Card": {
+    apiPath: "manufacturing/job-card",
+    module: "Manufacturing",
+    labelField: "name",
+    searchFields: ["name", "work_order", "operation", "workstation"],
+    defaultSortField: "creation",
+    defaultSortOrder: "desc",
+  },
   Workstation: {
     apiPath: "manufacturing/workstation",
     module: "Manufacturing",
@@ -747,7 +755,7 @@ export const DOCTYPE_CONFIG_V4: Record<string, DocTypeConfigV4> = {
     flow: {
       hasFlow: true,
       upstreamDoctype: "Sales Order",
-      downstreamDoctypes: ["Stock Entry"],
+      downstreamDoctypes: ["Stock Entry", "Job Card"],
       statusMachineKey: "Work Order",
       flowLabel: "Work Order",
     },
@@ -756,6 +764,29 @@ export const DOCTYPE_CONFIG_V4: Record<string, DocTypeConfigV4> = {
       canUpdate: false,
       canRead: true,
       toolDescription: "Create manufacturing work orders from sales orders",
+    },
+    ux: {
+      wizardSteps: 2,
+      showFlowTracker: true,
+      showWhatsNext: true,
+      showActivityTimeline: true,
+      defaultView: "list",
+    },
+  },
+  "Job Card": {
+    ...DOCTYPE_CONFIG["Job Card"],
+    flow: {
+      hasFlow: true,
+      upstreamDoctype: "Work Order",
+      downstreamDoctypes: [],
+      statusMachineKey: "Job Card",
+      flowLabel: "Job Card",
+    },
+    ai: {
+      canCreate: true,
+      canUpdate: true,
+      canRead: true,
+      toolDescription: "Manage job cards for manufacturing operations",
     },
     ux: {
       wizardSteps: 2,

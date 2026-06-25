@@ -39,6 +39,11 @@ import {
 import { validateWizardStep } from "@/lib/flows/flow-validation";
 import type { StepValidationResult } from "@/lib/flows/flow-validation";
 import { getActiveCompany } from "@/lib/settings/company";
+import {
+  fallbackFgWarehouse,
+  fallbackWipWarehouse,
+  resolveCompanyWarehouses,
+} from "@/lib/settings/warehouses";
 import type { WizardStep } from "@/types/flow-types";
 import type { SalesOrder } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
@@ -105,8 +110,9 @@ function CreateWorkOrderForm() {
       qty: preQty ? parseFloat(preQty) : 1,
       sales_order: salesOrderId || "",
       expected_delivery_date: "",
-      fg_warehouse: "",
-      wip_warehouse: "",
+      // 2S Part 11 — default to implicit warehouses (Stores=WIP, FG=Stores).
+      fg_warehouse: fallbackFgWarehouse(),
+      wip_warehouse: fallbackWipWarehouse(),
       source_warehouse: "",
       scrap_warehouse: "",
       planned_start_date: new Date().toISOString().split("T")[0],
@@ -120,6 +126,16 @@ function CreateWorkOrderForm() {
 
   const watchedAll = useWatch({ control });
   const selectedItem = watchedAll?.production_item;
+
+  // 2S Part 11 — Resolve implicit warehouses and set defaults. The user
+  // should rarely need to pick a warehouse; the implicit model provides
+  // Stores (FG) and WIP automatically.
+  useEffect(() => {
+    resolveCompanyWarehouses().then((wh) => {
+      if (!getValues("fg_warehouse")) setValue("fg_warehouse", wh.fg);
+      if (!getValues("wip_warehouse")) setValue("wip_warehouse", wh.wip);
+    });
+  }, [getValues, setValue]);
 
   // -- Auto-fill from Sales Order --------------------------------------------
   const { data: salesOrder, isLoading: loadingSO } = useFrappeDoc<SalesOrder>(

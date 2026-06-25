@@ -295,6 +295,18 @@ const LINKS: FlowLinkDef[] = [
     field: "work_order",
     returnParent: false,
   },
+  // 2S Part 10 — Work Order → Job Card: child-table back-link on
+  // Job Card.work_order. The WO rail shows its job cards and their
+  // completion roll-up.
+  {
+    from: "Work Order",
+    to: "Job Card",
+    direction: "forward",
+    pattern: "back_link",
+    queryDoctype: "Job Card",
+    field: "work_order",
+    returnParent: false,
+  },
   {
     from: "BOM",
     to: "Work Order",

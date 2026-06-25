@@ -192,6 +192,11 @@ const navigation = [
         href: "/manufacturing/work-order",
         icon: ClipboardList,
       },
+      {
+        title: "Job Cards",
+        href: "/manufacturing/job-card",
+        icon: ClipboardList,
+      },
       { title: "Bill of Materials", href: "/manufacturing/bom", icon: Layers },
       { title: "Workstations", href: "/manufacturing/workstation", icon: Cpu },
       { title: "Operations", href: "/manufacturing/operation", icon: Cog },
