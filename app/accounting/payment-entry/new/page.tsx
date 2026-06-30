@@ -42,6 +42,7 @@ import {
 } from "@/lib/flows/flow-auto-fill";
 import { validateWizardStep } from "@/lib/flows/flow-validation";
 import type { StepValidationResult } from "@/lib/flows/flow-validation";
+import { distributeAllocations } from "@/lib/accounting/payment-allocation";
 import type { WizardStep } from "@/types/flow-types";
 import type { PaymentEntry, SalesInvoice, PurchaseInvoice } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
@@ -273,6 +274,27 @@ function CreatePaymentEntryForm() {
     setValue("received_amount", watchedPaidAmount);
   }, [watchedPaidAmount, setValue]);
 
+  // 2U §A3 — keep each invoice allocation distributed from the (authoritative)
+  // Paid Amount, capped at the invoice outstanding. This keeps the live
+  // Difference indicator at zero and guarantees ERPNext's
+  // `difference_amount == 0` submit guard passes — the bug that blocked
+  // partial payments ("Difference Amount must be zero"). The equality guard
+  // makes the effect converge (no setValue once allocations already match).
+  useEffect(() => {
+    const refs = watchedReferences ?? [];
+    if (refs.length === 0) return;
+    let remaining = Number(watchedPaidAmount) || 0;
+    refs.forEach((r, i) => {
+      const outstanding = Number(r?.outstanding_amount) || 0;
+      const cap = outstanding > 0 ? outstanding : remaining;
+      const alloc = Math.max(0, Math.min(remaining, cap));
+      remaining -= alloc;
+      if (Number(r?.allocated_amount) !== alloc) {
+        setValue(`references.${i}.allocated_amount`, alloc);
+      }
+    });
+  }, [watchedPaidAmount, watchedReferences, setValue]);
+
   // Fetch outstanding invoices for the selected party
   const invoiceDoctype = watchedPartyType === "Supplier" ? "Purchase Invoice" : "Sales Invoice";
   const partyField = watchedPartyType === "Supplier" ? "supplier" : "customer";
@@ -410,18 +432,23 @@ function CreatePaymentEntryForm() {
 
   const handleSubmit = useCallback(() => {
     const values = getValues();
+    // 2U §A3 — distribute the typed Paid Amount across the referenced
+    // invoices so paid_amount === Σ allocated_amount. This is authoritative
+    // at submit (independent of whatever the live effect did), so the PE can
+    // never post with a non-zero difference_amount.
+    const { references: distributedRefs, paidAmount: effectivePaid } =
+      distributeAllocations(Number(values.paid_amount) || 0, values.references ?? []);
     createMutation.mutate({
       ...values,
       company: getActiveCompany(),
       naming_series: "ACC-PAY-.YYYY.-",
-      received_amount: values.paid_amount,
+      paid_amount: effectivePaid,
+      received_amount: effectivePaid,
       source_exchange_rate: 1,
       target_exchange_rate: 1,
-      base_paid_amount: values.paid_amount,
-      base_received_amount: values.paid_amount,
-      references: (values.references ?? []).filter(
-        (ref) => ref.reference_name && ref.allocated_amount > 0,
-      ),
+      base_paid_amount: effectivePaid,
+      base_received_amount: effectivePaid,
+      references: distributedRefs,
     });
   }, [createMutation, getValues]);
 

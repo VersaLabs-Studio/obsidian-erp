@@ -192,6 +192,11 @@ const navigation = [
         href: "/manufacturing/work-order",
         icon: ClipboardList,
       },
+      {
+        title: "Job Cards",
+        href: "/manufacturing/job-card",
+        icon: ClipboardList,
+      },
       { title: "Bill of Materials", href: "/manufacturing/bom", icon: Layers },
       { title: "Workstations", href: "/manufacturing/workstation", icon: Cpu },
       { title: "Operations", href: "/manufacturing/operation", icon: Cog },
@@ -242,6 +247,10 @@ const navigation = [
     // 2N Part 3.2: Reports group is a sub-section of Accounting. We link
     // each financial report directly rather than nesting a parent route.
     items: [
+      { title: "Dashboard", href: "/accounting/reports", icon: BarChart3 },
+      { title: "Sales", href: "/accounting/reports/sales", icon: TrendingUp },
+      { title: "Receivables", href: "/accounting/reports/receivables", icon: Wallet },
+      { title: "Payables", href: "/accounting/reports/payables", icon: Wallet },
       { title: "Profit & Loss", href: "/accounting/reports/profit-and-loss", icon: TrendingUp },
       { title: "Balance Sheet", href: "/accounting/reports/balance-sheet", icon: BarChart3 },
       { title: "Accounts Receivable", href: "/accounting/reports/accounts-receivable", icon: Wallet },

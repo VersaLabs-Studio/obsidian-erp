@@ -20,7 +20,7 @@ import {
   type ListDoc,
   type ResolvedFlowChainResult,
 } from "@/lib/flows/flow-graph";
-import { getFlowForDocType } from "@/lib/flows/flow-chain-resolver";
+import { getFlowForDocType, getFlowDefinition } from "@/lib/flows/flow-chain-resolver";
 
 // ---------------------------------------------------------------------------
 // Server-side I/O adapters
@@ -56,9 +56,20 @@ async function serverGetDoc(
 }
 
 /**
- * Server `listDoc`: build the Frappe `/api/method/frappe.client.get_list`
- * call. The BFS uses this for back-link filters and verify-existence
- * filters.
+ * Server `listDoc`: list `doctype` via the REST resource endpoint
+ * (`client.db.getDocList`). The BFS uses this for back-link filters and
+ * verify-existence filters.
+ *
+ * 2U §A — TRANSPORT FIX. The previous implementation called
+ * `frappe.client.get_list` over RPC. For the resolver's child-table
+ * back-links (PR→PI, PO→PR, SO→DN, DN→SI, QN→SO …) the BFS passed the
+ * CHILD doctype as `doctype`; `frappe.client.get_list` then runs
+ * `check_parent_permission`, which raises PermissionError (403) — and the
+ * whole rail goes dark. The resolver now passes the PARENT doctype with a
+ * 4-tuple child-table filter (see `resolveBackLink` Path B), and we route
+ * through `client.db.getDocList` — the same REST resource path the app's
+ * own list routes use and that returns 200 for 4-tuple child filters on
+ * live. ERPNext still runs DocPerm for the requesting user on the parent.
  */
 async function serverListDoc(
   client: ReturnType<typeof getRequestClient>,
@@ -76,19 +87,13 @@ async function serverListDoc(
     }
     return [];
   }
-  const params: Record<string, unknown> = {
-    doctype,
-    fields: ["name", ...fields.filter((f) => f !== "name")],
-    limit_page_length: Math.max(1, Math.min(limit, 1)),
-  };
-  if (filters && filters.length > 0) {
-    params.filters = filters;
-  }
+  const selectFields = ["name", ...fields.filter((f) => f !== "name")];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const raw: any = await (client.call as any).get(
-    "frappe.client.get_list",
-    params,
-  );
+  const raw: any = await (client.db as any).getDocList(doctype, {
+    fields: selectFields,
+    filters: filters as unknown,
+    limit: Math.max(1, limit),
+  });
   const rows = Array.isArray(raw) ? raw : raw?.message ?? [];
   if (!Array.isArray(rows)) return [];
   return rows.map((r: { name: string; parent?: string }) => ({
@@ -120,6 +125,11 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const doctype = searchParams.get("doctype");
   const name = searchParams.get("name");
+  // 2U §3 FIX — optional explicit flow projection. For a doctype that lives
+  // in more than one flow (Payment Entry → sales + purchase), the caller
+  // disambiguates by passing &flowId= (e.g. "purchase" for a Pay-type PE).
+  // Without it we fall back to getFlowForDocType's first match (sales).
+  const flowId = searchParams.get("flowId") || undefined;
 
   if (!doctype || !name) {
     return NextResponse.json(
@@ -134,8 +144,9 @@ export async function GET(request: NextRequest) {
   }
 
   // Confirm the anchor is part of a registered flow. If not, we still
-  // walk the graph but the response carries an empty `stages` array.
-  const flow = getFlowForDocType(doctype);
+  // walk the graph but the response carries an empty `stages` array. When
+  // an explicit flowId is supplied, project onto THAT flow (2U §3).
+  const flow = flowId ? getFlowDefinition(flowId) : getFlowForDocType(doctype);
 
   try {
     // Wrap the raw server fetches in a dedupe-aware batched getDoc. The
@@ -152,6 +163,7 @@ export async function GET(request: NextRequest) {
       name,
       getDoc,
       listDoc,
+      flowId,
     );
 
     return NextResponse.json({

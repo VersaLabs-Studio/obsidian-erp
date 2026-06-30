@@ -10,7 +10,8 @@
     "generate-types": "node scripts/generate-types.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "seed:catalog": "node scripts/seed-pana-catalog.js"
   },
   "dependencies": {
     "@fontsource/inter": "^5.2.6",

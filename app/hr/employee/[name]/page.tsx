@@ -1,6 +1,11 @@
 "use client";
 
+// app/hr/employee/[name]/page.tsx
+// Employee Detail — InfoCard grid. OKLCH semantic tokens only.
+
+import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { motion } from "framer-motion";
 import {
   User,
   Briefcase,
@@ -15,6 +20,7 @@ import {
   XCircle,
   Clock,
   ShieldCheck,
+  ArrowLeft,
 } from "lucide-react";
 import { useFrappeDoc, useFrappeDelete } from "@/hooks/generic";
 import { PageHeader, LoadingState, ConfirmDialog } from "@/components/smart";
@@ -22,7 +28,38 @@ import { InfoCard, DataPoint } from "@/components/ui/info-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { Employee } from "@/types/doctype-types";
-import { useState } from "react";
+
+function formatDate(dateStr: string | undefined): string {
+  if (!dateStr) return "—";
+  return new Date(dateStr).toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function getInitials(emp: Employee): string {
+  const first = emp.first_name?.charAt(0) || "";
+  const last = emp.last_name?.charAt(0) || "";
+  return `${first}${last}`.toUpperCase() || "NA";
+}
+
+const fadeIn = {
+  hidden: { opacity: 0, y: 20 },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.4, ease: [0.25, 0.1, 0.25, 1] as const },
+  },
+};
+
+const staggerContainer = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: { staggerChildren: 0.1 },
+  },
+};
 
 export default function EmployeeDetailPage() {
   const params = useParams();
@@ -87,24 +124,27 @@ export default function EmployeeDetailPage() {
         }
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
+      <motion.div
+        className="grid grid-cols-1 lg:grid-cols-3 gap-6"
+        variants={staggerContainer}
+        initial="hidden"
+        animate="show"
+      >
+        <motion.div className="lg:col-span-2 space-y-6" variants={fadeIn}>
           <InfoCard
             title="Personal Information"
             icon={<User className="h-4 w-4" />}
           >
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <DataPoint label="First Name" value={emp.first_name} />
-              <DataPoint label="Last Name" value={emp.last_name || "N/A"} />
+              <DataPoint label="Middle Name" value={emp.middle_name || "—"} />
+              <DataPoint label="Last Name" value={emp.last_name || "—"} />
               <DataPoint label="Gender" value={emp.gender} />
               <DataPoint
                 label="Date of Birth"
-                value={
-                  emp.date_of_birth
-                    ? new Date(emp.date_of_birth).toLocaleDateString()
-                    : "Not set"
-                }
+                value={formatDate(emp.date_of_birth)}
               />
+              <DataPoint label="Blood Group" value={emp.blood_group || "—"} />
             </div>
           </InfoCard>
 
@@ -124,17 +164,52 @@ export default function EmployeeDetailPage() {
               />
               <DataPoint
                 label="Date of Joining"
-                value={
-                  emp.date_of_joining
-                    ? new Date(emp.date_of_joining).toLocaleDateString()
-                    : "Not set"
-                }
+                value={formatDate(emp.date_of_joining)}
+              />
+              <DataPoint label="Branch" value={emp.branch || "—"} />
+              <DataPoint label="Reports To" value={emp.reports_to || "—"} />
+            </div>
+          </InfoCard>
+
+          <InfoCard
+            title="Contact Information"
+            icon={<Phone className="h-4 w-4" />}
+          >
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <DataPoint label="Mobile" value={emp.cell_number || "—"} />
+              <DataPoint
+                label="Personal Email"
+                value={emp.personal_email || "—"}
+              />
+              <DataPoint
+                label="Company Email"
+                value={emp.company_email || "—"}
+              />
+              <DataPoint
+                label="Preferred Email"
+                value={emp.prefered_contact_email || "—"}
               />
             </div>
           </InfoCard>
-        </div>
 
-        <div className="space-y-6">
+          <InfoCard
+            title="Address"
+            icon={<MapPin className="h-4 w-4" />}
+          >
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <DataPoint
+                label="Current Address"
+                value={emp.current_address || "—"}
+              />
+              <DataPoint
+                label="Permanent Address"
+                value={emp.permanent_address || "—"}
+              />
+            </div>
+          </InfoCard>
+        </motion.div>
+
+        <motion.div className="space-y-6" variants={fadeIn}>
           <InfoCard title="Quick Status" variant="gradient">
             <div className="space-y-4">
               <div className="flex items-center justify-between text-sm">
@@ -151,11 +226,44 @@ export default function EmployeeDetailPage() {
               <div className="flex items-center justify-between text-sm pt-4 border-t border-primary/10">
                 <span className="text-muted-foreground">Join Date</span>
                 <span className="font-medium">
-                  {emp.date_of_joining
-                    ? new Date(emp.date_of_joining).toLocaleDateString()
-                    : "N/A"}
+                  {formatDate(emp.date_of_joining)}
                 </span>
               </div>
+              {emp.reports_to && (
+                <div className="flex items-center justify-between text-sm pt-4 border-t border-primary/10">
+                  <span className="text-muted-foreground">Reports To</span>
+                  <span className="font-medium truncate max-w-[120px]">
+                    {emp.reports_to}
+                  </span>
+                </div>
+              )}
+            </div>
+          </InfoCard>
+
+          <InfoCard title="Contact Details" variant="gradient">
+            <div className="space-y-3">
+              {emp.cell_number && (
+                <div className="flex items-center gap-2 text-sm">
+                  <Phone className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-foreground">{emp.cell_number}</span>
+                </div>
+              )}
+              {emp.personal_email && (
+                <div className="flex items-center gap-2 text-sm">
+                  <Mail className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-foreground truncate">
+                    {emp.personal_email}
+                  </span>
+                </div>
+              )}
+              {emp.company_email && (
+                <div className="flex items-center gap-2 text-sm">
+                  <Mail className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-foreground truncate">
+                    {emp.company_email}
+                  </span>
+                </div>
+              )}
             </div>
           </InfoCard>
 
@@ -176,22 +284,30 @@ export default function EmployeeDetailPage() {
                   {emp.user_id || "None"}
                 </span>
               </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-muted-foreground">Employee Number</span>
+                <span className="text-foreground font-mono">
+                  {emp.employee_number || "—"}
+                </span>
+              </div>
               <div className="flex justify-between text-xs border-t border-border/50 pt-2">
                 <span className="text-muted-foreground">System Created</span>
                 <span className="text-foreground">
-                  {new Date(emp.creation!).toLocaleDateString()}
+                  {emp.creation
+                    ? new Date(emp.creation).toLocaleDateString()
+                    : "—"}
                 </span>
               </div>
             </div>
           </InfoCard>
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
 
       <ConfirmDialog
         open={showDeleteDialog}
         onOpenChange={setShowDeleteDialog}
         title="Delete Employee"
-        description={`Are you sure you want to delete "${emp.employee_name}"? This action cannot be undone.`}
+        description={`Are you sure you want to delete "${emp.employee_name || emp.name}"? This action cannot be undone.`}
         confirmText="Delete"
         variant="destructive"
         onConfirm={async () => {

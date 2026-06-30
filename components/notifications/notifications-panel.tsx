@@ -103,7 +103,9 @@ export function NotificationsPanel({
     (item: Notification) => {
       markRead(item.id);
       // F7: if item has detail or actions, show detail view
-      if (item.detail || (item.actions && item.actions.length > 0)) {
+      // 2W A3: also show detail view for CRUD notifications (doctype set)
+      // so the "CRUD Operation" block + "Open document" button are visible.
+      if (item.detail || (item.actions && item.actions.length > 0) || item.doctype) {
         setDetailItem(item);
         return;
       }
@@ -249,6 +251,37 @@ export function NotificationsPanel({
                     <p className="text-sm text-muted-foreground leading-relaxed">
                       {detailItem.message}
                     </p>
+                  )}
+
+                  {/* 2V P1-1 — CRUD context: doctype + operation info */}
+                  {detailItem.doctype && (
+                    <div className="rounded-xl bg-muted/30 p-4 space-y-1.5">
+                      <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                        CRUD Operation
+                      </p>
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="font-medium text-foreground">
+                          {detailItem.operation ?? "modified"}
+                        </span>
+                        <span className="text-muted-foreground/50">·</span>
+                        <span className="text-primary font-medium">
+                          {detailItem.doctype}
+                        </span>
+                        {detailItem.docName && (
+                          <>
+                            <span className="text-muted-foreground/50">·</span>
+                            <span className="font-mono text-xs text-muted-foreground">
+                              {detailItem.docName}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                      {detailItem.summary && (
+                        <p className="text-xs text-muted-foreground">
+                          {detailItem.summary}
+                        </p>
+                      )}
+                    </div>
                   )}
 
                   {detailItem.detail && (

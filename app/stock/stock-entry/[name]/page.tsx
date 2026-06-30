@@ -15,7 +15,6 @@ import {
   Send,
   Trash2,
   Ban,
-  Printer,
   Loader2,
   Package,
   ArrowRightLeft,
@@ -32,6 +31,7 @@ import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
 import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
 import { useFlowChain } from "@/hooks/flows/use-flow-chain";
 import { useFrappeDoc, useFrappeUpdate, useFrappeDelete } from "@/hooks/generic";
+import { PrintShare } from "@/components/ui/print-share";
 import type { StockEntry } from "@/types/doctype-types";
 
 const ETB = new Intl.NumberFormat("en-ET", { style: "currency", currency: "ETB" });
@@ -146,6 +146,7 @@ export default function StockEntryDetailPage() {
         }}
         actions={
           <div className="flex items-center gap-2">
+            <PrintShare doctype="Stock Entry" name={name} />
             {isDraft && (
               <>
                 <Button variant="outline" size="sm" asChild>
@@ -192,9 +193,6 @@ export default function StockEntryDetailPage() {
                 <Ban className="mr-1.5 h-4 w-4" /> Cancel
               </Button>
             )}
-            <Button variant="ghost" size="icon" disabled title="Print (Phase 2)">
-              <Printer className="h-4 w-4" />
-            </Button>
           </div>
         }
       />

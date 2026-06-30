@@ -32,6 +32,11 @@ import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
 import { FlowWizard } from "@/components/flows/FlowWizard";
 import { useFrappeCreate, useFrappeDoc } from "@/hooks/generic";
 import { useMakeFrom } from "@/hooks/flows/use-make-from";
+import {
+  getAutoFillMapping,
+  applyAutoFill,
+  applyItemAutoFill,
+} from "@/lib/flows/flow-auto-fill";
 import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
 import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
 import { getActiveCompany } from "@/lib/settings/company";
@@ -39,6 +44,7 @@ import { validateWizardStep } from "@/lib/flows/flow-validation";
 import type { StepValidationResult } from "@/lib/flows/flow-validation";
 import type { WizardStep } from "@/types/flow-types";
 import type { PurchaseInvoice } from "@/types/doctype-types";
+import type { PurchaseOrder, PurchaseReceipt } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
 
 interface PIItem {
@@ -186,6 +192,22 @@ export default function NewPurchaseInvoicePage() {
       ? `Purchase Receipt ${purchaseReceiptId}`
       : null;
 
+  // 2U §6 — Fallback: fetch source docs for hand-mapping when the server
+  // mapper returns an empty draft or errors. Matches the SI create page
+  // pattern (useFrappeDoc + getAutoFillMapping / applyAutoFill).
+  const { data: sourcePO } = useFrappeDoc<PurchaseOrder>(
+    "Purchase Order",
+    purchaseOrderId ?? "",
+    { enabled: !!purchaseOrderId && !piDraftPO },
+  );
+  const { data: sourcePR } = useFrappeDoc<PurchaseReceipt>(
+    "Purchase Receipt",
+    purchaseReceiptId ?? "",
+    { enabled: !!purchaseReceiptId && !piDraftPR },
+  );
+  const sourceDoc = sourcePO ?? sourcePR;
+  const sourceDoctype = purchaseOrderId ? "Purchase Order" : purchaseReceiptId ? "Purchase Receipt" : null;
+
   // 2R Part 2 — hydrate from the canonical draft. The mapped doc carries
   // the supplier, all item lines with `purchase_order` /
   // `purchase_order_item` / `purchase_receipt` / `pr_detail` back-links
@@ -194,16 +216,64 @@ export default function NewPurchaseInvoicePage() {
   useEffect(() => {
     if (!canonicalPiDraft || !canonicalPiSource) return;
     const d = canonicalPiDraft.doc as Partial<PIForm> & { items?: PIItem[] };
+    // 2T §1A.4 FIX — Coalesce null/undefined → "" for ALL string fields.
+    // ERPNext's mapper returns null for unset fields; React's controlled
+    // inputs reject null values ("A component is changing a controlled
+    // input to be uncontrolled"). This kills the console errors on every
+    // make-from redirect.
+    const safeD: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(d)) {
+      safeD[k] = v === null || v === undefined ? "" : v;
+    }
+    // Also null-safe the items array
+    const safeItems = Array.isArray(d.items)
+      ? d.items.map((it) => ({
+          ...it,
+          item_code: it.item_code ?? "",
+          item_name: it.item_name ?? "",
+          description: it.description ?? "",
+          uom: it.uom ?? "",
+        }))
+      : [{ ...EMPTY_ITEM }];
     form.reset({
       ...form.getValues(),
-      ...d,
-      items: Array.isArray(d.items) && d.items.length > 0 ? d.items : [{ ...EMPTY_ITEM }],
-    });
+      ...safeD,
+      items: safeItems.length > 0 ? safeItems : [{ ...EMPTY_ITEM }],
+    } as PIForm);
     toast.success(`Loaded from ${canonicalPiSource}`, {
       description: "Review items and the credit_to default to continue.",
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canonicalPiDraft, canonicalPiSource]);
+
+  // 2U §6 — Fallback: if the server mapper returned empty or errored,
+  // hand-map from the source doc (PO or PR) using the auto-fill registry.
+  // This mirrors the SI create page pattern (delivery_note / sales_order
+  // auto-fill fallback at lines 199-227 in the SI new page).
+  useEffect(() => {
+    if (!sourceDoc || !sourceDoctype || canonicalPiDraft) return;
+    const mapping = getAutoFillMapping(sourceDoctype, "Purchase Invoice");
+    if (!mapping) return;
+
+    const header = applyAutoFill(
+      sourceDoc as unknown as Record<string, unknown>,
+      mapping,
+    );
+    const items = applyItemAutoFill(
+      (sourceDoc as { items?: Record<string, unknown>[] }).items ?? [],
+      mapping,
+    ) as unknown as PIItem[];
+
+    form.reset({
+      ...form.getValues(),
+      ...(header as Partial<PIForm>),
+      items: items.length ? items : [{ ...EMPTY_ITEM }],
+    });
+    toast.success("Loaded source document", {
+      description: "Fields filled from auto-fill mapping. Review before creating.",
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceDoc, sourceDoctype, canonicalPiDraft]);
 
   const { control, getValues, setValue } = form;
   const { fields, append, remove } = useFieldArray({ control, name: "items" });

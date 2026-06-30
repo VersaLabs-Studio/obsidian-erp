@@ -24,6 +24,8 @@ export const BUILT_MODULES = new Set<string>([
   // Phase 4 — Manufacturing module
   "BOM",
   "Work Order",
+  // Phase 2V — Job Card UI
+  "Job Card",
   // Phase 2f — CRM head
   "Lead",
   "Opportunity",

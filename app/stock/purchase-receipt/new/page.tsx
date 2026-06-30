@@ -37,6 +37,7 @@ import { useMakeFrom } from "@/hooks/flows/use-make-from";
 import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
 import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
 import { getActiveCompany } from "@/lib/settings/company";
+import { resolveCompanyWarehouses } from "@/lib/settings/warehouses";
 import {
   getAutoFillMapping,
   applyAutoFill,
@@ -239,6 +240,19 @@ export default function NewPurchaseReceiptPage() {
       description: "Review items and set warehouse to continue.",
     });
   }, [poDraft, purchaseOrder, purchaseOrderId, reset, getValues]);
+
+  // 2V P1-2 — Prefill default receipt warehouse when no source document
+  // is being auto-filled and the field is empty.
+  useEffect(() => {
+    if (poDraft || purchaseOrder) return;
+    const cur = getValues("set_warehouse");
+    if (cur) return;
+    resolveCompanyWarehouses()
+      .then((w) => {
+        if (w.stores) setValue("set_warehouse", w.stores);
+      })
+      .catch(() => {});
+  }, [poDraft, purchaseOrder, getValues, setValue]);
 
   const isAuto = useCallback(
     (field: string) => autoFilledFields.has(field),

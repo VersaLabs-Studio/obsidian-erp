@@ -205,6 +205,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 9R.14 — Date-validated targets carry stale payment_schedule rows
+    // from the source document. Their due_dates were computed against the
+    // source's earlier transaction_date, so ERPNext rejects them with
+    // "Due Date in the Payment Terms table cannot be before Posting Date".
+    // Fix: zero the schedule rows + null out due dates while KEEPING the
+    // payment_terms_template. ERPNext's set_payment_schedule() rebuilds
+    // fresh dates from the template against the NEW doc's posting_date
+    // during validate — but ONLY when payment_schedule is empty.
+    const DATE_VALIDATED_TARGETS = new Set([
+      "Sales Order",
+      "Purchase Invoice",
+      "Sales Invoice",
+      "Delivery Note",
+      "Purchase Receipt",
+    ]);
+    if (DATE_VALIDATED_TARGETS.has(body.targetDoctype)) {
+      doc.payment_schedule = [];
+      doc.due_date = null;
+      doc.payment_due_date = null;
+    }
+
     return NextResponse.json({
       success: true,
       data: { doctype: body.targetDoctype, doc },

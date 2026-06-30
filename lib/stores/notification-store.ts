@@ -25,6 +25,12 @@ export interface Notification {
   timestamp: number;
   read: boolean;
   href?: string;
+  /** 2V P1-1 — CRUD context: which doctype, doc name, and operation */
+  doctype?: string;
+  docName?: string;
+  operation?: "created" | "updated" | "submitted" | "cancelled" | string;
+  /** Human-readable summary of what changed (e.g. "qty: 10 → 15") */
+  summary?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -171,4 +177,61 @@ export function getSnapshot(): Notification[] {
 const EMPTY: Notification[] = [];
 export function getServerSnapshot(): Notification[] {
   return EMPTY;
+}
+
+// ---------------------------------------------------------------------------
+// 2T §7 — Unified notification sink.
+// Every toast the system shows should ALSO persist to the notification
+// panel. `notify()` is the single call site: it fires a sonner toast AND
+// writes to the notification store in one call.
+// ---------------------------------------------------------------------------
+import { toast as sonnerToast } from "sonner";
+
+type NotifyKind = "success" | "error" | "info";
+
+interface NotifyOptions {
+  /** The toast message (also stored as notification title). */
+  message: string;
+  /** Optional detail text for the notification panel. */
+  detail?: string;
+  /** Link to the created/updated doc. */
+  href?: string;
+  /** Override toast duration (ms). Default: 4000 for success, 6000 for error. */
+  duration?: number;
+  /** 2V P1-1 — CRUD context for rich notification display */
+  doctype?: string;
+  docName?: string;
+  operation?: "created" | "updated" | "submitted" | "cancelled" | string;
+  /** Human-readable summary of what changed */
+  summary?: string;
+}
+
+/**
+ * Unified notification sink — fires a sonner toast AND persists to the
+ * notification store. Use this instead of calling `toast.*` directly
+ * for any CRUD/operation event that should appear in the notification panel.
+ */
+export function notify(kind: NotifyKind, opts: NotifyOptions): void {
+  // 1. Fire the ephemeral toast
+  const duration = opts.duration ?? (kind === "error" ? 6000 : 4000);
+  if (kind === "success") {
+    sonnerToast.success(opts.message, { duration });
+  } else if (kind === "error") {
+    sonnerToast.error(opts.message, { duration });
+  } else {
+    sonnerToast.info(opts.message, { duration });
+  }
+
+  // 2. Persist to the notification store (panel)
+  addNotification({
+    kind,
+    title: opts.message,
+    detail: opts.detail,
+    href: opts.href,
+    // 2V P1-1 — CRUD context surfaced in the notification panel
+    doctype: opts.doctype,
+    docName: opts.docName,
+    operation: opts.operation,
+    summary: opts.summary,
+  });
 }

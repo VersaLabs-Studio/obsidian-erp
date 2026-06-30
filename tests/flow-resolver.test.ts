@@ -31,6 +31,7 @@ import {
 // ---------------------------------------------------------------------------
 const HEADER_FIELDS: Record<string, string[]> = {
   "Sales Order": ["name", "customer", "company", "docstatus", "status"],
+  "Sales Order Item": ["name", "parent", "prevdoc_docname", "prevdoc_doctype", "item_code", "qty"],
   "Purchase Order": [
     "name",
     "supplier",
@@ -39,6 +40,7 @@ const HEADER_FIELDS: Record<string, string[]> = {
     "status",
     "set_warehouse",
   ],
+  "Purchase Order Item": ["name", "parent", "material_request", "item_code", "qty"],
   "Purchase Receipt": [
     "name",
     "supplier",
@@ -47,6 +49,7 @@ const HEADER_FIELDS: Record<string, string[]> = {
     "status",
     "set_warehouse",
   ],
+  "Purchase Receipt Item": ["name", "parent", "purchase_order", "item_code", "qty"],
   "Purchase Invoice": [
     "name",
     "supplier",
@@ -55,6 +58,7 @@ const HEADER_FIELDS: Record<string, string[]> = {
     "status",
     "credit_to",
   ],
+  "Purchase Invoice Item": ["name", "parent", "purchase_order", "purchase_receipt", "item_code", "qty"],
   "Sales Invoice": [
     "name",
     "customer",
@@ -64,6 +68,7 @@ const HEADER_FIELDS: Record<string, string[]> = {
     "outstanding_amount",
     "grand_total",
   ],
+  "Sales Invoice Item": ["name", "parent", "delivery_note", "sales_order", "item_code", "qty"],
   "Delivery Note": [
     "name",
     "customer",
@@ -71,6 +76,7 @@ const HEADER_FIELDS: Record<string, string[]> = {
     "docstatus",
     "status",
   ],
+  "Delivery Note Item": ["name", "parent", "against_sales_order", "item_code", "qty"],
   "Material Request": ["name", "company", "docstatus", "status"],
   "Request for Quotation": ["name", "company", "docstatus"],
   "Supplier Quotation": ["name", "supplier", "docstatus"],
@@ -81,6 +87,7 @@ const HEADER_FIELDS: Record<string, string[]> = {
     "docstatus",
     "status",
   ],
+  "Payment Entry Reference": ["name", "parent", "reference_doctype", "reference_name", "allocated_amount"],
   "Work Order": [
     "name",
     "production_item",
@@ -129,6 +136,23 @@ function mockGetDoc(doctype: string, name: string): Record<string, unknown> | nu
   return DOCS.get(`${doctype}::${name}`) ?? null;
 }
 
+// Map every known child table to its parent doctype. Used by the 4-tuple
+// child-table filter branch (Frappe resolves `[childDoctype, field, op, val]`
+// against the PARENT list endpoint by joining the child table). Covers the
+// non-"Item" children (e.g. Payment Entry Reference) the bare suffix-strip
+// can't handle.
+const CHILD_TO_PARENT: Record<string, string> = {
+  "Sales Order Item": "Sales Order",
+  "Purchase Order Item": "Purchase Order",
+  "Purchase Receipt Item": "Purchase Receipt",
+  "Purchase Invoice Item": "Purchase Invoice",
+  "Sales Invoice Item": "Sales Invoice",
+  "Delivery Note Item": "Delivery Note",
+  "Request for Quotation Item": "Request for Quotation",
+  "Supplier Quotation Item": "Supplier Quotation",
+  "Payment Entry Reference": "Payment Entry",
+};
+
 async function mockListDoc(
   doctype: string,
   filters: ReadonlyArray<unknown>,
@@ -139,6 +163,18 @@ async function mockListDoc(
   if (!doctype) return [];
 
   const headerAllowed = HEADER_FIELDS[doctype];
+
+  // 2U §A — emulate Frappe `check_parent_permission`. Querying a CHILD
+  // doctype (one that carries a `parent` field) directly via the list
+  // endpoint raises PermissionError on live (403). The resolver must never
+  // do this — it queries the PARENT with a 4-tuple child-table filter
+  // instead. This guard is what the pre-2U mock was missing: it let the
+  // child-direct query pass green while live 403'd on every back-link.
+  if (headerAllowed && headerAllowed.includes("parent")) {
+    throw new Error(
+      `check_parent_permission: cannot query child table "${doctype}" directly`,
+    );
+  }
 
   // Validate each filter:
   // - 3-tuple [field, op, value]: field must be on the parent's header.
@@ -184,21 +220,28 @@ async function mockListDoc(
       }
 
       // 4-tuple [childDoctype, field, op, value]: child-table filter.
-      // 9R.13: Apply against the parent doc's `items[]` array (the child
-      // table rows), joining on the child field. This catches wrong child
-      // field names — a previously silent-pass hole.
+      // 9R.13 / 2U §A: Apply against the parent doc's child-table rows,
+      // joining on the child field. The child rows may live in any array
+      // property of the parent (`items` for *-Item tables, `references`
+      // for Payment Entry Reference), so we gather every array-valued
+      // property rather than hardcoding `items`. This catches wrong child
+      // field names AND exercises the live 4-tuple-against-parent path.
       if (f.length === 4) {
         const [childDoctype, field, op, value] = f as [string, string, string, unknown];
-        // Only match if the childDoctype slug matches the parent doctype
-        // pattern (e.g. "Sales Order Item" matches parent "Sales Order").
-        const parentFromChild = childDoctype.replace(/\s+Item$/, "");
+        // The childDoctype must belong to THIS parent (e.g. "Sales Order
+        // Item" → "Sales Order", "Payment Entry Reference" → "Payment
+        // Entry"). If it maps elsewhere, the filter can't match here — skip.
+        const parentFromChild =
+          CHILD_TO_PARENT[childDoctype] ?? childDoctype.replace(/\s+Item$/, "");
         if (parentFromChild !== doctype) {
           // The child doctype doesn't belong to this parent — skip
           continue;
         }
-        const items = (doc.items ?? []) as Record<string, unknown>[];
-        const childMatch = items.some((item) => {
-          const childVal = item[field];
+        const childRows = Object.values(doc)
+          .filter((v): v is Record<string, unknown>[] => Array.isArray(v))
+          .flat();
+        const childMatch = childRows.some((item) => {
+          const childVal = item?.[field];
           if (op === "=") return childVal === value;
           if (op === "!=") return childVal !== value;
           return true;
@@ -321,6 +364,77 @@ function seedProduceTestData() {
   seedDoc("Supplier", "SUPP-001", {
     supplier_name: "Test Supplier",
     docstatus: 1,
+  });
+
+  // 2T — Seed child-table docs with `parent` field for direct child-table
+  // queries (the 2T resolveBackLink Path B queries child tables directly
+  // instead of using 4-tuple filters on the parent).
+
+  // SO Item → QN back-link
+  seedDoc("Sales Order Item", "SOI-001", {
+    parent: "SO-001",
+    prevdoc_docname: "QTN-001",
+    prevdoc_doctype: "Quotation",
+    item_code: "ITEM-001",
+    qty: 5,
+  });
+
+  // PO Item → MR back-link
+  seedDoc("Purchase Order Item", "POI-001", {
+    parent: "PO-001",
+    material_request: "MR-001",
+    item_code: "ITEM-001",
+    qty: 10,
+  });
+
+  // PR Item → PO back-link
+  seedDoc("Purchase Receipt Item", "PRI-001", {
+    parent: "PR-001",
+    purchase_order: "PO-001",
+    item_code: "ITEM-001",
+    qty: 10,
+  });
+
+  // PI Item → PO + PR back-links
+  seedDoc("Purchase Invoice Item", "PII-001", {
+    parent: "PI-001",
+    purchase_order: "PO-001",
+    purchase_receipt: "PR-001",
+    item_code: "ITEM-001",
+    qty: 10,
+  });
+
+  // DN Item → SO back-link
+  seedDoc("Delivery Note Item", "DNI-001", {
+    parent: "DN-001",
+    against_sales_order: "SO-001",
+    item_code: "ITEM-001",
+    qty: 5,
+  });
+
+  // SI Item → DN + SO back-links
+  seedDoc("Sales Invoice Item", "SII-001", {
+    parent: "SI-001",
+    delivery_note: "DN-001",
+    sales_order: "SO-001",
+    item_code: "ITEM-001",
+    qty: 5,
+  });
+
+  // PE Reference → SI back-link
+  seedDoc("Payment Entry Reference", "PEREF-001", {
+    parent: "PE-002",
+    reference_doctype: "Sales Invoice",
+    reference_name: "SI-001",
+    allocated_amount: 10000,
+  });
+
+  // PE Reference → PI back-link
+  seedDoc("Payment Entry Reference", "PEREF-002", {
+    parent: "PE-001",
+    reference_doctype: "Purchase Invoice",
+    reference_name: "PI-001",
+    allocated_amount: 5000,
   });
 }
 

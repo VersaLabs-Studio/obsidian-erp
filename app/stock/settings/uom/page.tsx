@@ -205,7 +205,7 @@ export default function UomListPage() {
                 "hover:border-primary/20 hover:shadow-md transition-all",
               )}
             >
-              <div className="flex items-center gap-3 min-w-0">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
                 <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                   <Ruler className="h-4 w-4 text-primary" />
                 </div>

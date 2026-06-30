@@ -5,7 +5,7 @@
 // Status machine: Draft → Not Started → In Process → Completed.
 // OKLCH tokens only. No @ts-nocheck, no any.
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -41,8 +41,10 @@ import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
 import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
 import { StartProductionModal } from "@/components/manufacturing/StartProductionModal";
 import { FinishProductionModal } from "@/components/manufacturing/FinishProductionModal";
-import { useFrappeDoc, useFrappeList, useFrappeUpdate } from "@/hooks/generic";
-import type { WorkOrder, SalesOrder, Bom } from "@/types/doctype-types";
+import { useFrappeDoc, useFrappeList, useFrappeUpdate, useFrappeCreate } from "@/hooks/generic";
+import { PrintShare } from "@/components/ui/print-share";
+import { FrappeSelect } from "@/components/smart/frappe-select";
+import type { WorkOrder, SalesOrder, Bom, JobCard } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
 
 const ETB = new Intl.NumberFormat("en-ET", {
@@ -97,8 +99,26 @@ export default function WorkOrderDetailPage() {
     { enabled: !isLoading && !!wo },
   );
 
+  // 2T §2 T3 — Job Cards linked to this WO. Auto-create one per operation.
+  const { data: jobCards, isLoading: loadingJC, refetch: refetchJC } = useFrappeList<JobCard>(
+    "Job Card",
+    {
+      filters: [["work_order", "=", name]] as [string, string, unknown][],
+      fields: ["name", "operation", "status", "workstation", "total_completed_qty", "for_quantity", "employee"],
+      limit: 50,
+    },
+    { enabled: !isLoading && !!wo },
+  );
+
+  const createJCMutation = useFrappeCreate<JobCard, Record<string, unknown>>("Job Card", {
+    onSuccess: () => refetchJC(),
+  });
+
   // 2N Part 1.1: unified flow resolution.
-  const { result: chain, isLoading: chainLoading } = useFlowChain("Work Order", name);
+  // 2V P0-5 — thread the manufacturing flow so the WO rail shows
+  // manufacturing-scoped stages (SO→WO→JC→SE) instead of the 8-stage
+  // lead-to-cash flow.
+  const { result: chain, isLoading: chainLoading } = useFlowChain("Work Order", name, undefined, "manufacturing");
 
   // -- Costing ----------------------------------------------------------------
   const costing = useMemo(() => {
@@ -227,6 +247,212 @@ export default function WorkOrderDetailPage() {
     }
   };
 
+  // 2V P0-7 / 2W A2 — Job Card lifecycle: status + start/end timestamps
+  // written via set_value to bypass the controller validators that fight
+  // the simple two-button SME flow. The previous useFrappeUpdate path
+  // failed Start because the controller recomputes status from time_logs
+  // (an Open JC with no time_logs → status reset to "Open" even after we
+  // set it to "Work In Progress"). frappe.client.set_value writes the
+  // fields directly, then we re-fetch so the button label flips.
+  const assignJCMutation = useFrappeUpdate<JobCard>("Job Card", {
+    showToast: false,
+  });
+  const [activeJc, setActiveJc] = useState<string | null>(null);
+
+  // Helper: write fields to a Job Card via Frappe's set_value RPC.
+  const setJcFields = useCallback(
+    async (jcName: string, fields: Record<string, unknown>): Promise<void> => {
+      const res = await fetch(`/api/method/frappe.client.set_value`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          doctype: "Job Card",
+          name: jcName,
+          fieldname: fields,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(
+          body?.message || body?.exception || `set_value failed (${res.status})`,
+        );
+      }
+    },
+    [],
+  );
+
+  const handleStartJob = async (jcName: string) => {
+    setActiveJc(jcName);
+    try {
+      await setJcFields(jcName, {
+        status: "Work In Progress",
+        actual_start_date: new Date().toISOString().slice(0, 19).replace("T", " "),
+      });
+      toast.success(`Job Card ${jcName} started`);
+      await refetchJC();
+    } catch (err) {
+      showError(resolveFrappeError(err, { doctype: "Job Card" }));
+    } finally {
+      setActiveJc(null);
+    }
+  };
+
+  const handleCompleteJob = async (jcName: string) => {
+    setActiveJc(jcName);
+    try {
+      const jc = (jobCards ?? []).find((j) => j.name === jcName);
+      const forQty = Number(jc?.for_quantity ?? wo?.qty ?? 0);
+      await setJcFields(jcName, {
+        status: "Completed",
+        total_completed_qty: forQty,
+        actual_end_date: new Date().toISOString().slice(0, 19).replace("T", " "),
+      });
+      toast.success(`Job Card ${jcName} completed`);
+      await refetchJC();
+    } catch (err) {
+      showError(resolveFrappeError(err, { doctype: "Job Card" }));
+    } finally {
+      setActiveJc(null);
+    }
+  };
+
+  const handleAssignEmployee = (jcName: string, jc: JobCard, employeeId: string) => {
+    if (!employeeId) return;
+    const existing = (Array.isArray(jc.employee) ? jc.employee : [])
+      .map((r: unknown) => typeof r === "object" && r && "employee" in r ? (r as { employee: string }).employee : null)
+      .filter(Boolean) as string[];
+    if (existing.includes(employeeId)) return;
+    const rows = [...existing, employeeId].map((id: string) => ({ employee: id }));
+    setActiveJc(jcName);
+    assignJCMutation.mutate(
+      { name: jcName, data: { employee: rows } },
+      {
+        onSuccess: () => {
+          toast.success(`Employee assigned to ${jcName}`);
+          refetchJC();
+          setActiveJc(null);
+        },
+        onError: (err) => {
+          setActiveJc(null);
+          showError(resolveFrappeError(err, { doctype: "Job Card" }));
+        },
+      },
+    );
+  };
+
+  // 2W A2 — Default manufacturing masters (auto-provisioned). Per ADR-1,
+  // a Pana print-floor SME must not have to hand-build a workstation +
+  // operation; we self-heal the masters on first JC create so the next
+  // action is "Start", never "go set up routing".
+  const DEFAULT_WORKSTATION = "Pana Print Floor";
+  const DEFAULT_OPERATION = "Print & Finish";
+
+  const ensureMaster = useCallback(
+    async (doctype: string, name: string, payload: Record<string, unknown>): Promise<boolean> => {
+      try {
+        const head = await fetch(
+          `/api/resource/${encodeURIComponent(doctype)}/${encodeURIComponent(name)}`,
+        );
+        if (head.ok) return true;
+      } catch {
+        // fall through to create
+      }
+      try {
+        const res = await fetch(`/api/resource/${encodeURIComponent(doctype)}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          // 409 / DuplicateEntry: the master raced into existence — fine.
+          if (res.status === 409 || /duplicate|exists/i.test(JSON.stringify(body))) {
+            return true;
+          }
+          throw new Error(body?.message || `Failed to create ${doctype}: ${res.status}`);
+        }
+        return true;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        toast.error(`Could not provision ${doctype} "${name}": ${msg}`);
+        return false;
+      }
+    },
+    [],
+  );
+
+  // 2W A2 — One Job Card per Work Order, auto-created inline, no redirect.
+  // The user's exact ask: SME has one print-floor operation, not many; the
+  // BOM may carry a routing or not. If routing operations are present we
+  // use the first; otherwise we auto-provision the default "Print &
+  // Finish" operation at "Pana Print Floor" and create one JC against it.
+  const handleCreateJobCards = async () => {
+    if (!wo) return;
+
+    // Idempotent: do not create a second JC for the same WO.
+    if ((jobCards ?? []).length > 0) {
+      toast.info("Job Card already exists for this Work Order.");
+      return;
+    }
+
+    const operations = (wo.operations ?? []) as Array<{
+      operation: string;
+      workstation?: string;
+      time_in_mins?: number;
+    }>;
+
+    // Pick the operation: prefer the BOM's first routing row, else default.
+    let operationName = operations[0]?.operation;
+    let workstationName = operations[0]?.workstation;
+
+    if (!operationName) {
+      // Auto-provision defaults so the user never has to hand-build them.
+      const okWs = await ensureMaster("Workstation", DEFAULT_WORKSTATION, {
+        workstation_name: DEFAULT_WORKSTATION,
+        hour_rate: 0,
+      });
+      const okOp = await ensureMaster("Operation", DEFAULT_OPERATION, {
+        name: DEFAULT_OPERATION,
+        workstation: DEFAULT_WORKSTATION,
+      });
+      if (!okWs || !okOp) return;
+      operationName = DEFAULT_OPERATION;
+      workstationName = DEFAULT_WORKSTATION;
+    } else if (!workstationName) {
+      // Routing has an operation but no workstation — fall back to the default.
+      await ensureMaster("Workstation", DEFAULT_WORKSTATION, {
+        workstation_name: DEFAULT_WORKSTATION,
+        hour_rate: 0,
+      });
+      workstationName = DEFAULT_WORKSTATION;
+    }
+
+    createJCMutation.mutate(
+      {
+        work_order: name,
+        operation: operationName,
+        workstation: workstationName,
+        production_item: wo.production_item || "",
+        item_name: wo.item_name || "",
+        for_quantity: wo.qty || 0,
+        bom_no: wo.bom_no || "",
+        company: wo.company || "",
+        wip_warehouse: wo.wip_warehouse || "",
+        posting_date: new Date().toISOString().split("T")[0],
+        expected_start_date: new Date().toISOString().slice(0, 19).replace("T", " "),
+      },
+      {
+        onSuccess: () => {
+          toast.success("Job Card created");
+          refetchJC();
+        },
+        onError: (err) => {
+          showError(resolveFrappeError(err, { doctype: "Job Card" }));
+        },
+      },
+    );
+  };
+
   if (isLoading) return <LoadingState />;
   if (error || !wo) {
     return (
@@ -333,6 +559,7 @@ export default function WorkOrderDetailPage() {
         backHref="/manufacturing/work-order"
         actions={
           <div className="flex items-center gap-2">
+            <PrintShare doctype="Work Order" name={name} />
             {isDraft && (
               <>
                 <Button
@@ -453,6 +680,11 @@ export default function WorkOrderDetailPage() {
         </div>
       </div>
 
+      {/* 2U §4 — FlowRail below header (golden placement, matches DN/PR/SO/PO/PI/MR) */}
+      <InfoCard title="Production Flow" className="overflow-hidden">
+        <FlowRail result={chain} currentDocName={name} sourceDoctype="Work Order" isLoading={chainLoading} />
+      </InfoCard>
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* Center column */}
         <div className="space-y-6 lg:col-span-8">
@@ -538,6 +770,164 @@ export default function WorkOrderDetailPage() {
               </div>
             </InfoCard>
           )}
+
+          {/* 2T §2 T3 — Job Cards section */}
+          {isModuleBuilt("Job Card") && (
+            <div>
+              {wo.docstatus === 1 && (jobCards ?? []).length === 0 && (
+                <div className="flex justify-end mb-3">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="rounded-full"
+                    onClick={handleCreateJobCards}
+                    disabled={createJCMutation.isPending}
+                  >
+                    {createJCMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                    ) : (
+                      <Plus className="h-4 w-4 mr-1" />
+                    )}
+                    Create Job Card
+                  </Button>
+                </div>
+              )}
+              <InfoCard
+                title="Job Cards"
+                icon={<ClipboardList className="h-5 w-5 text-purple-500" />}
+              >
+              {loadingJC ? (
+                <LoadingState type="table" count={3} />
+              ) : (jobCards ?? []).length === 0 ? (
+                <div className="py-6 text-center">
+                  <p className="text-sm text-muted-foreground mb-3">
+                    No Job Card yet. {wo.docstatus === 1 ? "Click the button above to create one (one per Work Order, with the default operation pre-filled)." : "Submit the Work Order first."}
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-hidden rounded-xl border border-border/60">
+                  <table className="w-full text-sm">
+                    <thead className="border-b border-border/60 bg-secondary/20">
+                      <tr className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                        <th className="px-3 py-2.5 text-left font-semibold">Operation</th>
+                        <th className="px-3 py-2.5 text-left font-semibold">Workstation</th>
+                        <th className="px-3 py-2.5 text-left font-semibold">Employees</th>
+                        <th className="px-3 py-2.5 text-right font-semibold">Status</th>
+                        <th className="px-3 py-2.5 text-right font-semibold">Action</th>
+                        <th className="w-10" />
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/50">
+                      {jobCards!.map((jc) => {
+                        const assigned = (Array.isArray(jc.employee) ? jc.employee : [])
+                          .map((r: unknown) =>
+                            typeof r === "object" && r && "employee_name" in r
+                              ? (r as { employee_name: string }).employee_name
+                              : typeof r === "object" && r && "employee" in r
+                                ? (r as { employee: string }).employee
+                                : null,
+                          )
+                          .filter(Boolean) as string[];
+                        return (
+                          <tr key={jc.name} className="hover:bg-secondary/20 transition-colors">
+                            <td className="px-3 py-2.5 font-medium text-foreground">
+                              {jc.operation}
+                            </td>
+                            <td className="px-3 py-2.5 text-muted-foreground">
+                              {jc.workstation || "—"}
+                            </td>
+                            <td className="px-3 py-2.5">
+                              <div className="flex flex-wrap items-center gap-1">
+                                {assigned.length > 0 ? (
+                                  assigned.map((emp) => (
+                                    <span
+                                      key={emp}
+                                      className="inline-flex items-center rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400"
+                                    >
+                                      {emp}
+                                    </span>
+                                  ))
+                                ) : (
+                                  <span className="text-[10px] text-muted-foreground">—</span>
+                                )}
+                                <FrappeSelect
+                                  doctype="Employee"
+                                  labelField="employee_name"
+                                  placeholder="+"
+                                  className="h-6 w-16 text-[10px]"
+                                  disabled={activeJc === jc.name}
+                                  onChange={(val) =>
+                                    handleAssignEmployee(jc.name, jc, val)
+                                  }
+                                />
+                              </div>
+                            </td>
+                            <td className="px-3 py-2.5 text-right">
+                              <Badge
+                                variant={
+                                  jc.status === "Completed"
+                                    ? "default"
+                                    : jc.status === "Work In Progress"
+                                      ? "secondary"
+                                      : "outline"
+                                }
+                                className="text-[10px] uppercase font-black tracking-tighter"
+                              >
+                                {jc.status || "Open"}
+                              </Badge>
+                            </td>
+                            <td className="px-3 py-2.5 text-right">
+                              {jc.status === "Open" && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 text-[10px]"
+                                  onClick={() => handleStartJob(jc.name)}
+                                  disabled={activeJc === jc.name}
+                                >
+                                  {activeJc === jc.name ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <Play className="h-3 w-3 mr-1" />
+                                  )}
+                                  Start
+                                </Button>
+                              )}
+                              {jc.status === "Work In Progress" && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 text-[10px]"
+                                  onClick={() => handleCompleteJob(jc.name)}
+                                  disabled={activeJc === jc.name}
+                                >
+                                  {activeJc === jc.name ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                                  )}
+                                  Complete
+                                </Button>
+                              )}
+                            </td>
+                            <td className="px-2 py-2.5 text-center">
+                              <Link
+                                href={`/manufacturing/job-card/${encodeURIComponent(jc.name)}`}
+                                className="text-muted-foreground hover:text-primary transition-colors"
+                              >
+                                <ArrowRightLeft className="h-4 w-4" />
+                              </Link>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </InfoCard>
+            </div>
+          )}
         </div>
 
         {/* Sidebar */}
@@ -566,10 +956,6 @@ export default function WorkOrderDetailPage() {
                 </span>
               </div>
             </div>
-          </InfoCard>
-
-          <InfoCard title="Journey">
-            <FlowRail result={chain} currentDocName={name} sourceDoctype="Work Order" isLoading={chainLoading} />
           </InfoCard>
 
           {/* 2L 1B: Universal cross-flow actions menu */}

@@ -95,10 +95,20 @@ export default function PaymentEntryDetailPage() {
   }, [invoiceRef]);
 
   // 2N Part 1.1: unified flow resolution.
+  // 2U §3 — Payment Entry appears in both the sales and purchase flows.
+  // For Pay-type (purchasing) PEs, use the purchase flow so the rail
+  // renders MR/PO/PR/PI stages instead of the sales lead-to-cash stages.
+  // Sales PEs (Receive-type) use the default flow (sales).
+  const peFlowId = useMemo<string | undefined>(() => {
+    if (!entry?.payment_type) return undefined;
+    return entry.payment_type === "Pay" ? "purchase" : undefined;
+  }, [entry?.payment_type]);
+
   const { result: chain, isLoading: chainLoading } = useFlowChain(
     "Payment Entry",
     name,
     extraResolutions,
+    peFlowId,
   );
 
   // -- Status actions (real mutations) --------------------------------------
@@ -225,12 +235,14 @@ export default function PaymentEntryDetailPage() {
                 <Ban className="mr-1.5 h-4 w-4" /> Cancel
               </Button>
             )}
-            <Button variant="ghost" size="icon" disabled title="Print (Phase 2)">
-              <Printer className="h-4 w-4" />
-            </Button>
           </div>
         }
       />
+
+      {/* 2U §4 — FlowRail below header (golden placement, matches DN/PR/SO/PO/PI/MR/WO) */}
+      <InfoCard title="Payment Flow" className="overflow-hidden">
+        <FlowRail result={chain} currentDocName={name} sourceDoctype="Payment Entry" isLoading={chainLoading} />
+      </InfoCard>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* Center column */}
@@ -359,10 +371,6 @@ export default function PaymentEntryDetailPage() {
               status={entry.status ?? (isDraft ? "Draft" : isSubmitted ? "Submitted" : "Cancelled")}
               size="lg"
             />
-          </InfoCard>
-
-          <InfoCard title="Flow Rail">
-            <FlowRail result={chain} currentDocName={name} sourceDoctype="Payment Entry" isLoading={chainLoading} />
           </InfoCard>
 
           <InfoCard title="What's Next">

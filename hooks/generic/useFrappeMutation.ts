@@ -6,8 +6,12 @@ import {
   useQueryClient,
   UseMutationOptions,
 } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { getApiPath } from "@/lib/doctype-config";
+// 2T §7 — Use the unified notification sink instead of direct toast calls.
+// Every CRUD mutation now auto-persists to the notification panel.
+import { notify } from "@/lib/stores/notification-store";
+// 2W A3 — CRUD context for the notification panel detail view.
+import { getDocTypeRoute } from "@/lib/flows/flow-chain-resolver";
 
 type MutationOperation = "create" | "update" | "delete";
 
@@ -157,27 +161,94 @@ export function useFrappeMutation<TData = unknown, TVariables = unknown>(
         queryClient.invalidateQueries({ queryKey: key, refetchType: "all" });
       });
 
-      // Show success toast
+      // 2T §7 — Show success toast + persist to notification panel
+      // 2W A3 — Populate CRUD context (doctype, docName, operation,
+      // summary) so the notification panel detail view can render a real
+      // "CRUD Operation" block + a clickable deep-link to the doc. The
+      // 2V change extended the store shape but never wired producers.
       if (showToast) {
         const message =
           typeof config?.successMessage === "function"
             ? config.successMessage(data)
             : config?.successMessage || `${doctype} ${operation}d successfully`;
-        toast.success(message);
+
+        // Derive the doc name:
+        //   - create: response payload's `name` field (the new doc id)
+        //   - update: `variables.name`
+        //   - delete: `variables` (the doc name string)
+        let docName: string | undefined;
+        if (operation === "create" && data && typeof data === "object") {
+          const d = data as { name?: unknown; data?: { name?: unknown } };
+          if (typeof d.name === "string") docName = d.name;
+          else if (d.data && typeof d.data.name === "string") docName = d.data.name;
+        } else if (operation === "update" && variables && typeof variables === "object") {
+          const v = variables as { name?: unknown };
+          if (typeof v.name === "string") docName = v.name;
+        } else if (operation === "delete") {
+          docName = String(variables ?? "");
+        }
+
+        // Past-tense for the CRUD context (the store enum):
+        const opTense =
+          operation === "create" ? "created"
+          : operation === "update" ? "updated"
+          : "deleted";
+
+        const summary = docName
+          ? `${opTense.charAt(0).toUpperCase() + opTense.slice(1)} ${doctype} ${docName}`
+          : `${opTense.charAt(0).toUpperCase() + opTense.slice(1)} ${doctype}`;
+
+        const href = docName
+          ? `/${getDocTypeRoute(doctype)}/${encodeURIComponent(docName)}`
+          : undefined;
+
+        notify("success", {
+          message,
+          doctype,
+          docName,
+          operation: opTense,
+          summary,
+          href,
+        });
       }
 
       config?.onSuccess?.(data, variables);
     },
 
     onError: (error, variables) => {
-      // Show error toast
+      // 2T §7 — Show error toast + persist to notification panel
+      // 2W A3 — Carry the same CRUD context on failure so the panel can
+      // show what was attempted (e.g. "Failed to create Sales Order").
       if (showToast) {
         const message =
           typeof config?.errorMessage === "function"
             ? config.errorMessage(error)
             : config?.errorMessage || error.message;
-        toast.error(`Failed to ${operation} ${doctype}`, {
-          description: message,
+
+        // Best-effort docName extraction (update + delete carry it; create
+        // failed before the server assigned a name).
+        let docName: string | undefined;
+        if (operation === "update" && variables && typeof variables === "object") {
+          const v = variables as { name?: unknown };
+          if (typeof v.name === "string") docName = v.name;
+        } else if (operation === "delete") {
+          docName = String(variables ?? "");
+        }
+
+        const opTense =
+          operation === "create" ? "created"
+          : operation === "update" ? "updated"
+          : "deleted";
+
+        notify("error", {
+          message: `Failed to ${operation} ${doctype}`,
+          detail: message,
+          doctype,
+          docName,
+          operation: opTense,
+          summary: docName
+            ? `Failed to ${operation} ${doctype} ${docName}`
+            : `Failed to ${operation} ${doctype}`,
         });
       }
 

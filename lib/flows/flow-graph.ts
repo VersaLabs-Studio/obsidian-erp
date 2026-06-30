@@ -39,7 +39,7 @@ import {
   type FlowLinkDef,
   type FlowLinkPattern,
 } from "./flow-link-map";
-import { getFlowForDocType } from "./flow-chain-resolver";
+import { getFlowForDocType, getFlowDefinition } from "./flow-chain-resolver";
 import type { FlowStageStatus } from "@/types/flow-types";
 
 // ---------------------------------------------------------------------------
@@ -163,11 +163,23 @@ export async function resolveFlowGraph(
   anchorName: string,
   getDoc: GetDoc,
   listDoc: ListDoc,
+  /**
+   * 2U §3 FIX — Explicit flow projection. A doctype that appears in more
+   * than one flow (Payment Entry is in BOTH sales and purchase) defaults
+   * to `getFlowForDocType`'s FIRST match (sales), so a Pay-type PE
+   * projected its fully-resolved graph onto the sales stage list and the
+   * purchase docs (MR/PO/PR/PI) were dropped. When the caller knows the
+   * intended flow (e.g. payment_type === "Pay" → "purchase") it passes
+   * `flowId` here and we project onto THAT flow's stages instead. The BFS
+   * itself is flow-agnostic — it already resolved every reachable doc into
+   * `resolved`; only this projection was wrong.
+   */
+  flowId?: string,
 ): Promise<ResolvedFlowChainResult> {
   // The flow definition (with stages) for the anchor. If the anchor
   // isn't part of any registered flow, we still walk the graph but only
   // return an empty `stages` array (the rail will show just the anchor).
-  const flow = getFlowForDocType(anchorDoctype);
+  const flow = flowId ? getFlowDefinition(flowId) : getFlowForDocType(anchorDoctype);
   const flowStages = flow?.stages ?? [];
 
   // Final resolved map: doctype → name. Initialized with the anchor.
@@ -318,49 +330,63 @@ async function resolveBackLink(
   _fromDoc: Record<string, unknown>,
   listDoc: ListDoc,
 ): Promise<string | null> {
-  // Two shapes:
-  //   - Header field on the queried parent (e.g. "Work Order",
-  //     "Purchase Order"): the filter is `[field, "=", anchorName]`.
-  //   - Child-table back-link (`returnParent: true`): the filter is
-  //     `[childDoctype, field, "=", anchorName]` (4-tuple) against the
-  //     parent doctype — Frappe resolves child-table filters on the parent.
-  const filters: Array<unknown> = [];
-  if (edge.returnParent && edge.queryDoctype) {
-    filters.push([edge.queryDoctype, edge.field, "=", _fromDoc?.name ?? ""]);
-  } else {
-    filters.push([edge.field, "=", _fromDoc?.name ?? ""]);
+  // 2U §A FIX (supersedes the 2T child-direct approach) — Two resolution
+  // paths:
+  //
+  // Path A: Header-field back-link (returnParent: false). The filter is
+  //   `[field, "=", anchorName]` against the queried parent doctype.
+  //   Example: Work Order.sales_order = SO name → query WO list.
+  //
+  // Path B: Child-table back-link (returnParent: true). We query the
+  //   PARENT doctype (`edge.to`) with a 4-tuple child-table filter
+  //   `[childDoctype, field, "=", anchorName]`. This is the shape ERPNext's
+  //   REST resource list (`client.db.getDocList`) supports and the app's
+  //   own list routes already use successfully on live (HTTP 200). The
+  //   previous 2T approach queried the CHILD doctype directly via
+  //   `frappe.client.get_list`, which trips Frappe's `check_parent_permission`
+  //   and 403s for every single back-link edge (PR→PI, PO→PR, SO→DN, DN→SI,
+  //   QN→SO …) — i.e. the entire rail went dark. Querying the parent with the
+  //   child-table filter returns the PARENT row directly, so we read
+  //   `rows[0].name` (no `parent` field needed).
+  //   Example: query Sales Order where `Sales Order Item.prevdoc_docname =
+  //   QN name` → rows[0].name is the SO.
+
+  if (edge.returnParent && edge.queryDoctype && edge.field) {
+    // --- Path B: 4-tuple child-table filter against the PARENT doctype ---
+    const parentFilters: Array<unknown> = [
+      [edge.queryDoctype, edge.field, "=", _fromDoc?.name ?? ""],
+    ];
+    // Extra filters live on the SAME child table (e.g. `reference_doctype`
+    // on Payment Entry Reference). The registry uses "" to mean "the child
+    // table of this edge" — expand it to the child doctype so the filter
+    // stays a valid 4-tuple child-table filter.
+    if (edge.extraFilters) {
+      for (const f of edge.extraFilters) {
+        const childDoctype = f[0] === "" ? edge.queryDoctype : f[0];
+        parentFilters.push([childDoctype, f[1], f[2], f[3]]);
+      }
+    }
+    // Query the PARENT (edge.to); the matched row's own name is the result.
+    const rows = await listDoc(edge.to, parentFilters, ["name"], 1);
+    if (rows.length === 0) return null;
+    return rows[0].name ?? null;
   }
-  // 2S Part 0.1 — normalize extraFilters: the link map stores extra
-  // filters as ["", field, op, value] (4-tuple with empty doctype).
-  // For child-table queries (returnParent: true), the extra filter lives
-  // on the SAME child table as the main filter, so we must prefix it
-  // with the child doctype (matching buildLinkFilter's fillChildExtraFilter).
-  // For parent-field queries, collapse to 3-tuple [field, op, value].
+
+  // --- Path A: header-field back-link ---
+  const filters: Array<unknown> = [];
+  filters.push([edge.field ?? "", "=", _fromDoc?.name ?? ""]);
   if (edge.extraFilters) {
-    const childDoctype = edge.returnParent ? edge.queryDoctype : undefined;
     for (const f of edge.extraFilters) {
       if (f[0] === "") {
-        if (childDoctype) {
-          // Child-table extra filter: [childDoctype, field, op, value]
-          filters.push([childDoctype, f[1], f[2], f[3]]);
-        } else {
-          // Parent-field extra filter: [field, op, value]
-          filters.push([f[1], f[2], f[3]]);
-        }
+        filters.push([f[1], f[2], f[3]]);
       } else {
         filters.push(f);
       }
     }
   }
-  const parentDoctype = edge.returnParent ? edge.to : (edge.queryDoctype ?? edge.to);
-  const fields = ["name"];
-  const rows = await listDoc(parentDoctype, filters, fields, 1);
+  const parentDoctype = edge.queryDoctype ?? edge.to;
+  const rows = await listDoc(parentDoctype, filters, ["name"], 1);
   if (rows.length === 0) return null;
-  // 2S Part 0.2 FIX — always return rows[0].name. When filtering a parent
-  // doctype by a child-table field, Frappe returns the parent rows, so
-  // rows[0].name IS the parent name. The previous code returned
-  // rows[0].parent which is empty for parent rows (the `parent` column on
-  // a parent row is always blank).
   return rows[0].name ?? null;
 }
 

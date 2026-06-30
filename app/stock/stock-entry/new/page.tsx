@@ -37,6 +37,7 @@ import { useFrappeCreate } from "@/hooks/generic";
 import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
 import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
 import { getActiveCompany } from "@/lib/settings/company";
+import { resolveCompanyWarehouses } from "@/lib/settings/warehouses";
 import { validateWizardStep } from "@/lib/flows/flow-validation";
 import type { StepValidationResult } from "@/lib/flows/flow-validation";
 import type { WizardStep } from "@/types/flow-types";
@@ -164,6 +165,32 @@ export default function NewStockEntryPage() {
     if (workOrderParam) setValue("work_order", workOrderParam);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
+
+  // 2V P1-2 — Warehouse defaults: prefill from/to warehouses when empty
+  useEffect(() => {
+    // Only prefill when both warehouse fields are empty (user hasn't set them)
+    const fw = getValues("from_warehouse");
+    const tw = getValues("to_warehouse");
+    if (fw || tw) return;
+    resolveCompanyWarehouses()
+      .then((w) => {
+        const purpose = watchedPurpose || getValues("purpose");
+        if (purpose === "Material Transfer" || purpose === "Material Transfer for Manufacture") {
+          setValue("from_warehouse", w.stores || "");
+          setValue("to_warehouse", w.wip || "");
+        } else if (purpose === "Manufacture") {
+          setValue("from_warehouse", w.wip || "");
+          setValue("to_warehouse", w.fg || "");
+        } else if (purpose === "Material Receipt") {
+          setValue("to_warehouse", w.stores || "");
+        } else if (purpose === "Material Issue") {
+          setValue("from_warehouse", w.stores || "");
+        }
+      })
+      .catch(() => {
+        // Silently fall through — user fills manually
+      });
+  }, [getValues, setValue, watchedPurpose]);
 
   // Keep stock_entry_type in sync with purpose
   useEffect(() => {

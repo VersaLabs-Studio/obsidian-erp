@@ -18,6 +18,7 @@ import {
   Plus,
   Trash2,
   Lock,
+  Boxes,
 } from "lucide-react";
 
 import { PageHeader } from "@/components/smart";
@@ -50,6 +51,7 @@ import type { WizardStep } from "@/types/flow-types";
 import type { Quotation } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
 import { FieldWrap } from "@/components/form/field-wrap";
+import { StockLevelModal } from "@/components/stock/StockLevelModal";
 
 // ---------------------------------------------------------------------------
 // Form model — concrete item shape so the field array is fully typed
@@ -87,6 +89,7 @@ interface SOForm {
   terms?: string;
   po_no?: string;
   po_date?: string;
+  payment_terms_template?: string;
   status: string;
   items: SOItem[];
 }
@@ -146,6 +149,8 @@ export default function NewSalesOrderPage() {
     new Set(),
   );
   const [triedNextSteps, setTriedNextSteps] = useState<Set<number>>(new Set());
+  // 2T §3 — StockLevelModal state: opens with the items currently on the form
+  const [stockModalOpen, setStockModalOpen] = useState(false);
 
   const form = useForm<SOForm>({
     defaultValues: {
@@ -159,6 +164,7 @@ export default function NewSalesOrderPage() {
       price_list_currency: "ETB",
       conversion_rate: 1,
       plc_conversion_rate: 1,
+      payment_terms_template: "",
       status: "Draft",
       items: [{ ...EMPTY_ITEM }],
     },
@@ -320,10 +326,11 @@ export default function NewSalesOrderPage() {
     createMutation.mutate({
       ...values,
       company: getActiveCompany(),
-      // 9R.1: Explicitly clear payment_terms_template to prevent ERPNext
-      // from inheriting the Customer's default terms, which can produce a
-      // payment schedule whose due_date precedes the SO transaction_date.
-      payment_terms_template: "",
+      // 2T §1A.3 — Send the user-selected payment_terms_template to ERPNext.
+      // ERPNext's set_payment_schedule() rebuilds fresh dates from the template
+      // against the SO's transaction_date during validate. We NEVER POST a stale
+      // payment_schedule — just the template reference.
+      payment_terms_template: values.payment_terms_template || "",
       items: items.map((it) => ({
         ...it,
         amount: (Number(it.qty) || 0) * (Number(it.rate) || 0),
@@ -435,6 +442,17 @@ export default function NewSalesOrderPage() {
                         name="po_no"
                         label="Customer PO No"
                         placeholder="Optional reference"
+                      />
+                      {/* 2T §1A.3 — Payment Terms Template selector.
+                          Lets the user set installment-based payment schedules.
+                          ERPNext applies the template's payment_schedule entries
+                          to auto-populate due dates and amounts against the doc date. */}
+                      <FormFrappeSelect
+                        control={control}
+                        name="payment_terms_template"
+                        label="Payment Terms"
+                        doctype="Payment Terms Template"
+                        placeholder="Select payment terms..."
                       />
                     </div>
                   </div>
@@ -556,15 +574,29 @@ export default function NewSalesOrderPage() {
                         </tbody>
                       </table>
                       <div className="flex items-center justify-between border-t border-border/60 bg-secondary/10 px-3 py-3">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="rounded-full border-dashed"
-                          onClick={() => append({ ...EMPTY_ITEM })}
-                        >
-                          <Plus className="mr-1.5 h-4 w-4" /> Add Item
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="rounded-full border-dashed"
+                            onClick={() => append({ ...EMPTY_ITEM })}
+                          >
+                            <Plus className="mr-1.5 h-4 w-4" /> Add Item
+                          </Button>
+                          {/* 2T §3 — Stock check: opens the StockLevelModal
+                              with the current form items so the user can
+                              see per-warehouse stock while building the order. */}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="rounded-full text-muted-foreground"
+                            onClick={() => setStockModalOpen(true)}
+                          >
+                            <Boxes className="mr-1.5 h-4 w-4" /> Check Stock
+                          </Button>
+                        </div>
                         <div className="text-right">
                           <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                             Subtotal
@@ -646,6 +678,20 @@ export default function NewSalesOrderPage() {
       </Form>
 
       <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
+
+      {/* 2T §3 — Stock-level modal: shows per-warehouse stock for items
+          currently on the form. Closing it does not disturb the line being
+          edited (the modal is display-only; no form state mutations). */}
+      <StockLevelModal
+        open={stockModalOpen}
+        onOpenChange={setStockModalOpen}
+        items={(watchedItems ?? [])
+          .filter((it): it is SOItem & { item_code: string } => Boolean(it?.item_code))
+          .map((it) => ({
+            item_code: it.item_code,
+            item_name: it.item_name,
+          }))}
+      />
     </div>
   );
 }

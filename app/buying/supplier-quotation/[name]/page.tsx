@@ -26,6 +26,7 @@ import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
 import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
 import { useFlowChain } from "@/hooks/flows/use-flow-chain";
 import { useFrappeDoc, useFrappeUpdate } from "@/hooks/generic";
+import { PrintShare } from "@/components/ui/print-share";
 import type { SupplierQuotation } from "@/types/doctype-types";
 
 const ETB = new Intl.NumberFormat("en-ET", {
@@ -130,6 +131,7 @@ export default function SupplierQuotationDetailPage() {
         backHref="/buying/supplier-quotation"
         actions={
           <div className="flex items-center gap-2">
+            <PrintShare doctype="Supplier Quotation" name={name} />
             {isDraft && (
               <Button
                 size="sm"

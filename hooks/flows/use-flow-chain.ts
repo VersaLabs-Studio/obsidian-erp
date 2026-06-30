@@ -29,7 +29,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useFrappeDoc } from "@/hooks/generic";
-import { getFlowForDocType, resolveFlowChain } from "@/lib/flows/flow-chain-resolver";
+import { resolveFlowChain, getDocTypeRoute } from "@/lib/flows/flow-chain-resolver";
 import type { FlowChainResult, FlowStageStatus } from "@/types/flow-types";
 
 // ---------------------------------------------------------------------------
@@ -79,16 +79,31 @@ export function useFlowChain(
    * doctypes; values resolve those stages to "completed".
    */
   extraResolutions?: Record<string, ResolvedSlot>,
+  /**
+   * 2U §3 — Optional explicit flow ID override. When provided (e.g.
+   * "purchase" for a Pay-type Payment Entry), use this flow definition
+   * instead of the first matching one from getFlowForDocType. Solves
+   * the disambiguation problem when a doctype (Payment Entry) appears
+   * in multiple flows.
+   */
+  flowId?: string,
 ): UseFlowChainResult {
-  const flow = getFlowForDocType(doctype);
-
   // ----- 2R Part 1: ONE query against the server-side resolver -----------
   // Replaces the 16-slot storm. The response is the full resolved map;
   // we never need to read the anchor doc client-side for the rail.
+  //
+  // 2U §3 FIX — `flowId` must reach the SERVER (it owns the projection of
+  // the resolved graph onto a flow's stage list) AND `resolveFlowChain`
+  // below (it builds the client rail from the same flow). Threading it
+  // only into a local `flow` var here was a no-op — the rail stayed on the
+  // first-match (sales) flow for Pay-type PEs. The queryKey includes
+  // flowId so a sales-projected and purchase-projected resolve of the same
+  // doc never collide in the TanStack cache.
   const resolveQuery = useQuery<ResolveResponse, Error>({
-    queryKey: ["flows", "resolve", doctype, name],
+    queryKey: ["flows", "resolve", doctype, name, flowId ?? null],
     queryFn: async () => {
       const params = new URLSearchParams({ doctype, name });
+      if (flowId) params.set("flowId", flowId);
       const res = await fetch(`/api/flows/resolve?${params.toString()}`, {
         credentials: "include",
       });
@@ -124,9 +139,16 @@ export function useFlowChain(
     const data = resolveQuery.data;
     if (data?.stages) {
       for (const s of data.stages) {
+        // 9R.12 — compute documentUrl for completed stages so FlowRail
+        // can render clickable <Link> navigations to those documents.
+        const docName = s.stage.documentName;
+        const url = docName
+          ? `/${getDocTypeRoute(s.doctype)}/${encodeURIComponent(docName)}`
+          : undefined;
         out[s.doctype] = {
           status: s.stage.status,
-          documentName: s.stage.documentName,
+          documentName: docName,
+          documentUrl: url,
         };
       }
     }
@@ -153,8 +175,8 @@ export function useFlowChain(
   }, [resolveQuery.data, doctype, name, extraResolutions]);
 
   const result = useMemo(
-    () => resolveFlowChain(doctype, name, stageStatuses),
-    [doctype, name, stageStatuses],
+    () => resolveFlowChain(doctype, name, stageStatuses, flowId),
+    [doctype, name, stageStatuses, flowId],
   );
 
   // isLoading is true while the resolver call is in flight. The rail

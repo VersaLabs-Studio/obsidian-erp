@@ -497,3 +497,6 @@ Each listed module has filtering, full-text search, sortable columns, column sho
 
 ## REPORT BACK (per MESH_REPORTING_CONTRACT.md)
 Produce `docs/v4/PHASE_2S_BUILD_REPORT.md`: Part-by-Part table with `file:line` + before→after, static gates, a **live retest checklist** (rail green on 7 doctypes, UOM fraction WO, partial PE, configurator round-trip, employee job loop, each report), and KNOWN GAPS. Flag anything you could not verify against the live instance so Kidus can check it.
+
+
+

@@ -207,6 +207,11 @@ export default function PurchaseReceiptDetailPage() {
         }
       />
 
+      {/* 2U §A — FlowRail below header (golden placement, matches DN/SO/PI/MR) */}
+      <InfoCard title="Receipt Flow" className="overflow-hidden">
+        <FlowRail result={chain} currentDocName={name} sourceDoctype="Purchase Receipt" isLoading={chainLoading} />
+      </InfoCard>
+
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
         {/* Center column */}
         <div className="space-y-6 lg:col-span-8">
@@ -279,10 +284,6 @@ export default function PurchaseReceiptDetailPage() {
                 <DataPoint label="% Billed" value={`${pr.per_billed}%`} />
               )}
             </div>
-          </InfoCard>
-
-          <InfoCard title="Flow Tracker">
-            <FlowRail result={chain} currentDocName={name} sourceDoctype="Purchase Receipt" isLoading={chainLoading} />
           </InfoCard>
 
           <InfoCard title="What's Next">

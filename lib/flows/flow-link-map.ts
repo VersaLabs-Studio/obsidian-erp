@@ -295,6 +295,27 @@ const LINKS: FlowLinkDef[] = [
     field: "work_order",
     returnParent: false,
   },
+  // 2S Part 10 — Work Order → Job Card: child-table back-link on
+  // Job Card.work_order. The WO rail shows its job cards and their
+  // completion roll-up.
+  // Phase 2V — Work Order → Sales Order backward edge. WO has `sales_order`
+  // as a header field; read it and verify the SO exists.
+  {
+    from: "Work Order",
+    to: "Sales Order",
+    direction: "backward",
+    pattern: "header_link",
+    headerField: "sales_order",
+  },
+  {
+    from: "Work Order",
+    to: "Job Card",
+    direction: "forward",
+    pattern: "back_link",
+    queryDoctype: "Job Card",
+    field: "work_order",
+    returnParent: false,
+  },
   {
     from: "BOM",
     to: "Work Order",

@@ -134,6 +134,11 @@ export default function NewPurchaseOrderPage() {
   const searchParams = useSearchParams();
   const materialRequestId = searchParams.get("material_request");
   const supplierQuotationId = searchParams.get("supplier_quotation");
+  // 2V P0-2 — shortfall prefill: optional shortfall param from the
+  // StartProductionModal. Format: "ITEM-001:qty,ITEM-002:qty". Items are
+  // prefilled with the specified qty; supplier stays blank.
+  const shortfallParam = searchParams.get("shortfall");
+  const workOrderParam = searchParams.get("work_order");
 
   const [step, setStep] = useState(0);
   const [autoFilledFields, setAutoFilledFields] = useState<Set<string>>(
@@ -269,6 +274,52 @@ export default function NewPurchaseOrderPage() {
     supplierQuotation,
     materialRequestId,
     supplierQuotationId,
+    reset,
+    getValues,
+  ]);
+
+  // 2V P0-2 — shortfall prefill. When ?shortfall= is provided (from
+  // StartProductionModal), populate items with the shortfall pairs.
+  // Runs only when no canonical source doc auto-fill is in progress.
+  useEffect(() => {
+    if (!shortfallParam) return;
+    if (canonicalDraft || materialRequest || supplierQuotation) return;
+
+    const pairs = shortfallParam.split(",").filter(Boolean);
+    const items: POItem[] = pairs.map((pair) => {
+      const [item_code, qtyStr] = pair.split(":");
+      return {
+        item_code: item_code ?? "",
+        item_name: "",
+        description: "",
+        qty: Math.max(1, Number(qtyStr) || 1),
+        rate: 0,
+        amount: 0,
+        uom: "Nos",
+        warehouse: "",
+      };
+    });
+
+    if (items.length === 0) return;
+
+    reset({
+      ...getValues(),
+      items,
+      ...(workOrderParam ? { material_request: `WO: ${workOrderParam}` } : {}),
+      schedule_date: "",
+    });
+
+    setAutoFilledFields(new Set(["items"]));
+
+    toast.success("Shortfall items loaded", {
+      description: `${items.length} item(s) prefilled from the production shortfall. Set a supplier to continue.`,
+    });
+  }, [
+    shortfallParam,
+    workOrderParam,
+    canonicalDraft,
+    materialRequest,
+    supplierQuotation,
     reset,
     getValues,
   ]);

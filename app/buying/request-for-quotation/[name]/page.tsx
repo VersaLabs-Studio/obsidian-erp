@@ -26,6 +26,7 @@ import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
 import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
 import { useFlowChain } from "@/hooks/flows/use-flow-chain";
 import { useFrappeDoc, useFrappeUpdate } from "@/hooks/generic";
+import { PrintShare } from "@/components/ui/print-share";
 import type { RequestForQuotation } from "@/types/doctype-types";
 
 interface RFQItem {
@@ -128,6 +129,7 @@ export default function RequestForQuotationDetailPage() {
         backHref="/buying/request-for-quotation"
         actions={
           <div className="flex items-center gap-2">
+            <PrintShare doctype="Request for Quotation" name={name} />
             {isDraft && (
               <Button
                 size="sm"

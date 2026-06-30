@@ -29,6 +29,7 @@ import { useFrappeCreate } from "@/hooks/generic";
 import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
 import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
 import { getActiveCompany } from "@/lib/settings/company";
+import { resolveCompanyWarehouses } from "@/lib/settings/warehouses";
 import { validateWizardStep } from "@/lib/flows/flow-validation";
 import type { StepValidationResult } from "@/lib/flows/flow-validation";
 import type { WizardStep } from "@/types/flow-types";
@@ -187,6 +188,26 @@ export default function NewMaterialRequestPage() {
   const watchedType = watchedAll?.material_request_type ?? "";
 
   const isTransfer = watchedType === "Material Transfer";
+
+  // 2W A4 — Prefill warehouse defaults from company settings.
+  // For Material Transfer: set_from_warehouse = Raw Materials (or Stores),
+  // set_warehouse = WIP (or FG). For Purchase: set_warehouse = Stores.
+  // For Material Issue: set_warehouse = FG (or Stores).
+  useEffect(() => {
+    resolveCompanyWarehouses().then((wh) => {
+      if (!getValues("set_warehouse")) {
+        if (isTransfer) {
+          setValue("set_warehouse", wh.wip ?? wh.fg);
+        } else {
+          // Purchase / Material Issue → target is Stores (or FG for Issue)
+          setValue("set_warehouse", wh.stores);
+        }
+      }
+      if (isTransfer && !getValues("set_from_warehouse")) {
+        setValue("set_from_warehouse", wh.rawMaterials ?? wh.stores);
+      }
+    });
+  }, [getValues, setValue, isTransfer]);
 
   const validationResults = useMemo<Record<string, StepValidationResult>>(() => {
     const values = { ...getValues(), ...watchedAll, items: watchedAll?.items ?? [] };

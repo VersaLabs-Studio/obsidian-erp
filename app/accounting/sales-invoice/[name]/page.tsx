@@ -183,6 +183,11 @@ export default function SalesInvoiceDetailPage() {
         }
       />
 
+      {/* 9R.7 — FlowRail below header (golden placement, matches SO/PO/PI/MR) */}
+      <InfoCard title="Sales Flow" className="overflow-hidden">
+        <FlowRail result={chain} currentDocName={name} sourceDoctype="Sales Invoice" isLoading={chainLoading} />
+      </InfoCard>
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         <div className="space-y-6 lg:col-span-8">
           <InfoCard title="Invoice Details">
@@ -298,10 +303,6 @@ export default function SalesInvoiceDetailPage() {
                 </span>
               )}
             </div>
-          </InfoCard>
-
-          <InfoCard title="Flow Rail">
-            <FlowRail result={chain} currentDocName={name} sourceDoctype="Sales Invoice" isLoading={chainLoading} />
           </InfoCard>
 
           {/* 2L 1B: Universal cross-flow actions menu */}

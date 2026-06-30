@@ -64,6 +64,11 @@ interface CrossFlowActionsMenuProps {
    *  chain's own isLoading). Use this when the page is not yet ready to
    *  render cross-flow affordances. */
   isLoading?: boolean;
+  /** 2W A1 — When set, every forward-create row renders disabled with this
+   *  reason as a tooltip. Used on draft documents where downstream creation
+   *  is not yet permitted (e.g. draft SO → "Submit the Sales Order first").
+   *  View affordances (resolved targets, backward edges) remain interactive. */
+  disableCreate?: string;
 }
 
 export function CrossFlowActionsMenu({
@@ -72,6 +77,7 @@ export function CrossFlowActionsMenu({
   className,
   title = "Cross-flow actions",
   isLoading = false,
+  disableCreate,
 }: CrossFlowActionsMenuProps) {
   // 2O Part 1.4: consume the same useFlowChain result the FlowRail uses.
   // This is the *single source of truth* for "is the downstream SI
@@ -159,6 +165,7 @@ export function CrossFlowActionsMenu({
                 edge={edge}
                 sourceDocName={name}
                 stageStatus={stageStatusByDoctype[edge.targetDoctype]}
+                disableCreate={disableCreate}
               />
             ))}
           </ul>
@@ -177,6 +184,7 @@ export function CrossFlowActionsMenu({
                 edge={edge}
                 sourceDocName={name}
                 stageStatus={stageStatusByDoctype[edge.targetDoctype]}
+                disableCreate={disableCreate}
               />
             ))}
           </ul>
@@ -195,10 +203,12 @@ function AdjacencyRow({
   edge,
   sourceDocName,
   stageStatus,
+  disableCreate,
 }: {
   edge: FlowAdjacency;
   sourceDocName: string;
   stageStatus?: { resolvedName?: string; status: string };
+  disableCreate?: string;
 }) {
   // 2O Part 1.4: View ↔ Create decision from the SHARED chain result.
   //   - backward edge with no resolved upstream → hidden (consistent with
@@ -223,6 +233,11 @@ function AdjacencyRow({
 
   if (!href) return null;
 
+  // 2W A1 — When a forward-create is disabled (e.g. draft SO), render an
+  // inert disabled row instead of a navigation link. "View" rows are
+  // unaffected — viewing an existing doc is always safe.
+  const isCreateDisabled = !isView && edge.direction === "forward" && !!disableCreate;
+
   const Icon = isView ? Eye : edge.direction === "forward" ? Plus : ChevronLeft;
   const iconClass = isView
     ? "text-info"
@@ -231,6 +246,28 @@ function AdjacencyRow({
       : "text-muted-foreground";
 
   const buttonText = isView ? `View ${resolvedName}` : edge.label;
+
+  if (isCreateDisabled) {
+    return (
+      <li>
+        <div
+          className="flex w-full items-center justify-between rounded-xl border border-border/40 bg-muted/40 px-4 py-3 cursor-not-allowed"
+          title={disableCreate}
+          aria-disabled="true"
+        >
+          <span className="flex items-center gap-2.5">
+            <span className="flex h-6 w-6 items-center justify-center rounded-md bg-muted/60">
+              <Icon className="h-3.5 w-3.5 text-muted-foreground/60" />
+            </span>
+            <span className="text-sm font-medium text-muted-foreground">{buttonText}</span>
+          </span>
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
+            {disableCreate}
+          </span>
+        </div>
+      </li>
+    );
+  }
 
   return (
     <li>

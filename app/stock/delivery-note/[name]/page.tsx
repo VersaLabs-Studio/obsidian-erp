@@ -202,6 +202,11 @@ export default function DeliveryNoteDetailPage() {
         }
       />
 
+      {/* 9R.7 — FlowRail below header (golden placement, matches SO/PO/PI/MR) */}
+      <InfoCard title="Delivery Flow" className="overflow-hidden">
+        <FlowRail result={chain} currentDocName={name} sourceDoctype="Delivery Note" isLoading={chainLoading} />
+      </InfoCard>
+
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
         {/* Center column */}
         <div className="space-y-6 lg:col-span-8">
@@ -277,10 +282,6 @@ export default function DeliveryNoteDetailPage() {
                 <DataPoint label="% Billed" value={`${dn.per_billed}%`} />
               )}
             </div>
-          </InfoCard>
-
-          <InfoCard title="Flow Tracker">
-            <FlowRail result={chain} currentDocName={name} sourceDoctype="Delivery Note" isLoading={chainLoading} />
           </InfoCard>
 
           <InfoCard title="What's Next">

@@ -114,27 +114,47 @@ async function createWarehouseIfMissing(
   const existing = await findWarehouse(abbr, name);
   if (existing) return existing.name;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const raw: any = await (frappeClient.call as any).get(
-      "frappe.client.insert",
-      {
-        doc: {
-          doctype: "Warehouse",
-          warehouse_name: name,
-          company,
-          is_group: isGroup ? 1 : 0,
-          disabled: 0,
+    // 2U §5a — FIX: use POST instead of GET for inserts.
+    // The previous code used `.get("frappe.client.insert", ...)` which sends
+    // an HTTP GET to `frappe.client.insert`; Frappe requires POST, causing
+    // `is_valid_http_method` → PermissionError (403 → 500). We now POST to
+    // the Frappe REST API via a direct fetch using the service-account client's
+    // ERP_API_URL and auth headers.
+    const erpApiUrl = (process.env.ERP_API_URL || "").replace(/\/+$/, "");
+    const apiKey = process.env.ERP_API_KEY || "";
+    const apiSecret = process.env.ERP_API_SECRET || "";
+    let created: { name?: string } | null = null;
+    if (erpApiUrl && apiKey && apiSecret) {
+      const insertRes = await fetch(`${erpApiUrl}/api/method/frappe.client.insert`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `token ${apiKey}:${apiSecret}`,
         },
-      },
-    );
-    const doc = raw?.message ?? raw;
-    return doc?.name ?? name;
+        body: JSON.stringify({
+          doc: {
+            doctype: "Warehouse",
+            warehouse_name: name,
+            company,
+            is_group: isGroup ? 1 : 0,
+            disabled: 0,
+          },
+        }),
+      });
+      if (insertRes.ok) {
+        const json = await insertRes.json();
+        created = json?.message ?? json;
+      }
+    }
+    if (created?.name) return created.name;
   } catch (err) {
     // DuplicateEntryError (or any other race) → re-resolve.
     const existing2 = await findWarehouse(abbr, name);
     if (existing2) return existing2.name;
     throw err;
   }
+  // Fallback: return the computed name when creation is not configured or fails
+  return name;
 }
 
 export async function GET(request: NextRequest) {
