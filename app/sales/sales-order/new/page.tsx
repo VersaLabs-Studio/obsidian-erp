@@ -18,7 +18,6 @@ import {
   Plus,
   Trash2,
   Lock,
-  Boxes,
 } from "lucide-react";
 
 import { PageHeader } from "@/components/smart";
@@ -38,7 +37,7 @@ import { ItemRateAutoFill } from "@/lib/flows/item-price-lookup";
 import { useItemPriceRate } from "@/lib/flows/item-price-lookup";
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
 import { FlowWizard } from "@/components/flows/FlowWizard";
-import { useFrappeCreate, useFrappeDoc } from "@/hooks/generic";
+import { useFrappeCreate, useFrappeDoc, useFormPersistence } from "@/hooks/generic";
 import { useMakeFrom } from "@/hooks/flows/use-make-from";
 import {
   getAutoFillMapping,
@@ -50,8 +49,6 @@ import type { StepValidationResult } from "@/lib/flows/flow-validation";
 import type { WizardStep } from "@/types/flow-types";
 import type { Quotation } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
-import { FieldWrap } from "@/components/form/field-wrap";
-import { StockLevelModal } from "@/components/stock/StockLevelModal";
 
 // ---------------------------------------------------------------------------
 // Form model — concrete item shape so the field array is fully typed
@@ -149,9 +146,6 @@ export default function NewSalesOrderPage() {
     new Set(),
   );
   const [triedNextSteps, setTriedNextSteps] = useState<Set<number>>(new Set());
-  // 2T §3 — StockLevelModal state: opens with the items currently on the form
-  const [stockModalOpen, setStockModalOpen] = useState(false);
-
   const form = useForm<SOForm>({
     defaultValues: {
       naming_series: "SAL-ORD-.YYYY.-",
@@ -385,11 +379,7 @@ export default function NewSalesOrderPage() {
                       description="Confirm who this order is for and when it's due."
                     />
                     <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                      <FieldWrap
-                        auto={isAuto("customer")}
-                        loading={loadingQuotation}
-                        error={triedNextSteps.has(step) ? validationResults?.step1?.errors?.customer : undefined}
-                      >
+                      <div>
                         {/* 2L 1A: Quick-Add enabled master field — Customer */}
                         <QuickAddField
                           control={control}
@@ -401,7 +391,7 @@ export default function NewSalesOrderPage() {
                           placeholder="Search customer..."
                           disabled={isAuto("customer")}
                         />
-                      </FieldWrap>
+                      </div>
                       <FormDatePicker
                         control={control}
                         name="transaction_date"
@@ -584,18 +574,6 @@ export default function NewSalesOrderPage() {
                           >
                             <Plus className="mr-1.5 h-4 w-4" /> Add Item
                           </Button>
-                          {/* 2T §3 — Stock check: opens the StockLevelModal
-                              with the current form items so the user can
-                              see per-warehouse stock while building the order. */}
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="rounded-full text-muted-foreground"
-                            onClick={() => setStockModalOpen(true)}
-                          >
-                            <Boxes className="mr-1.5 h-4 w-4" /> Check Stock
-                          </Button>
                         </div>
                         <div className="text-right">
                           <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
@@ -678,20 +656,6 @@ export default function NewSalesOrderPage() {
       </Form>
 
       <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
-
-      {/* 2T §3 — Stock-level modal: shows per-warehouse stock for items
-          currently on the form. Closing it does not disturb the line being
-          edited (the modal is display-only; no form state mutations). */}
-      <StockLevelModal
-        open={stockModalOpen}
-        onOpenChange={setStockModalOpen}
-        items={(watchedItems ?? [])
-          .filter((it): it is SOItem & { item_code: string } => Boolean(it?.item_code))
-          .map((it) => ({
-            item_code: it.item_code,
-            item_name: it.item_name,
-          }))}
-      />
     </div>
   );
 }

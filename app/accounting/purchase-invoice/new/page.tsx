@@ -30,7 +30,7 @@ import {
 import { QuickAddField } from "@/components/quick-add/QuickAddField";
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
 import { FlowWizard } from "@/components/flows/FlowWizard";
-import { useFrappeCreate, useFrappeDoc } from "@/hooks/generic";
+import { useFrappeCreate, useFrappeDoc, useFormPersistence } from "@/hooks/generic";
 import { useMakeFrom } from "@/hooks/flows/use-make-from";
 import {
   getAutoFillMapping,
@@ -73,6 +73,7 @@ interface PIForm {
   taxes_and_charges: string;
   payment_terms_template: string;
   status: string;
+  pana_fs_number?: string; // 2Y Part 1 — Fiscal serial number (Ethiopia e-invoicing)
   items: PIItem[];
 }
 
@@ -153,6 +154,7 @@ export default function NewPurchaseInvoicePage() {
       taxes_and_charges: "",
       payment_terms_template: "",
       status: "Draft",
+      pana_fs_number: "",
       items: [{ ...EMPTY_ITEM }],
     },
   });
@@ -277,6 +279,10 @@ export default function NewPurchaseInvoicePage() {
 
   const { control, getValues, setValue } = form;
   const { fields, append, remove } = useFieldArray({ control, name: "items" });
+
+  // 2Y Part 2 — Draft autosave: persists form state to localStorage,
+  // restores on reload, clears on successful submit.
+  useFormPersistence(form, "Purchase Invoice", "new");
 
   const watchedAll = useWatch({ control });
   const watchedItems = watchedAll?.items ?? [];
@@ -442,6 +448,13 @@ export default function NewPurchaseInvoicePage() {
                         doctype="Payment Terms Template"
                         placeholder="Select payment terms..."
                       />
+                      {/* 2Y Part 1 — Fiscal serial number for Ethiopia e-invoicing */}
+                      <FormInput
+                        control={control}
+                        name="pana_fs_number"
+                        label="Fiscal Serial No"
+                        placeholder="Government fiscal serial number"
+                      />
                     </div>
                   </div>
                 );
@@ -590,6 +603,7 @@ export default function NewPurchaseInvoicePage() {
                       <Summary label="Due Date" value={v.due_date} />
                       <Summary label="Bill No" value={v.bill_no} />
                       <Summary label="Credit To" value={v.credit_to} />
+                      <Summary label="Fiscal Serial No" value={v.pana_fs_number} />
                     </div>
                     <div className="mt-4 border-t border-border/60 pt-4">
                       <div className="flex items-center justify-between">

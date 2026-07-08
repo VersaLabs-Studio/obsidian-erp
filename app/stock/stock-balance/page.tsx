@@ -36,6 +36,7 @@ import { KPICard } from "@/components/dashboard/KPICard";
 import { cn } from "@/lib/utils";
 import { computeStockKPIs } from "@/lib/kpi/compute-stock-kpis";
 import { StockCountModal } from "@/components/stock/StockCountModal";
+import { StockBalanceDrilldown } from "@/components/stock/StockBalanceDrilldown";
 import { ListErrorState } from "@/components/ui/list-error-state";
 
 interface Bin {
@@ -81,6 +82,8 @@ export default function StockBalancePage() {
   const [itemFilter, setItemFilter] = useState<string>("");
   const [warehouseFilter, setWarehouseFilter] = useState<string>("");
   const [openCount, setOpenCount] = useState(false);
+  const [drilldownOpen, setDrilldownOpen] = useState(false);
+  const [drilldownItem, setDrilldownItem] = useState<{ code: string; name?: string } | null>(null);
 
   const filters = useMemo<
     [string, string, unknown][] | undefined
@@ -322,11 +325,15 @@ export default function StockBalancePage() {
                     <tr
                       key={bin.name}
                       className={cn(
-                        "border-b border-border/30 last:border-b-0 transition-colors hover:bg-secondary/30",
+                        "border-b border-border/30 last:border-b-0 transition-colors hover:bg-secondary/30 cursor-pointer",
                         status === "out" && "bg-destructive/5",
                         status === "low" && "bg-warning/5",
                       )}
                       data-testid={`stock-row-${bin.item_code}`}
+                      onClick={() => {
+                        setDrilldownItem({ code: bin.item_code, name: bin.item_name });
+                        setDrilldownOpen(true);
+                      }}
                     >
                       <td className="px-4 py-3">
                         <div className="font-medium text-foreground">
@@ -381,6 +388,13 @@ export default function StockBalancePage() {
       )}
 
       <StockCountModal open={openCount} onOpenChange={setOpenCount} />
+      {/* 2Y Part 4 — Stock balance drill-down: per-warehouse + ledger movements */}
+      <StockBalanceDrilldown
+        open={drilldownOpen}
+        onOpenChange={setDrilldownOpen}
+        itemCode={drilldownItem?.code ?? ""}
+        itemName={drilldownItem?.name}
+      />
     </div>
   );
 }

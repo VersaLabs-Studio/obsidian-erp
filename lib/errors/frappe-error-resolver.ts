@@ -79,9 +79,21 @@ const strategies: ErrorStrategy[] = [
         severity: "warning",
         actions: [
           {
-            label: "Create Material Request",
+            label: "Create Purchase Order",
             kind: "prefill",
             variant: "default",
+            run: () => {
+              const params = new URLSearchParams({
+                shortfall: `${itemCode}:${qty}`,
+                warehouse: warehouse,
+              });
+              window.location.href = `/buying/purchase-order/new?${params.toString()}`;
+            },
+          },
+          {
+            label: "Create Purchase Receipt",
+            kind: "prefill",
+            variant: "secondary",
             run: () => {
               const params = new URLSearchParams({
                 item_code: itemCode,
@@ -89,7 +101,7 @@ const strategies: ErrorStrategy[] = [
                 qty: qty,
                 warehouse: warehouse,
               });
-              window.location.href = `/stock/material-request/new?${params.toString()}`;
+              window.location.href = `/stock/purchase-receipt/new?${params.toString()}`;
             },
           },
           {

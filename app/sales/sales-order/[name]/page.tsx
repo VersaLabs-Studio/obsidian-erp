@@ -24,6 +24,9 @@ import {
   CheckCircle2,
   UserPlus,
   ExternalLink,
+  Play,
+  Square,
+  Cog,
 } from "lucide-react";
 
 import { PageHeader, LoadingState, ConfirmDialog } from "@/components/smart";
@@ -31,6 +34,7 @@ import { StatusBadge } from "@/components/smart/status-badge";
 import { InfoCard, DataPoint } from "@/components/ui/info-card";
 import { Button } from "@/components/ui/button";
 import { PrintShare } from "@/components/ui/print-share";
+import { PrintMenu } from "@/components/print/PrintMenu";
 import { FlowRail } from "@/components/flows/FlowRail";
 import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
 import { isModuleBuilt } from "@/lib/flows/module-availability";
@@ -46,6 +50,7 @@ import { useFrappeDoc, useFrappeList, useFrappeUpdate, useFrappeCreate } from "@
 import { FrappeSelect } from "@/components/smart/frappe-select";
 import type { SalesOrder } from "@/types/doctype-types";
 import { getDefaultFgWarehouse, fetchWarehouseDefaults } from "@/lib/stock/warehouse-defaults";
+import { cn } from "@/lib/utils";
 
 // 2U §P0 — Manufacturing master-doc rows. A Sales Order acts as the cockpit
 // where the sales user creates Work Orders, submits them (which generates Job
@@ -62,6 +67,13 @@ interface JobCardEmployeeRow {
   employee?: string;
   employee_name?: string;
 }
+interface JobCardTimeLog {
+  employee?: string;
+  from_time?: string;
+  to_time?: string;
+  completed_qty?: number;
+  time_in_mins?: number;
+}
 interface LinkedJobCard {
   name: string;
   status?: string;
@@ -70,6 +82,7 @@ interface LinkedJobCard {
   workstation?: string;
   for_quantity?: number;
   employee?: JobCardEmployeeRow[];
+  time_logs?: JobCardTimeLog[];
 }
 
 const ETB = new Intl.NumberFormat("en-ET", { style: "currency", currency: "ETB" });
@@ -124,7 +137,7 @@ export default function SalesOrderDetailPage() {
       "Job Card",
       {
         filters: [["work_order", "in", linkedWONames.length ? linkedWONames : ["__none__"]]],
-        fields: ["name", "status", "operation", "work_order", "workstation", "for_quantity", "employee"],
+        fields: ["name", "status", "operation", "work_order", "workstation", "for_quantity", "employee", "time_logs"],
         limit: 100,
       },
       { enabled: linkedWONames.length > 0 },
@@ -172,7 +185,11 @@ export default function SalesOrderDetailPage() {
         toast.info(`${employeeName || employeeId} is already assigned to ${jc.name}.`);
         return;
       }
-      const rows = [...existing, employeeId].map((id) => ({ employee: id }));
+      // 2X P0-D — include employee_name so the chip shows name, not ID.
+      const rows = [...existing, employeeId].map((id) => ({
+        employee: id,
+        employee_name: id === employeeId && employeeName ? employeeName : undefined,
+      }));
       setAssigningJC(jc.name);
       assignJCMutation.mutate(
         { name: jc.name, data: { employee: rows } },
@@ -190,6 +207,134 @@ export default function SalesOrderDetailPage() {
       );
     },
     [assignJCMutation, refetchJobCards, showError],
+  );
+
+  // 2Y Part 3 — JC lifecycle mutations (Start / Complete) inline in SO cockpit.
+  // Uses useFrappeUpdate with correct time_logs data so Frappe's controller
+  // validates the status transition. Same pattern as WO/JC detail pages (2X P0-B).
+  const lifecycleJCMutation = useFrappeUpdate<LinkedJobCard>("Job Card", { showToast: false });
+  const [lifecycleJC, setLifecycleJC] = useState<string | null>(null);
+
+  /** Start a Job Card: append a new time_log entry with from_time. */
+  const handleStartJC = useCallback(
+    (jc: LinkedJobCard) => {
+      const assignedEmps = (jc.employee ?? []).filter((r) => r.employee);
+      if (assignedEmps.length === 0) {
+        toast.error("Assign an employee before starting this Job Card.");
+        return;
+      }
+      const emp = assignedEmps[0].employee!;
+      const existingLogs = jc.time_logs ?? [];
+      const newLog: JobCardTimeLog = {
+        employee: emp,
+        from_time: new Date().toISOString(),
+        completed_qty: 0,
+      };
+      setLifecycleJC(jc.name);
+      lifecycleJCMutation.mutate(
+        { name: jc.name, data: { time_logs: [...existingLogs, newLog] } },
+        {
+          onSuccess: async () => {
+            toast.success(`Job Card ${jc.name} started`, {
+              description: `${emp} is now clocked in.`,
+            });
+            await refetchJobCards();
+            setLifecycleJC(null);
+          },
+          onError: (err) => {
+            setLifecycleJC(null);
+            showError(resolveFrappeError(err, { doctype: "Job Card" }));
+          },
+        },
+      );
+    },
+    [lifecycleJCMutation, refetchJobCards, showError],
+  );
+
+  /** Complete a Job Card: update the last open time_log with to_time + completed_qty. */
+  const handleCompleteJC = useCallback(
+    (jc: LinkedJobCard) => {
+      const logs = [...(jc.time_logs ?? [])];
+      // Find the last open log (no to_time)
+      const openIdx = logs.findLastIndex((l) => l.from_time && !l.to_time);
+      if (openIdx === -1) {
+        toast.error("No open time log to complete.");
+        return;
+      }
+      logs[openIdx] = {
+        ...logs[openIdx],
+        to_time: new Date().toISOString(),
+        completed_qty: jc.for_quantity ?? 0,
+      };
+      setLifecycleJC(jc.name);
+      lifecycleJCMutation.mutate(
+        { name: jc.name, data: { time_logs: logs } },
+        {
+          onSuccess: async () => {
+            toast.success(`Job Card ${jc.name} completed`);
+            await Promise.all([refetchJobCards(), refetchWO()]);
+            setLifecycleJC(null);
+          },
+          onError: (err) => {
+            setLifecycleJC(null);
+            showError(resolveFrappeError(err, { doctype: "Job Card" }));
+          },
+        },
+      );
+    },
+    [lifecycleJCMutation, refetchJobCards, refetchWO, showError],
+  );
+
+  /** Assign a workstation to a Job Card. */
+  const wsJCMutation = useFrappeUpdate<LinkedJobCard>("Job Card", { showToast: false });
+  const [assigningWS, setAssigningWS] = useState<string | null>(null);
+
+  const handleAssignWorkstation = useCallback(
+    (jc: LinkedJobCard, workstation: string) => {
+      if (!workstation) return;
+      setAssigningWS(jc.name);
+      wsJCMutation.mutate(
+        { name: jc.name, data: { workstation } },
+        {
+          onSuccess: async () => {
+            toast.success(`Workstation ${workstation} assigned to ${jc.name}`);
+            await refetchJobCards();
+            setAssigningWS(null);
+          },
+          onError: (err) => {
+            setAssigningWS(null);
+            showError(resolveFrappeError(err, { doctype: "Job Card" }));
+          },
+        },
+      );
+    },
+    [wsJCMutation, refetchJobCards, showError],
+  );
+
+  // 2Y Part 3 — Complete WO inline: when all JCs for a WO are completed,
+  // the operator can mark the WO as Completed (sets status via useFrappeUpdate).
+  const completeWOMutation = useFrappeUpdate<LinkedWorkOrder>("Work Order", { showToast: false });
+  const [completingWO, setCompletingWO] = useState<string | null>(null);
+
+  const handleCompleteWO = useCallback(
+    (woName: string) => {
+      setCompletingWO(woName);
+      completeWOMutation.mutate(
+        { name: woName, data: { status: "Completed" } },
+        {
+          onSuccess: async () => {
+            toast.success(`Work Order ${woName} completed`);
+            await refetchWO();
+            setCompletingWO(null);
+          },
+          onError: (err) => {
+            setCompletingWO(null);
+            showError(resolveFrappeError(err, { doctype: "Work Order" }));
+          },
+        },
+      );
+    },
+    [completeWOMutation, refetchWO, showError],
   );
 
   // -- BOM lookup for WO creation (default BOM per production item) ----------
@@ -484,7 +629,11 @@ export default function SalesOrderDetailPage() {
         backHref="/sales/sales-order"
         actions={
           <div className="flex items-center gap-2">
-            <PrintShare doctype="Sales Order" name={order.name} />
+            <PrintMenu
+              doctype="Sales Order"
+              doc={order as unknown as Record<string, unknown>}
+            />
+            <PrintShare doctype="Sales Order" name={order.name} showPrint={false} />
             {isDraft && (
               <>
                 <Button variant="outline" size="sm" asChild>
@@ -641,44 +790,66 @@ export default function SalesOrderDetailPage() {
                   </Button>
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {workOrders.map((wo) => {
                     const isWoDraft = wo.docstatus === 0;
+                    const isWoCompleted = wo.status === "Completed";
+                    const woJCs = (jobCards ?? []).filter((jc) => jc.work_order === wo.name);
+                    const allJCsCompleted = woJCs.length > 0 && woJCs.every((jc) => jc.status === "Completed");
                     return (
                       <div
                         key={wo.name}
-                        className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-card px-3 py-2.5"
+                        className="rounded-xl border border-border/60 bg-card px-3 py-2.5"
                       >
-                        <div className="min-w-0">
-                          <Link
-                            href={`/manufacturing/work-order/${encodeURIComponent(wo.name)}`}
-                            className="flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
-                          >
-                            {wo.name}
-                            <ExternalLink className="h-3 w-3 shrink-0" />
-                          </Link>
-                          <p className="truncate text-xs text-muted-foreground">
-                            {wo.production_item}
-                            {wo.qty ? ` · ${wo.qty} unit(s)` : ""}
-                          </p>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-2">
-                          <StatusBadge status={wo.status} />
-                          {isWoDraft && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleSubmitWorkOrder(wo.name)}
-                              disabled={submittingWO === wo.name}
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <Link
+                              href={`/manufacturing/work-order/${encodeURIComponent(wo.name)}`}
+                              className="flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
                             >
-                              {submittingWO === wo.name ? (
-                                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                              ) : (
-                                <Send className="mr-1.5 h-4 w-4" />
-                              )}
-                              Submit
-                            </Button>
-                          )}
+                              {wo.name}
+                              <ExternalLink className="h-3 w-3 shrink-0" />
+                            </Link>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {wo.production_item}
+                              {wo.qty ? ` · ${wo.qty} unit(s)` : ""}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2">
+                            <StatusBadge status={wo.status} />
+                            {isWoDraft && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleSubmitWorkOrder(wo.name)}
+                                disabled={submittingWO === wo.name}
+                              >
+                                {submittingWO === wo.name ? (
+                                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Send className="mr-1.5 h-4 w-4" />
+                                )}
+                                Submit
+                              </Button>
+                            )}
+                            {/* 2Y Part 3 — Complete WO inline when all JCs are done */}
+                            {!isWoDraft && !isWoCompleted && allJCsCompleted && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-emerald-500/50 text-emerald-600 hover:bg-emerald-500/10 dark:text-emerald-400"
+                                onClick={() => handleCompleteWO(wo.name)}
+                                disabled={completingWO === wo.name}
+                              >
+                                {completingWO === wo.name ? (
+                                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                                ) : (
+                                  <CheckCircle2 className="mr-1.5 h-4 w-4" />
+                                )}
+                                Complete
+                              </Button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     );
@@ -687,13 +858,14 @@ export default function SalesOrderDetailPage() {
               )}
 
               {/* Job Cards — appear once a routed Work Order is submitted */}
+              {/* 2Y Part 3 — Enhanced: workstation assignment + Start/Complete inline */}
               {jobCards && jobCards.length > 0 && (
                 <div className="mt-6">
                   <div className="mb-3 flex items-center gap-2">
                     <Wrench className="h-4 w-4 text-amber-500" />
                     <h4 className="text-sm font-semibold text-foreground">Job Cards</h4>
                     <span className="text-xs text-muted-foreground">
-                      ({jobCards.length}) — assign an employee to each
+                      ({jobCards.length}) — assign workstation + employee, then start
                     </span>
                   </div>
                   <div className="space-y-2">
@@ -701,10 +873,17 @@ export default function SalesOrderDetailPage() {
                       const assigned = (jc.employee ?? [])
                         .map((r) => r.employee_name || r.employee)
                         .filter(Boolean) as string[];
+                      const jcStatus = jc.status ?? "Open";
+                      const isOpen = jcStatus === "Open";
+                      const isInProgress = jcStatus === "In Process" || jcStatus === "Work In Progress";
+                      const isCompleted = jcStatus === "Completed";
                       return (
                         <div
                           key={jc.name}
-                          className="rounded-xl border border-border/60 bg-card px-3 py-2.5"
+                          className={cn(
+                            "rounded-xl border bg-card px-3 py-2.5",
+                            isCompleted ? "border-emerald-500/30 bg-emerald-500/5" : "border-border/60",
+                          )}
                         >
                           <div className="flex items-center justify-between gap-3">
                             <div className="min-w-0">
@@ -717,10 +896,44 @@ export default function SalesOrderDetailPage() {
                               </Link>
                               <p className="truncate text-xs text-muted-foreground">
                                 {jc.work_order}
-                                {jc.workstation ? ` · ${jc.workstation}` : ""}
                               </p>
                             </div>
-                            <StatusBadge status={jc.status ?? "Open"} />
+                            <div className="flex items-center gap-2">
+                              <StatusBadge status={jcStatus} />
+                              {/* 2Y Part 3 — Start/Complete JC inline */}
+                              {isOpen && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="border-amber-500/50 text-amber-600 hover:bg-amber-500/10 dark:text-amber-400"
+                                  onClick={() => handleStartJC(jc)}
+                                  disabled={lifecycleJC === jc.name}
+                                >
+                                  {lifecycleJC === jc.name ? (
+                                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <Play className="mr-1.5 h-3.5 w-3.5" />
+                                  )}
+                                  Start
+                                </Button>
+                              )}
+                              {isInProgress && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="border-emerald-500/50 text-emerald-600 hover:bg-emerald-500/10 dark:text-emerald-400"
+                                  onClick={() => handleCompleteJC(jc)}
+                                  disabled={lifecycleJC === jc.name}
+                                >
+                                  {lifecycleJC === jc.name ? (
+                                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <Square className="mr-1.5 h-3.5 w-3.5" />
+                                  )}
+                                  Complete
+                                </Button>
+                              )}
+                            </div>
                           </div>
                           <div className="mt-2.5 flex flex-col gap-2 sm:flex-row sm:items-center">
                             <div className="flex flex-wrap items-center gap-1.5">
@@ -738,23 +951,48 @@ export default function SalesOrderDetailPage() {
                                   <UserPlus className="h-3 w-3" /> Unassigned
                                 </span>
                               )}
+                              {/* 2Y Part 3 — Workstation badge */}
+                              {jc.workstation ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-600 dark:text-blue-400">
+                                  <Cog className="h-3 w-3" /> {jc.workstation}
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                                  <Cog className="h-3 w-3" /> No workstation
+                                </span>
+                              )}
                             </div>
-                            <div className="sm:ml-auto sm:w-64">
-                              <FrappeSelect
-                                doctype="Employee"
-                                labelField="employee_name"
-                                placeholder={
-                                  assigningJC === jc.name ? "Assigning…" : "Assign employee…"
-                                }
-                                disabled={assigningJC === jc.name}
-                                onChange={(val, doc) =>
-                                  handleAssignEmployee(
-                                    jc,
-                                    val,
-                                    (doc as { label?: string })?.label,
-                                  )
-                                }
-                              />
+                            <div className="flex gap-2 sm:ml-auto sm:w-auto">
+                              {/* 2Y Part 3 — Workstation assignment */}
+                              {!isCompleted && (
+                                <div className="w-48">
+                                  <FrappeSelect
+                                    doctype="Workstation"
+                                    placeholder={assigningWS === jc.name ? "Assigning…" : "Workstation…"}
+                                    disabled={assigningWS === jc.name || isCompleted}
+                                    value={jc.workstation ?? ""}
+                                    onChange={(val) => handleAssignWorkstation(jc, val)}
+                                  />
+                                </div>
+                              )}
+                              {/* Employee assignment */}
+                              {!isCompleted && (
+                                <div className="w-48">
+                                  <FrappeSelect
+                                    doctype="Employee"
+                                    labelField="employee_name"
+                                    placeholder={assigningJC === jc.name ? "Assigning…" : "Employee…"}
+                                    disabled={assigningJC === jc.name || isCompleted}
+                                    onChange={(val, doc) =>
+                                      handleAssignEmployee(
+                                        jc,
+                                        val,
+                                        (doc as { label?: string })?.label,
+                                      )
+                                    }
+                                  />
+                                </div>
+                              )}
                             </div>
                           </div>
                         </div>

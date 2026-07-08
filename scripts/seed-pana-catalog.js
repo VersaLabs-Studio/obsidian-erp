@@ -10,9 +10,17 @@
  *
  * Prerequisites:
  * - Frappe bench running with ERPNext installed
- * - ERP_API_KEY and ERP_API_SECRET environment variables set
+ * - ERP_API_KEY and ERP_API_SECRET environment variables set (in .env or exported)
  * - Default company configured (resolved via API on first run)
  */
+
+// 2X P0-F — Load .env automatically so bare `pnpm seed:catalog` works
+// without manually exporting environment variables.
+try {
+  require("dotenv").config({ path: require("path").resolve(process.cwd(), ".env") });
+} catch (_) {
+  // dotenv not installed — rely on inline env vars
+}
 
 const https = require("https");
 const http = require("http");
@@ -146,12 +154,25 @@ async function createIfNotExists(doctype, name, data) {
   }
 }
 
-/** Submit a document (set docstatus to 1). */
+/** Submit a document (set docstatus to 1) via the full-doc pattern.
+ *  2X P0-F — Frappe's `frappe.client.submit` requires the FULL doc
+ *  object (not just `{doctype, name}`), otherwise it throws
+ *  `TypeError: submit() missing 1 required positional argument: 'doc'`.
+ *  We GET the doc first, then POST the full doc to submit.
+ */
 async function submitDoc(doctype, name) {
   try {
+    // 1. GET the full document
+    const docResult = await frappeRequest(`${doctype}/${encodeURIComponent(name)}`);
+    const fullDoc = docResult?.data;
+    if (!fullDoc) {
+      console.error(`  ✗ Could not fetch ${doctype} "${name}" for submit`);
+      return false;
+    }
+
+    // 2. Submit via full-doc pattern
     await frappeMethod("frappe.client.submit", {
-      doctype,
-      name,
+      doc: fullDoc,
     });
     console.log(`  ✓ Submitted ${doctype} "${name}"`);
     return true;
@@ -280,15 +301,42 @@ async function seed() {
   }
 
   // ---- Step 2: Manufacturing masters ----------------------------------------
-  console.log("\n🔧 Step 2: Manufacturing Masters");
-  await createIfNotExists("Workstation", "Pana Print Floor", {
-    workstation_name: "Pana Print Floor",
-    hour_rate: 0,
-  });
-  await createIfNotExists("Operation", "Print & Finish", {
-    name: "Print & Finish",
-    workstation: "Pana Print Floor",
-  });
+  console.log("\n🔧 Step 2: Manufacturing Masters (8 Workstations + Operations)");
+  // 2Y Part 5 — Eight real production workstations for Pana Print Shop.
+  // Each maps to a physical machine/area on the production floor.
+  const WORKSTATIONS = [
+    { name: "Digital Press",    hour_rate: 500 },
+    { name: "Offset Press",     hour_rate: 800 },
+    { name: "Lamination",       hour_rate: 300 },
+    { name: "Cutting",          hour_rate: 200 },
+    { name: "Saddle Binding",   hour_rate: 250 },
+    { name: "Perfect Binding",  hour_rate: 300 },
+    { name: "Spiral Binding",   hour_rate: 250 },
+    { name: "Finishing",        hour_rate: 200 },
+  ];
+  for (const ws of WORKSTATIONS) {
+    await createIfNotExists("Workstation", ws.name, {
+      workstation_name: ws.name,
+      hour_rate: ws.hour_rate,
+    });
+  }
+  // Operations — one per workstation for simplicity (2Y Part 5).
+  const OPERATIONS = [
+    { name: "Digital Print",    workstation: "Digital Press" },
+    { name: "Offset Print",     workstation: "Offset Press" },
+    { name: "Laminate",         workstation: "Lamination" },
+    { name: "Cut & Trim",       workstation: "Cutting" },
+    { name: "Saddle Stitch",    workstation: "Saddle Binding" },
+    { name: "Perfect Bind",     workstation: "Perfect Binding" },
+    { name: "Spiral Bind",      workstation: "Spiral Binding" },
+    { name: "Finish & Pack",    workstation: "Finishing" },
+  ];
+  for (const op of OPERATIONS) {
+    await createIfNotExists("Operation", op.name, {
+      name: op.name,
+      workstation: op.workstation,
+    });
+  }
 
   // ---- Step 3: Raw-material Items -------------------------------------------
   console.log("\n📦 Step 3: Raw Material Items");
@@ -398,8 +446,8 @@ async function seed() {
       })),
       operations: [
         {
-          operation: "Print & Finish",
-          workstation: "Pana Print Floor",
+          operation: "Digital Print",
+          workstation: "Digital Press",
           time_in_mins: 30,
         },
       ],
@@ -411,6 +459,26 @@ async function seed() {
       const submitted = await submitDoc("BOM", doc.name || bomName);
       if (!submitted) {
         console.warn(`  ⚠ BOM "${bomName}" created but not submitted — WO might not find it`);
+      }
+    } else {
+      // 2X P0-F — Heal on re-run: the BOM already exists but was not
+      // returned (createIfNotExists returns null for existing docs). If
+      // it's still a draft (docstatus 0), submit it now. This heals the
+      // case where a prior run created the BOM but the submit step failed.
+      try {
+        const existing = await frappeRequest(`BOM/${encodeURIComponent(bomName)}`);
+        if (existing?.data?.docstatus === 0) {
+          console.log(`  ⟳ Healing: submitting draft BOM "${bomName}" from prior run`);
+          const submitted = await submitDoc("BOM", bomName);
+          if (submitted) {
+            createdBoms[itemCode] = bomName;
+          }
+        } else if (existing?.data?.docstatus === 1) {
+          // Already submitted — just register it for the default_bom step
+          createdBoms[itemCode] = bomName;
+        }
+      } catch (_) {
+        // Can't read the BOM — skip
       }
     }
   }
@@ -427,7 +495,7 @@ async function seed() {
   console.log("=".repeat(60));
   console.log(`\n📊 Summary:`);
   console.log(`  • Item Groups:       ${PARENT_GROUPS.length + PRODUCT_GROUPS.length + RAW_GROUPS.length} (parents + children)`);
-  console.log(`  • Manufacturing:     Workstation "Pana Print Floor" + Operation "Print & Finish"`);
+  console.log(`  • Manufacturing:     8 Workstations + 8 Operations (2Y Part 5)`);
   console.log(`  • Raw Materials:     ${RAW_MATERIALS.length} items (with valuation_rate)`);
   console.log(`  • Finished Goods:    ${FINISHED_GOODS.length} items`);
   console.log(`  • Item Prices:       ${Object.keys(ITEM_PRICES).length} (Standard Selling, ETB)`);
@@ -439,6 +507,27 @@ async function seed() {
   }
   console.log(`\n⚠️  No BOM created for PRINT-CUT-STICKER (incomplete spec, marked "Not Finished" in source).`);
   console.log(`\n📝 Re-run safe: all operations are idempotent.`);
+
+  // ---- Step 9: Fiscal Custom Fields (2Y Part 1) -----------------------------
+  console.log("\n🧾 Step 9: Fiscal Custom Fields (Sales Invoice + Purchase Invoice)");
+  const FS_FIELD = {
+    fieldname: "pana_fs_number",
+    label: "Fiscal Serial Number",
+    fieldtype: "Data",
+    insert_after: "po_no",
+    reqd: 0,
+    in_list_view: 1,
+    in_standard_filter: 1,
+    translatable: 0,
+    description: "Government-issued fiscal serial number for this transaction (Ethiopia e-invoicing requirement).",
+  };
+  for (const dt of ["Sales Invoice", "Purchase Invoice"]) {
+    const cfName = `${dt.replace(/ /g, "-")}-${FS_FIELD.fieldname}`.toLowerCase();
+    await createIfNotExists("Custom Field", cfName, {
+      dt: dt,
+      ...FS_FIELD,
+    });
+  }
 }
 
 seed().catch((err) => {

@@ -18,6 +18,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getActiveCompany } from "@/lib/settings/company";
+import { resolveCompanyWarehouses } from "@/lib/settings/warehouses";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -158,6 +159,51 @@ export function getDefaultSourceWarehouse(): string {
  */
 export function getDefaultScrapWarehouse(): string {
   return getCachedWarehouseDefaults().scrapWarehouse;
+}
+
+// ---------------------------------------------------------------------------
+// 2X P0-A — Unified prefill resolver: saved settings first, canonical fallback.
+// Every create-form prefill reads this (not resolveCompanyWarehouses directly).
+// ---------------------------------------------------------------------------
+
+export interface PrefillWarehouses {
+  /** Source / default warehouse (Stock Settings.default_warehouse) */
+  source: string;
+  /** Same as source — convenience alias for SE/MR forms */
+  stores: string;
+  /** Work-in-progress warehouse */
+  wip: string;
+  /** Finished-goods warehouse */
+  fg: string;
+  /** Scrap / rejected warehouse */
+  scrap: string;
+}
+
+/**
+ * Resolve warehouse defaults for create-form prefill. Reads the user's saved
+ * ERPNext settings first (the source of truth), then falls back to the
+ * canonical warehouse names computed from the company abbreviation. This
+ * eliminates the two-source divergence that caused "works but wrong values."
+ */
+export async function resolvePrefillWarehouses(): Promise<PrefillWarehouses> {
+  const saved = await fetchWarehouseDefaults();
+  // Canonical fallback — only used when the saved value is blank.
+  // Catch errors (e.g. admin-gated route) so non-admin users still get
+  // the computed defaults rather than empty fields.
+  const canon = await resolveCompanyWarehouses().catch(() => ({
+    stores: "",
+    wip: "",
+    fg: "",
+    rawMaterials: "",
+  } as Partial<import("@/lib/settings/warehouses").CompanyWarehouses>));
+
+  return {
+    source: saved.sourceWarehouse || canon.rawMaterials || canon.stores || "",
+    stores: saved.sourceWarehouse || canon.stores || "",
+    wip:    saved.wipWarehouse   || canon.wip || "",
+    fg:     saved.fgWarehouse    || canon.fg || "",
+    scrap:  saved.scrapWarehouse || canon.wip || "",
+  };
 }
 
 // ---------------------------------------------------------------------------

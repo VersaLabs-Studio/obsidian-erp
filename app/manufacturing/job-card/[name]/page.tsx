@@ -73,72 +73,111 @@ export default function JobCardDetailPage() {
     showToast: false,
   });
 
+  // 2X P0-B — separate mutation for lifecycle transitions (start/complete)
+  // that write time_logs data, vs the employee-assignment mutation.
+  const lifecycleMutation = useFrappeUpdate<JobCard>("Job Card", {
+    showToast: false,
+  });
+
   const status = jc?.status || "Open";
   const [busy, setBusy] = useState(false);
 
-  // 2W A2 — Job Card lifecycle via frappe.client.set_value (same approach
-  // as the WO detail JC table). useFrappeUpdate (PUT /api/resource/Job Card)
-  // triggers the Frappe controller's validate hook which recomputes status
-  // from time_logs — so writing status: "Work In Progress" gets reset on
-  // save. set_value bypasses the controller for atomic field writes.
-  const setJcFields = useCallback(
-    async (fields: Record<string, unknown>): Promise<void> => {
-      const res = await fetch(`/api/method/frappe.client.set_value`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          doctype: "Job Card",
-          name,
-          fieldname: fields,
-        }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(
-          body?.message || body?.exception || `set_value failed (${res.status})`,
-        );
-      }
-    },
-    [name],
-  );
+  // 2X P0-B — Job Card lifecycle via useFrappeUpdate (resource PUT through
+  // our proxy). The Frappe controller recomputes status from time_logs on
+  // each PUT, so we write the CORRECT time_logs data so the controller
+  // naturally agrees with our intended status:
+  //   Start: append a new time_log {employee, from_time, completed_qty: 0}
+  //   Complete: update the open time_log row with {to_time, completed_qty}
+  // This replaces the broken frappe.client.set_value RPC that 404'd.
 
   const handleStart = async () => {
-    setBusy(true);
-    try {
-      await setJcFields({
-        status: "Work In Progress",
-        actual_start_date: new Date().toISOString().slice(0, 19).replace("T", " "),
-      });
-      toast.success("Job Card started");
-      await refetch();
-    } catch (err) {
-      showError(resolveFrappeError(err, { doctype: "Job Card" }));
-    } finally {
-      setBusy(false);
+    if (!jc) return;
+
+    // Require an assigned employee before starting.
+    const employees = Array.isArray(jc.employee) ? jc.employee : [];
+    if (employees.length === 0) {
+      toast.error("Assign an employee before starting this Job Card.");
+      return;
     }
+
+    setBusy(true);
+    const now = new Date().toISOString().slice(0, 19).replace("T", " ");
+    const employeeId = (employees[0] as { employee?: string })?.employee || "";
+
+    const existingLogs = Array.isArray(jc.time_logs) ? jc.time_logs : [];
+    const newTimeLog = {
+      employee: employeeId,
+      from_time: now,
+      completed_qty: 0,
+    };
+
+    lifecycleMutation.mutate(
+      {
+        name,
+        data: {
+          status: "Work In Progress",
+          time_logs: [...(existingLogs as unknown[]), newTimeLog],
+        },
+      },
+      {
+        onSuccess: () => {
+          toast.success("Job Card started");
+          refetch();
+          setBusy(false);
+        },
+        onError: (err) => {
+          setBusy(false);
+          showError(resolveFrappeError(err, { doctype: "Job Card" }));
+        },
+      },
+    );
   };
 
   const handleComplete = async () => {
+    if (!jc) return;
     setBusy(true);
-    try {
-      const forQty = Number(jc?.for_quantity ?? 0);
-      await setJcFields({
-        status: "Completed",
-        total_completed_qty: forQty,
-        actual_end_date: new Date().toISOString().slice(0, 19).replace("T", " "),
-      });
-      toast.success("Job Card completed");
-      await refetch();
-    } catch (err) {
-      showError(resolveFrappeError(err, { doctype: "Job Card" }));
-    } finally {
-      setBusy(false);
-    }
+    const now = new Date().toISOString().slice(0, 19).replace("T", " ");
+    const forQty = Number(jc.for_quantity ?? 0);
+
+    // Update the open time_log row (last one with no to_time).
+    const existingLogs = Array.isArray(jc.time_logs)
+      ? (jc.time_logs as Array<Record<string, unknown>>)
+      : [];
+    const updatedLogs = existingLogs.map((log, idx) => {
+      const isOpen = !log.to_time;
+      if (isOpen || idx === existingLogs.length - 1) {
+        return { ...log, to_time: now, completed_qty: forQty };
+      }
+      return log;
+    });
+
+    lifecycleMutation.mutate(
+      {
+        name,
+        data: {
+          status: "Completed",
+          total_completed_qty: forQty,
+          time_logs: updatedLogs,
+        },
+      },
+      {
+        onSuccess: () => {
+          toast.success("Job Card completed");
+          refetch();
+          setBusy(false);
+        },
+        onError: (err) => {
+          setBusy(false);
+          showError(resolveFrappeError(err, { doctype: "Job Card" }));
+        },
+      },
+    );
   };
 
   // Employee chip assignment — append to the union row table (Table
   // MultiSelect child), same shape the WO detail JC row writes.
-  const assignEmployee = (employeeId: string) => {
+  // 2X P0-D — include employee_name so the chip shows name, not ID.
+  const assignEmployee = (employeeId: string, employeeName?: string) => {
     if (!employeeId || !jc) return;
     const existing = (Array.isArray(jc.employee) ? jc.employee : [])
       .map((r: unknown) =>
@@ -148,7 +187,10 @@ export default function JobCardDetailPage() {
       )
       .filter(Boolean) as string[];
     if (existing.includes(employeeId)) return;
-    const rows = [...existing, employeeId].map((id) => ({ employee: id }));
+    const rows = [...existing, employeeId].map((id) => ({
+      employee: id,
+      employee_name: id === employeeId && employeeName ? employeeName : undefined,
+    }));
     setBusy(true);
     updateMutation.mutate(
       { name, data: { employee: rows } },
@@ -417,7 +459,7 @@ export default function JobCardDetailPage() {
                     labelField="employee_name"
                     placeholder="Assign employee…"
                     disabled={busy}
-                    onChange={(val) => assignEmployee(val)}
+                    onChange={(val, doc) => assignEmployee(val, (doc as { label?: string })?.label)}
                   />
                 </div>
               </div>

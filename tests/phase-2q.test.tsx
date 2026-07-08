@@ -1263,7 +1263,11 @@ describe("Part 8 (F-B4): Print & Share in document header", () => {
     expect(exists).toBe(true);
     const src = await fs.readFile("app/print.css", "utf-8");
     expect(src).toMatch(/@media\s+print/);
-    expect(src).toMatch(/is-printing/);
+    // 2Y-R2: printing no longer restyles the on-screen DOM (`is-printing`).
+    // It renders a dedicated, DOM-isolated `.print-document` that is hidden
+    // on screen and becomes the ONLY visible element in print.
+    expect(src).toMatch(/\.print-document/);
+    expect(src).toMatch(/visibility:\s*hidden/);
   });
 
   it("the SO detail page wires <PrintShare doctype='Sales Order' name=...>", async () => {

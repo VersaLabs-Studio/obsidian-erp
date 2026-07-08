@@ -37,7 +37,7 @@ import { useMakeFrom } from "@/hooks/flows/use-make-from";
 import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
 import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
 import { getActiveCompany } from "@/lib/settings/company";
-import { resolveCompanyWarehouses } from "@/lib/settings/warehouses";
+import { resolvePrefillWarehouses } from "@/lib/stock/warehouse-defaults";
 import {
   getAutoFillMapping,
   applyAutoFill,
@@ -241,13 +241,16 @@ export default function NewPurchaseReceiptPage() {
     });
   }, [poDraft, purchaseOrder, purchaseOrderId, reset, getValues]);
 
-  // 2V P1-2 — Prefill default receipt warehouse when no source document
-  // is being auto-filled and the field is empty.
+  // 2X P0-A — Prefill default receipt warehouse from saved settings (source
+  // of truth), with canonical fallback. Replaces resolveCompanyWarehouses().
+  // Also: the saved-settings route is user-scoped, so non-admin sessions get
+  // the value (previously the admin-gate on the canonical route silently
+  // returned nothing for non-admin users).
   useEffect(() => {
     if (poDraft || purchaseOrder) return;
     const cur = getValues("set_warehouse");
     if (cur) return;
-    resolveCompanyWarehouses()
+    resolvePrefillWarehouses()
       .then((w) => {
         if (w.stores) setValue("set_warehouse", w.stores);
       })
@@ -399,6 +402,17 @@ export default function NewPurchaseReceiptPage() {
                           placeholder="Link to PO..."
                         />
                       </FieldWrap>
+                      {/* 2X P0-A — visible warehouse field so the prefill is not
+                          invisible. Previously set_warehouse only appeared in the
+                          read-only review step, making the prefill seem absent. */}
+                      <QuickAddField
+                        control={control}
+                        name="set_warehouse"
+                        label="Receiving Warehouse"
+                        doctype="Warehouse"
+                        placeholder="Where goods arrive..."
+                        filters={[["is_group", "=", 0]]}
+                      />
                     </div>
                   </div>
                 );

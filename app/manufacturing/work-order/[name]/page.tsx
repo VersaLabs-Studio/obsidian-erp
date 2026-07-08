@@ -104,7 +104,7 @@ export default function WorkOrderDetailPage() {
     "Job Card",
     {
       filters: [["work_order", "=", name]] as [string, string, unknown][],
-      fields: ["name", "operation", "status", "workstation", "total_completed_qty", "for_quantity", "employee"],
+      fields: ["name", "operation", "status", "workstation", "total_completed_qty", "for_quantity", "employee", "time_logs"],
       limit: 50,
     },
     { enabled: !isLoading && !!wo },
@@ -247,82 +247,124 @@ export default function WorkOrderDetailPage() {
     }
   };
 
-  // 2V P0-7 / 2W A2 — Job Card lifecycle: status + start/end timestamps
-  // written via set_value to bypass the controller validators that fight
-  // the simple two-button SME flow. The previous useFrappeUpdate path
-  // failed Start because the controller recomputes status from time_logs
-  // (an Open JC with no time_logs → status reset to "Open" even after we
-  // set it to "Work In Progress"). frappe.client.set_value writes the
-  // fields directly, then we re-fetch so the button label flips.
+  // 2X P0-B — Job Card lifecycle: use useFrappeUpdate (resource PUT through
+  // our proxy) instead of the broken frappe.client.set_value RPC call that
+  // 404'd because /api/method/* has no Next.js route. The controller validates
+  // and recomputes status from time_logs — so we write the CORRECT time_logs
+  // data so the controller naturally agrees with our intent:
+  //   Start: append a new time_log {employee, from_time, completed_qty: 0}
+  //   Complete: update the open time_log row with {to_time, completed_qty}
+  // The employee is required before starting (guided message if none).
   const assignJCMutation = useFrappeUpdate<JobCard>("Job Card", {
+    showToast: false,
+  });
+  const lifecycleJCMutation = useFrappeUpdate<JobCard>("Job Card", {
     showToast: false,
   });
   const [activeJc, setActiveJc] = useState<string | null>(null);
 
-  // Helper: write fields to a Job Card via Frappe's set_value RPC.
-  const setJcFields = useCallback(
-    async (jcName: string, fields: Record<string, unknown>): Promise<void> => {
-      const res = await fetch(`/api/method/frappe.client.set_value`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          doctype: "Job Card",
-          name: jcName,
-          fieldname: fields,
-        }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(
-          body?.message || body?.exception || `set_value failed (${res.status})`,
-        );
-      }
-    },
-    [],
-  );
-
   const handleStartJob = async (jcName: string) => {
-    setActiveJc(jcName);
-    try {
-      await setJcFields(jcName, {
-        status: "Work In Progress",
-        actual_start_date: new Date().toISOString().slice(0, 19).replace("T", " "),
-      });
-      toast.success(`Job Card ${jcName} started`);
-      await refetchJC();
-    } catch (err) {
-      showError(resolveFrappeError(err, { doctype: "Job Card" }));
-    } finally {
-      setActiveJc(null);
+    const jc = (jobCards ?? []).find((j) => j.name === jcName);
+    if (!jc) return;
+
+    // 2X P0-B — require an assigned employee before starting.
+    const employees = Array.isArray(jc.employee) ? jc.employee : [];
+    if (employees.length === 0) {
+      toast.error("Assign an employee before starting this Job Card.");
+      return;
     }
+
+    setActiveJc(jcName);
+    const now = new Date().toISOString().slice(0, 19).replace("T", " ");
+    const employeeId = (employees[0] as { employee?: string })?.employee || "";
+
+    // Build the time_logs: existing rows + a new "from" row.
+    const existingLogs = Array.isArray(jc.time_logs) ? jc.time_logs : [];
+    const newTimeLog = {
+      employee: employeeId,
+      from_time: now,
+      completed_qty: 0,
+    };
+
+    lifecycleJCMutation.mutate(
+      {
+        name: jcName,
+        data: {
+          status: "Work In Progress",
+          time_logs: [...(existingLogs as unknown[]), newTimeLog],
+        },
+      },
+      {
+        onSuccess: () => {
+          toast.success(`Job Card ${jcName} started`);
+          refetchJC();
+          setActiveJc(null);
+        },
+        onError: (err) => {
+          setActiveJc(null);
+          showError(resolveFrappeError(err, { doctype: "Job Card" }));
+        },
+      },
+    );
   };
 
   const handleCompleteJob = async (jcName: string) => {
+    const jc = (jobCards ?? []).find((j) => j.name === jcName);
+    if (!jc) return;
+
     setActiveJc(jcName);
-    try {
-      const jc = (jobCards ?? []).find((j) => j.name === jcName);
-      const forQty = Number(jc?.for_quantity ?? wo?.qty ?? 0);
-      await setJcFields(jcName, {
-        status: "Completed",
-        total_completed_qty: forQty,
-        actual_end_date: new Date().toISOString().slice(0, 19).replace("T", " "),
-      });
-      toast.success(`Job Card ${jcName} completed`);
-      await refetchJC();
-    } catch (err) {
-      showError(resolveFrappeError(err, { doctype: "Job Card" }));
-    } finally {
-      setActiveJc(null);
-    }
+    const now = new Date().toISOString().slice(0, 19).replace("T", " ");
+    const forQty = Number(jc.for_quantity ?? wo?.qty ?? 0);
+
+    // Update the open time_log row (last one with no to_time) with
+    // to_time + completed_qty, then set status to Completed.
+    const existingLogs = Array.isArray(jc.time_logs)
+      ? (jc.time_logs as Array<Record<string, unknown>>)
+      : [];
+    const updatedLogs = existingLogs.map((log, idx) => {
+      // Update the last open row (no to_time)
+      const isOpen = !log.to_time;
+      if (isOpen || idx === existingLogs.length - 1) {
+        return { ...log, to_time: now, completed_qty: forQty };
+      }
+      return log;
+    });
+
+    lifecycleJCMutation.mutate(
+      {
+        name: jcName,
+        data: {
+          status: "Completed",
+          total_completed_qty: forQty,
+          time_logs: updatedLogs,
+        },
+      },
+      {
+        onSuccess: () => {
+          toast.success(`Job Card ${jcName} completed`);
+          refetchJC();
+          setActiveJc(null);
+        },
+        onError: (err) => {
+          setActiveJc(null);
+          showError(resolveFrappeError(err, { doctype: "Job Card" }));
+        },
+      },
+    );
   };
 
-  const handleAssignEmployee = (jcName: string, jc: JobCard, employeeId: string) => {
+  const handleAssignEmployee = (jcName: string, jc: JobCard, employeeId: string, employeeName?: string) => {
     if (!employeeId) return;
     const existing = (Array.isArray(jc.employee) ? jc.employee : [])
       .map((r: unknown) => typeof r === "object" && r && "employee" in r ? (r as { employee: string }).employee : null)
       .filter(Boolean) as string[];
     if (existing.includes(employeeId)) return;
-    const rows = [...existing, employeeId].map((id: string) => ({ employee: id }));
+    // 2X P0-D — include employee_name in the assignment rows so Frappe
+    // stores it and the chip displays the name instead of the ID.
+    const rows = [...existing, employeeId].map((id: string) => ({
+      employee: id,
+      employee_name: id === employeeId && employeeName ? employeeName : undefined,
+    }));
     setActiveJc(jcName);
     assignJCMutation.mutate(
       { name: jcName, data: { employee: rows } },
@@ -856,8 +898,8 @@ export default function WorkOrderDetailPage() {
                                   placeholder="+"
                                   className="h-6 w-16 text-[10px]"
                                   disabled={activeJc === jc.name}
-                                  onChange={(val) =>
-                                    handleAssignEmployee(jc.name, jc, val)
+                                  onChange={(val, doc) =>
+                                    handleAssignEmployee(jc.name, jc, val, (doc as { label?: string })?.label)
                                   }
                                 />
                               </div>

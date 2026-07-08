@@ -345,17 +345,22 @@ describe("Wizard pristine state — A1 fix", () => {
 // =========================================================================
 
 describe("Feature Path — Resolver navigation URLs", () => {
-  it("INSUFFICIENT_STOCK 'Create Material Request' navigates with correct URL + params", () => {
+  it("INSUFFICIENT_STOCK 'Create Purchase Order' navigates with correct URL + params", () => {
     const result = resolveFrappeError(
       new Error("2.0 units of Item P-001: Raw Paper needed in Warehouse Stores - P to complete this transaction."),
       { doctype: "Delivery Note" },
     );
     expect(result.code).toBe("INSUFFICIENT_STOCK");
 
-    // Find the "Create Material Request" action
-    const createAction = result.actions.find((a) => a.label === "Create Material Request");
+    // Find the "Create Purchase Order" action (2X P0-E — changed from MR)
+    const createAction = result.actions.find((a) => a.label === "Create Purchase Order");
     expect(createAction).toBeDefined();
     expect(createAction!.kind).toBe("prefill");
+
+    // Verify the Purchase Receipt secondary action exists
+    const receiptAction = result.actions.find((a) => a.label === "Create Purchase Receipt");
+    expect(receiptAction).toBeDefined();
+    expect(receiptAction!.variant).toBe("secondary");
 
     // The action's run() sets window.location.href. In JSDOM we can't easily
     // intercept that, so we verify the action exists and has the right kind.

@@ -39,11 +39,7 @@ import {
 import { validateWizardStep } from "@/lib/flows/flow-validation";
 import type { StepValidationResult } from "@/lib/flows/flow-validation";
 import { getActiveCompany } from "@/lib/settings/company";
-import {
-  fallbackFgWarehouse,
-  fallbackWipWarehouse,
-  resolveCompanyWarehouses,
-} from "@/lib/settings/warehouses";
+import { resolvePrefillWarehouses } from "@/lib/stock/warehouse-defaults";
 import type { WizardStep } from "@/types/flow-types";
 import type { SalesOrder } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
@@ -110,9 +106,12 @@ function CreateWorkOrderForm() {
       qty: preQty ? parseFloat(preQty) : 1,
       sales_order: salesOrderId || "",
       expected_delivery_date: "",
-      // 2S Part 11 — default to implicit warehouses (Stores=WIP, FG=Stores).
-      fg_warehouse: fallbackFgWarehouse(),
-      wip_warehouse: fallbackWipWarehouse(),
+      // 2X P0-A — default to saved warehouse settings (source of truth),
+      // with canonical fallback. Replaces the old resolveCompanyWarehouses()
+      // call that diverged from user settings (e.g. saved fg=Stores vs
+      // canonical fg=Finished Goods).
+      fg_warehouse: "",
+      wip_warehouse: "",
       source_warehouse: "",
       scrap_warehouse: "",
       planned_start_date: new Date().toISOString().split("T")[0],
@@ -127,17 +126,15 @@ function CreateWorkOrderForm() {
   const watchedAll = useWatch({ control });
   const selectedItem = watchedAll?.production_item;
 
-  // 2S Part 11 — Resolve implicit warehouses and set defaults. The user
-  // should rarely need to pick a warehouse; the implicit model provides
-  // Stores (FG), WIP, and Source (Raw Materials) automatically.
+  // 2X P0-A — Resolve warehouse defaults from saved settings first,
+  // with canonical names as per-field fallback. Replaces the old
+  // resolveCompanyWarehouses() effect that diverged from user settings.
   useEffect(() => {
-    resolveCompanyWarehouses().then((wh) => {
+    resolvePrefillWarehouses().then((wh) => {
       if (!getValues("fg_warehouse")) setValue("fg_warehouse", wh.fg);
       if (!getValues("wip_warehouse")) setValue("wip_warehouse", wh.wip);
-      // 2W A4 — source_warehouse = Raw Materials (or Stores fallback)
-      if (!getValues("source_warehouse")) {
-        setValue("source_warehouse", wh.rawMaterials ?? wh.stores);
-      }
+      if (!getValues("source_warehouse")) setValue("source_warehouse", wh.source);
+      if (!getValues("scrap_warehouse")) setValue("scrap_warehouse", wh.scrap);
     });
   }, [getValues, setValue]);
 

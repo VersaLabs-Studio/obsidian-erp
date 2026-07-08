@@ -47,6 +47,12 @@ export interface PrintShareProps {
    * omitted, the user is prompted for an address.
    */
   defaultEmail?: string;
+  /**
+   * 2Y-R2 — render the Print button. Set false on pages that use the new
+   * <PrintMenu> (real print-document subsystem) so there aren't two Print
+   * buttons. Share-only mode keeps Copy link / Email / Save as PDF.
+   */
+  showPrint?: boolean;
   className?: string;
 }
 
@@ -122,6 +128,7 @@ export function PrintShare({
   doctype,
   name,
   defaultEmail,
+  showPrint = true,
   className,
 }: PrintShareProps) {
   const [emailOpen, setEmailOpen] = useState(false);
@@ -130,16 +137,18 @@ export function PrintShare({
 
   return (
     <div className={cn("flex items-center gap-1.5", className)}>
-      <Button
-        size="sm"
-        variant="outline"
-        className="gap-1.5"
-        onClick={() => handlePrint(doctype, name)}
-        aria-label={`Print ${doctype} ${name}`}
-      >
-        <Printer className="h-3.5 w-3.5" />
-        <span className="hidden sm:inline">Print</span>
-      </Button>
+      {showPrint && (
+        <Button
+          size="sm"
+          variant="outline"
+          className="gap-1.5"
+          onClick={() => handlePrint(doctype, name)}
+          aria-label={`Print ${doctype} ${name}`}
+        >
+          <Printer className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">Print</span>
+        </Button>
+      )}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button

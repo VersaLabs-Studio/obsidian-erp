@@ -37,7 +37,7 @@ import { useFrappeCreate } from "@/hooks/generic";
 import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
 import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
 import { getActiveCompany } from "@/lib/settings/company";
-import { resolveCompanyWarehouses } from "@/lib/settings/warehouses";
+import { resolvePrefillWarehouses } from "@/lib/stock/warehouse-defaults";
 import { validateWizardStep } from "@/lib/flows/flow-validation";
 import type { StepValidationResult } from "@/lib/flows/flow-validation";
 import type { WizardStep } from "@/types/flow-types";
@@ -166,25 +166,27 @@ export default function NewStockEntryPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
-  // 2V P1-2 — Warehouse defaults: prefill from/to warehouses when empty
+  // 2X P0-A — Warehouse defaults: prefill from saved settings (source of
+  // truth), with canonical names as fallback. Replaces the old
+  // resolveCompanyWarehouses() call that diverged from user settings.
   useEffect(() => {
     // Only prefill when both warehouse fields are empty (user hasn't set them)
     const fw = getValues("from_warehouse");
     const tw = getValues("to_warehouse");
     if (fw || tw) return;
-    resolveCompanyWarehouses()
+    resolvePrefillWarehouses()
       .then((w) => {
         const purpose = watchedPurpose || getValues("purpose");
         if (purpose === "Material Transfer" || purpose === "Material Transfer for Manufacture") {
-          setValue("from_warehouse", w.stores || "");
-          setValue("to_warehouse", w.wip || "");
+          setValue("from_warehouse", w.source);
+          setValue("to_warehouse", w.wip);
         } else if (purpose === "Manufacture") {
-          setValue("from_warehouse", w.wip || "");
-          setValue("to_warehouse", w.fg || "");
+          setValue("from_warehouse", w.wip);
+          setValue("to_warehouse", w.fg);
         } else if (purpose === "Material Receipt") {
-          setValue("to_warehouse", w.stores || "");
+          setValue("to_warehouse", w.stores);
         } else if (purpose === "Material Issue") {
-          setValue("from_warehouse", w.stores || "");
+          setValue("from_warehouse", w.stores);
         }
       })
       .catch(() => {

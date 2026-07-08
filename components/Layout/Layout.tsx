@@ -197,7 +197,10 @@ const navigation = [
         href: "/manufacturing/job-card",
         icon: ClipboardList,
       },
-      { title: "Bill of Materials", href: "/manufacturing/bom", icon: Layers },
+      // 2Y Part 5 — BOM hidden from nav (valuation-only, no accounting UI).
+      // Direct URL still works for admin/audit. The SO cockpit creates WOs
+      // with BOM lookup, so operators never need to browse BOMs manually.
+      // { title: "Bill of Materials", href: "/manufacturing/bom", icon: Layers },
       { title: "Workstations", href: "/manufacturing/workstation", icon: Cpu },
       { title: "Operations", href: "/manufacturing/operation", icon: Cog },
       { title: "Settings", href: "/manufacturing/settings", icon: Settings },

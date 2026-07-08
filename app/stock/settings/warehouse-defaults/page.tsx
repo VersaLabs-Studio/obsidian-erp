@@ -11,7 +11,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
-import { Warehouse, ArrowLeft, Save, Loader2, RotateCcw } from "lucide-react";
+import { Warehouse, ArrowLeft, Save, Loader2, RotateCcw, Eye, EyeOff } from "lucide-react";
 
 import { PageHeader } from "@/components/smart";
 import { InfoCard } from "@/components/ui/info-card";
@@ -19,12 +19,15 @@ import { Button } from "@/components/ui/button";
 import { FormFrappeSelect } from "@/components/form";
 import { Form } from "@/components/ui/form";
 import { useForm } from "react-hook-form";
+import { cn } from "@/lib/utils";
 import { getActiveCompany } from "@/lib/settings/company";
 import {
   useWarehouseDefaults,
   useUpdateWarehouseDefaults,
   type WarehouseDefaults,
 } from "@/lib/stock/warehouse-defaults";
+// 2Y Part 8 — Implicit warehouse admin escape hatch.
+import { getShowPickersOverride, setShowPickersOverride } from "@/lib/stock/implicit-warehouses";
 
 const fadeIn = {
   hidden: { opacity: 0, y: 20 },
@@ -58,6 +61,18 @@ export default function WarehouseDefaultsPage() {
       form.reset(defaults);
     }
   }, [defaults, form]);
+
+  // 2Y Part 8 — Admin escape hatch: toggle to show/hide warehouse pickers.
+  const [showPickers, setShowPickersState] = useState(getShowPickersOverride());
+  const handleTogglePickers = (show: boolean) => {
+    setShowPickersOverride(show);
+    setShowPickersState(show);
+    toast.success(show ? "Warehouse pickers shown" : "Warehouse pickers hidden (implicit mode)", {
+      description: show
+        ? "All create forms will display warehouse fields for manual override."
+        : "All create forms will auto-resolve warehouses from saved defaults.",
+    });
+  };
 
   const handleSubmit = (data: WarehouseDefaults) => {
     updateMutation.mutate(data, {
@@ -169,26 +184,65 @@ export default function WarehouseDefaultsPage() {
               </div>
             </InfoCard>
 
-            <InfoCard title="How It Works">
-              <div className="space-y-3 text-sm text-muted-foreground">
-                <p>
-                  <strong className="text-foreground">Source Warehouse</strong> — Default warehouse for stock movements (Stock Settings.default_warehouse).
-                  Used in Delivery Note, Purchase Receipt, Material Request, and Stock Entry create forms.
-                </p>
-                <p>
-                  <strong className="text-foreground">Finished-Goods Warehouse</strong> — Where completed production items are stored (Manufacturing Settings.default_fg_warehouse).
-                  Required for Work Order creation and SO→WO automation.
-                </p>
-                <p>
-                  <strong className="text-foreground">WIP Warehouse</strong> — Work-in-progress staging area (Manufacturing Settings.default_wip_warehouse).
-                  Required for Work Order creation.
-                </p>
-                <p>
-                  <strong className="text-foreground">Scrap Warehouse</strong> — For rejected/scrap materials (Manufacturing Settings.default_scrap_warehouse).
-                  Optional; used in manufacturing operations.
-                </p>
-              </div>
-            </InfoCard>
+             <InfoCard title="How It Works">
+               <div className="space-y-3 text-sm text-muted-foreground">
+                 <p>
+                   <strong className="text-foreground">Source Warehouse</strong> — Default warehouse for stock movements (Stock Settings.default_warehouse).
+                   Used in Delivery Note, Purchase Receipt, Material Request, and Stock Entry create forms.
+                 </p>
+                 <p>
+                   <strong className="text-foreground">Finished-Goods Warehouse</strong> — Where completed production items are stored (Manufacturing Settings.default_fg_warehouse).
+                   Required for Work Order creation and SO→WO automation.
+                 </p>
+                 <p>
+                   <strong className="text-foreground">WIP Warehouse</strong> — Work-in-progress staging area (Manufacturing Settings.default_wip_warehouse).
+                   Required for Work Order creation.
+                 </p>
+                 <p>
+                   <strong className="text-foreground">Scrap Warehouse</strong> — For rejected/scrap materials (Manufacturing Settings.default_scrap_warehouse).
+                   Optional; used in manufacturing operations.
+                 </p>
+               </div>
+             </InfoCard>
+
+             {/* 2Y Part 8 — Admin escape hatch for implicit warehouses. */}
+             <InfoCard title="Implicit Warehouse Mode" icon={<Eye className="h-5 w-5 text-primary" />}>
+               <div className="space-y-4">
+                 <p className="text-sm text-muted-foreground">
+                   When <strong className="text-foreground">Implicit Mode</strong> is ON (default), create forms
+                   auto-resolve warehouses from the defaults above and hide the pickers. This reduces form
+                   complexity and ensures consistent warehouse usage across the organization.
+                 </p>
+                 <p className="text-sm text-muted-foreground">
+                   Toggle <strong className="text-foreground">Show Pickers</strong> to reveal warehouse fields in
+                   all create forms — useful for one-off overrides or during initial setup.
+                 </p>
+                 <div className="flex items-center gap-4">
+                   <Button
+                     type="button"
+                     variant={showPickers ? "default" : "outline"}
+                     size="sm"
+                     onClick={() => handleTogglePickers(true)}
+                   >
+                     <Eye className="mr-1.5 h-4 w-4" /> Show Pickers
+                   </Button>
+                   <Button
+                     type="button"
+                     variant={!showPickers ? "default" : "outline"}
+                     size="sm"
+                     onClick={() => handleTogglePickers(false)}
+                   >
+                     <EyeOff className="mr-1.5 h-4 w-4" /> Implicit Mode
+                   </Button>
+                   <span className={cn(
+                     "text-xs font-medium",
+                     showPickers ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400",
+                   )}>
+                     {showPickers ? "Pickers visible" : "Implicit mode active"}
+                   </span>
+                 </div>
+               </div>
+             </InfoCard>
           </motion.div>
         </form>
       </Form>

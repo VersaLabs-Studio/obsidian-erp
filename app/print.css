@@ -1,188 +1,264 @@
 /* app/print.css
- * Obsidian ERP v4.0 — Premium print/PDF stylesheet (2R Part 11).
+ * Obsidian ERP v4.0 — Premium print/PDF stylesheet.
  *
- * System-wide branded letterhead applied to every transactional doc
- * (Sales Order, Quotation, Delivery Note, Sales Invoice, Purchase
- * Order, Purchase Receipt, Purchase Invoice, Payment Entry). One
- * template, many docs — the PrintShare component sets data attributes
- * on <body> just before window.print(), the afterprint listener
- * cleans up.
- *
- * Branding tokens (Pana letterhead):
- *   - Brand mark: "PANË" (uppercase, tracked)
- *   - Accent: var(--brand-accent, #2563eb) — semantic blue
- *   - Currency: ETB
- *
- * The body.is-printing class hides the app chrome (sidebar, topbar,
- * buttons). The doc body is restructured into a single-column print
- * layout: letterhead, parties (From / To), items table, totals, terms.
- * The doc's own data is rendered by the detail page; this stylesheet
- * just provides the print frame.
- *
- * Pana identity is hard-coded here for the Pana tenant; multi-tenant
- * deployment swaps this via the active company name in
- * `components/ui/print-share.tsx` (data-print-doctype + data-print-name
- * attributes) — the doc header reads them via ::before content.
+ * 2Y-R2 REWRITE. Printing no longer restyles the on-screen detail page.
+ * Instead, every detail page renders a dedicated, self-contained
+ * <PrintDocument> (class `.print-document`) that is hidden on screen and
+ * becomes the ONLY visible element in print. This is a real document
+ * template (letterhead → parties → items → totals → signatures), driven
+ * by lib/print/print-config.ts, so "SO prints SALES ORDER, SI prints TAX
+ * INVOICE, DN gate pass hides prices" all come from data — not from
+ * fragile CSS ::before text and nth-child column hiding.
  */
+
+/* Hidden on screen; only the print layer shows it. */
+.print-document {
+  display: none;
+}
 
 @media print {
   @page {
     size: A4;
-    margin: 16mm 14mm;
+    margin: 14mm 13mm;
   }
 
-  /* Hide the app chrome. */
-  body.is-printing aside,
-  body.is-printing header,
-  body.is-printing nav,
-  body.is-printing [data-no-print] {
-    display: none !important;
+  /* Isolate the print document: hide everything, then reveal only it.
+     `visibility` (not display) preserves the print-document's own layout. */
+  body * {
+    visibility: hidden !important;
+  }
+  .print-document,
+  .print-document * {
+    visibility: visible !important;
+  }
+  .print-document {
+    /* Brand accent (Pana gold). <PrintDocument> overrides via inline
+       --pd-accent from lib/print/brand.ts; this is the fallback. */
+    --pd-accent: #f59e0b;
+    display: block !important;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    color: #14161a;
+    font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+    font-size: 12px;
+    line-height: 1.5;
   }
 
-  body.is-printing {
-    background: white !important;
-    color: #1a1a1a !important;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  /* ---------- Letterhead ---------- */
+  .print-document .pd-letterhead {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding-bottom: 10px;
+    border-bottom: 2.5px solid var(--pd-accent, #f59e0b);
   }
-  body.is-printing main {
-    padding: 0 !important;
-    max-width: none !important;
-    margin: 0 !important;
-  }
-
-  /* ---------- LETTERHEAD ---------- */
-  /* The `::before` injects a Pana letterhead block. The data-print-doctype
-     and data-print-name attributes drive the doc title; ::after is unused. */
-  body.is-printing::before {
-    content: "PANË  ·  " attr(data-print-doctype) "  ·  " attr(data-print-name);
+  .print-document .pd-logo {
+    height: 46px;
+    width: auto;
+    max-width: 220px;
+    object-fit: contain;
     display: block;
-    padding: 0 0 0.75rem 0;
-    border-bottom: 2px solid #2563eb;
-    margin-bottom: 1.25rem;
-    font-size: 0.875rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    color: #2563eb;
+  }
+  /* Shown only when the logo image fails to load (see onError in
+     PrintDocument). Hidden by default so the logo is the primary mark. */
+  .print-document .pd-brand-fallback {
+    display: none;
+  }
+  .print-document .pd-brand-name {
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    color: #14161a;
     text-transform: uppercase;
   }
-
-  /* The first heading inside the doc becomes the doc title block. */
-  body.is-printing main h1:first-of-type {
-    font-size: 1.5rem !important;
-    font-weight: 700 !important;
-    color: #1a1a1a !important;
-    margin: 0 0 0.25rem 0 !important;
-    letter-spacing: -0.01em !important;
+  .print-document .pd-brand-meta {
+    font-size: 10.5px;
+    color: #6b7280;
+    margin-top: 2px;
   }
-  /* Subtitle (subtitle paragraph right after the H1) */
-  body.is-printing main h1:first-of-type + p,
-  body.is-printing main h1:first-of-type + div {
-    color: #6b7280 !important;
-    font-size: 0.875rem !important;
-    margin: 0 0 1.25rem 0 !important;
+  .print-document .pd-title-block {
+    text-align: right;
   }
-
-  /* ---------- FORCE A SINGLE-COLUMN FLOW ---------- */
-  body.is-printing * {
-    grid-template-columns: 1fr !important;
+  .print-document .pd-title {
+    font-size: 17px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    color: var(--pd-accent, #f59e0b);
   }
-  /* But the items table keeps its real columns. */
-  body.is-printing table {
-    grid-template-columns: none !important;
+  .print-document .pd-currency {
+    font-size: 10px;
+    color: #6b7280;
+    margin-top: 2px;
   }
 
-  /* ---------- TABLES (items) ---------- */
-  body.is-printing table {
-    width: 100% !important;
-    border-collapse: collapse !important;
-    margin: 0.75rem 0 1.25rem 0 !important;
-    page-break-inside: auto !important;
+  /* ---------- Meta row (parties + header fields) ---------- */
+  .print-document .pd-meta-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 18px;
+    margin: 16px 0;
   }
-  body.is-printing table thead {
-    background: #f3f4f6 !important;
-    color: #1a1a1a !important;
+  .print-document .pd-label {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #9ca3af;
+    margin-bottom: 3px;
   }
-  body.is-printing table th {
-    font-weight: 600 !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.04em !important;
-    font-size: 0.6875rem !important;
-    padding: 0.5rem 0.625rem !important;
-    text-align: left !important;
-    border-bottom: 1px solid #e5e7eb !important;
+  .print-document .pd-party {
+    flex: 1;
   }
-  body.is-printing table td {
-    padding: 0.5rem 0.625rem !important;
-    border-bottom: 1px solid #f3f4f6 !important;
-    font-size: 0.8125rem !important;
-    vertical-align: top !important;
+  .print-document .pd-party-name {
+    font-size: 13px;
+    font-weight: 700;
   }
-  body.is-printing table tr {
-    page-break-inside: avoid !important;
+  .print-document .pd-address {
+    font-size: 11px;
+    color: #4b5563;
+    white-space: pre-line;
   }
-
-  /* ---------- INFO CARDS (party blocks, summary) ---------- */
-  body.is-printing .rounded-2xl,
-  body.is-printing [class*="border-border"] {
-    background: white !important;
-    border: 1px solid #e5e7eb !important;
-    border-radius: 0.5rem !important;
-    box-shadow: none !important;
-    margin-bottom: 0.75rem !important;
-    padding: 0.75rem 1rem !important;
+  .print-document .pd-header-fields {
+    min-width: 210px;
+    display: grid;
+    gap: 3px;
   }
-
-  /* ---------- TEXT NORMALIZATION ---------- */
-  body.is-printing h1,
-  body.is-printing h2,
-  body.is-printing h3,
-  body.is-printing h4 {
-    color: #1a1a1a !important;
-    font-weight: 600 !important;
+  .print-document .pd-hf {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 11px;
+    border-bottom: 1px dotted #e5e7eb;
+    padding-bottom: 2px;
   }
-  body.is-printing h2 {
-    font-size: 1rem !important;
-    margin: 1rem 0 0.5rem 0 !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.05em !important;
+  .print-document .pd-hf-label {
+    color: #6b7280;
   }
-  body.is-printing p,
-  body.is-printing li {
-    color: #1a1a1a !important;
-    font-size: 0.8125rem !important;
-    line-height: 1.5 !important;
-  }
-  body.is-printing .text-muted-foreground {
-    color: #6b7280 !important;
-  }
-  body.is-printing .text-primary {
-    color: #2563eb !important;
+  .print-document .pd-hf-value {
+    font-weight: 600;
+    text-align: right;
   }
 
-  /* ---------- FOOTER (terms + generated timestamp) ---------- */
-  body.is-printing::after {
-    content: "Generated by Pana · " attr(data-print-name) " · ETB";
-    display: block;
-    margin-top: 2rem;
-    padding-top: 0.5rem;
+  /* ---------- Logistics box (gate pass) ---------- */
+  .print-document .pd-logistics {
+    border: 2px solid #14161a;
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 14px;
+  }
+  .print-document .pd-logistics-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 24px;
+    font-size: 11.5px;
+    font-weight: 600;
+    margin-top: 4px;
+  }
+
+  /* ---------- Items table ---------- */
+  .print-document .pd-items {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 4px 0 14px;
+  }
+  .print-document .pd-items thead th {
+    background: #f3f4f6;
+    font-size: 9.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #374151;
+    padding: 7px 8px;
+    border-bottom: 1.5px solid #d1d5db;
+  }
+  .print-document .pd-items tbody td {
+    padding: 6px 8px;
+    border-bottom: 1px solid #f0f1f3;
+    font-size: 11.5px;
+    vertical-align: top;
+  }
+  .print-document .pd-items tr {
+    page-break-inside: avoid;
+  }
+  .print-document .pd-idx {
+    width: 26px;
+    color: #9ca3af;
+    text-align: right;
+  }
+
+  /* ---------- Totals ---------- */
+  .print-document .pd-totals {
+    margin-left: auto;
+    width: 46%;
+    page-break-inside: avoid;
+  }
+  .print-document .pd-total-line {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    font-size: 12px;
+    border-bottom: 1px solid #f0f1f3;
+  }
+  .print-document .pd-grand {
+    font-size: 14px;
+    font-weight: 800;
+    color: #14161a;
+    border-bottom: none;
+    border-top: 2px solid #14161a;
+    margin-top: 2px;
+    padding-top: 7px;
+  }
+  .print-document .pd-in-words {
+    font-size: 10.5px;
+    font-style: italic;
+    color: #6b7280;
+    margin-top: 6px;
+  }
+
+  /* ---------- Terms ---------- */
+  .print-document .pd-terms {
+    margin-top: 16px;
+    page-break-inside: avoid;
+  }
+  .print-document .pd-terms-body {
+    font-size: 10.5px;
+    color: #4b5563;
+    white-space: pre-line;
+  }
+
+  /* ---------- Signatures ---------- */
+  .print-document .pd-signatures {
+    display: flex;
+    justify-content: space-between;
+    gap: 28px;
+    margin-top: 42px;
+    page-break-inside: avoid;
+  }
+  .print-document .pd-sign {
+    flex: 1;
+    text-align: center;
+  }
+  .print-document .pd-sign-line {
+    border-top: 1px solid #14161a;
+    margin-bottom: 4px;
+  }
+  .print-document .pd-sign-label {
+    font-size: 10px;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* ---------- Footer note ---------- */
+  .print-document .pd-footer-note {
+    margin-top: 18px;
+    padding-top: 6px;
     border-top: 1px solid #e5e7eb;
-    font-size: 0.6875rem;
+    font-size: 9.5px;
     color: #9ca3af;
     text-align: center;
-    letter-spacing: 0.04em;
-  }
-
-  /* ---------- REMOVE ALL UNNECESSARY ANIMATIONS / BADGES ---------- */
-  body.is-printing [class*="animate-"],
-  body.is-printing [class*="transition-"] {
-    animation: none !important;
-    transition: none !important;
-  }
-
-  /* Page break hints — sections the doc considers a unit don't break
-     across pages (totals, parties). */
-  body.is-printing .rounded-2xl,
-  body.is-printing tfoot {
-    page-break-inside: avoid !important;
+    letter-spacing: 0.03em;
   }
 }

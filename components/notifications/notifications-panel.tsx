@@ -253,31 +253,51 @@ export function NotificationsPanel({
                     </p>
                   )}
 
-                  {/* 2V P1-1 — CRUD context: doctype + operation info */}
+                  {/* 2X P1-A — CRUD context: premium UI with color-coded operation
+                      badge, linked doctype+name title, muted timestamp, summary
+                      text, and primary Open document button. */}
                   {detailItem.doctype && (
-                    <div className="rounded-xl bg-muted/30 p-4 space-y-1.5">
-                      <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                        CRUD Operation
-                      </p>
-                      <div className="flex items-center gap-2 text-sm">
-                        <span className="font-medium text-foreground">
+                    <div className="rounded-xl border border-border/40 bg-card/60 backdrop-blur-sm p-4 space-y-3">
+                      {/* Operation badge */}
+                      <div className="flex items-center gap-2">
+                        <span className={
+                          `inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ` +
+                          (detailItem.operation === "created" ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" :
+                           detailItem.operation === "updated" ? "bg-amber-500/10 text-amber-600 dark:text-amber-400" :
+                           detailItem.operation === "deleted" ? "bg-red-500/10 text-red-600 dark:text-red-400" :
+                           detailItem.operation === "submitted" ? "bg-blue-500/10 text-blue-600 dark:text-blue-400" :
+                           "bg-secondary text-muted-foreground")
+                        }>
                           {detailItem.operation ?? "modified"}
                         </span>
-                        <span className="text-muted-foreground/50">·</span>
-                        <span className="text-primary font-medium">
-                          {detailItem.doctype}
+                        <span className="text-[10px] text-muted-foreground/60">
+                          {relativeTime(detailItem.timestamp)}
                         </span>
+                      </div>
+
+                      {/* Doctype + doc name as linked title */}
+                      <div className="space-y-1">
+                        <p className="text-sm font-semibold text-foreground">
+                          {detailItem.doctype}
+                        </p>
                         {detailItem.docName && (
-                          <>
-                            <span className="text-muted-foreground/50">·</span>
-                            <span className="font-mono text-xs text-muted-foreground">
-                              {detailItem.docName}
-                            </span>
-                          </>
+                          <button
+                            type="button"
+                            className="font-mono text-xs text-primary hover:underline"
+                            onClick={() => {
+                              if (detailItem.href) {
+                                handleOpenHref(detailItem.href, detailItem.id);
+                              }
+                            }}
+                          >
+                            {detailItem.docName}
+                          </button>
                         )}
                       </div>
+
+                      {/* Summary */}
                       {detailItem.summary && (
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-xs text-muted-foreground leading-relaxed">
                           {detailItem.summary}
                         </p>
                       )}
@@ -336,8 +356,8 @@ export function NotificationsPanel({
                       className="w-full rounded-2xl bg-primary text-primary-foreground hover:bg-primary/90"
                       onClick={() => handleOpenHref(detailItem.href!, detailItem.id)}
                     >
-                      {/* 2L P1: "Open <doc>" — label reflects the deep link target */}
-                      Open document
+                      {/* 2X P1-A — contextual label when doctype is known */}
+                      Open{detailItem.doctype ? ` ${detailItem.doctype}` : " document"}
                     </Button>
                   )}
 

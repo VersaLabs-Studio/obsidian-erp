@@ -32,6 +32,7 @@ import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
 import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
 import { PrintShare } from "@/components/ui/print-share";
+import { PrintMenu } from "@/components/print/PrintMenu";
 import { useFlowChain } from "@/hooks/flows/use-flow-chain";
 import { useFrappeDoc, useFrappeList, useFrappeUpdate, useFrappeDelete } from "@/hooks/generic";
 import type { DeliveryNote } from "@/types/doctype-types";
@@ -149,7 +150,15 @@ export default function DeliveryNoteDetailPage() {
         backHref="/stock/delivery-note"
         actions={
           <div className="flex items-center gap-2">
-            <PrintShare doctype="Delivery Note" name={dn.name} />
+            {/* 2Y-R2 Part 6 — DN dual-format print (customer copy + gate pass)
+                via the real print-document subsystem. PrintShare is Share-only
+                here so there aren't two Print buttons. */}
+            <PrintMenu
+              doctype="Delivery Note"
+              doc={dn as unknown as Record<string, unknown>}
+              variants={["standard", "gate-pass"]}
+            />
+            <PrintShare doctype="Delivery Note" name={dn.name} showPrint={false} />
             {isDraft && (
               <>
                 <Button variant="outline" size="sm" asChild>
@@ -263,7 +272,7 @@ export default function DeliveryNoteDetailPage() {
             </div>
           </InfoCard>
 
-          <InfoCard title="Logistics" icon={<Truck className="h-5 w-5 text-primary" />}>
+          <InfoCard title="Logistics" icon={<Truck className="h-5 w-5 text-primary" />} data-logistics>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <DataPoint label="Driver" value={dn.driver_name || dn.driver || "—"} />
               <DataPoint label="Vehicle" value={dn.vehicle_no || "—"} />
