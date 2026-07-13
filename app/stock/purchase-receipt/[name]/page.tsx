@@ -31,6 +31,7 @@ import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
 import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
 import { PrintShare } from "@/components/ui/print-share";
+import { PrintMenu } from "@/components/print/PrintMenu";
 import { useFlowChain } from "@/hooks/flows/use-flow-chain";
 import { useFrappeDoc, useFrappeList, useFrappeUpdate, useFrappeDelete } from "@/hooks/generic";
 import type { PurchaseReceipt } from "@/types/doctype-types";
@@ -154,7 +155,8 @@ export default function PurchaseReceiptDetailPage() {
         backHref="/stock/purchase-receipt"
         actions={
           <div className="flex items-center gap-2">
-            <PrintShare doctype="Purchase Receipt" name={pr.name} />
+            <PrintMenu doctype="Purchase Receipt" doc={pr as unknown as Record<string, unknown>} />
+            <PrintShare doctype="Purchase Receipt" name={pr.name} showPrint={false} />
             {isDraft && (
               <>
                 <Button variant="outline" size="sm" asChild>

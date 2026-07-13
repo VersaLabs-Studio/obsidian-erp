@@ -34,6 +34,7 @@ import {
 } from "@/components/errors/GuidedErrorDialog";
 import { useFrappeDoc, useFrappeUpdate } from "@/hooks/generic";
 import { PrintShare } from "@/components/ui/print-share";
+import { PrintMenu } from "@/components/print/PrintMenu";
 import { FrappeSelect } from "@/components/smart/frappe-select";
 import type { JobCard } from "@/types/doctype-types";
 
@@ -313,7 +314,8 @@ export default function JobCardDetailPage() {
           backHref="/manufacturing/job-card"
           actions={
             <div className="flex items-center gap-2">
-              <PrintShare doctype="Job Card" name={name} />
+              <PrintMenu doctype="Job Card" doc={jc as unknown as Record<string, unknown>} />
+              <PrintShare doctype="Job Card" name={name} showPrint={false} />
               {status === "Open" && (
                 <Button size="sm" onClick={handleStart} disabled={busy}>
                   {busy ? (

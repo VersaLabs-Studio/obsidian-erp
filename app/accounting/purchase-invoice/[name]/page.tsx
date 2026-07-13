@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { FlowRail } from "@/components/flows/FlowRail";
 import { isModuleBuilt } from "@/lib/flows/module-availability";
 import { PrintShare } from "@/components/ui/print-share";
+import { PrintMenu } from "@/components/print/PrintMenu";
 import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
 import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
@@ -197,7 +198,15 @@ export default function PurchaseInvoiceDetailPage() {
                 <Ban className="mr-1.5 h-4 w-4" /> Cancel
               </Button>
             )}
-            <PrintShare doctype="Purchase Invoice" name={name} />
+            {isDraft && (
+              <Button variant="outline" size="sm" asChild>
+                <Link href={`/accounting/purchase-invoice/${encodeURIComponent(name)}/edit`}>
+                  <Edit3 className="mr-1.5 h-4 w-4" /> Edit
+                </Link>
+              </Button>
+            )}
+            <PrintMenu doctype="Purchase Invoice" doc={invoice as unknown as Record<string, unknown>} />
+            <PrintShare doctype="Purchase Invoice" name={name} showPrint={false} />
           </div>
         }
       />
@@ -227,6 +236,11 @@ export default function PurchaseInvoiceDetailPage() {
               <DataPoint label="Company" value={invoice.company} />
               <DataPoint label="Currency" value={invoice.currency} />
               <DataPoint label="Bill No" value={invoice.bill_no || "—"} />
+              {/* 2Y-R2 P1 — FS No (pana_fs_number custom field) surfaced on detail. */}
+              <DataPoint
+                label="FS No"
+                value={(invoice as { pana_fs_number?: string }).pana_fs_number ?? "—"}
+              />
             </div>
             {isSubmitted && (
               <div className="mt-4 pt-4 border-t border-border/60">

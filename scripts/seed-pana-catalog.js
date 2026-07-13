@@ -218,8 +218,9 @@ const BOM_ITEMS = {
   // PRINT-CUT-STICKER: no BOM (incomplete spec)
 };
 
-// Products with pricing TBD (basePrice or matrix table incomplete)
-const PRICING_TBD = ["SADDLE-BOOKLET", "PERFECT-BOOKLET", "SPIRAL-BOOKLET", "NOTEBOOK", "PRINT-CUT-STICKER"];
+// Products with pricing TBD (basePrice or matrix table incomplete).
+// Booklets ×3 are out-of-stock upstream (printonline-et 011) — no price source.
+const PRICING_TBD = ["SADDLE-BOOKLET", "PERFECT-BOOKLET", "SPIRAL-BOOKLET", "PRINT-CUT-STICKER"];
 const SKIP_BOM = ["PRINT-CUT-STICKER"]; // no BOM; incomplete spec
 
 /** Item Prices (base rate). Products with TBD pricing are skipped. */
@@ -235,6 +236,7 @@ const ITEM_PRICES = {
   "STICKER-SHEET":  50.0,    // A4/none
   "CERTIFICATE":    40.0,    // white
   "BOOKMARK":       24.0,    // both/matte
+  "NOTEBOOK":       470.0,   // A5/50-sheet default (printonline-et 013_spiral_notebooks_fix)
 };
 
 // ---------------------------------------------------------------------------
@@ -302,17 +304,17 @@ async function seed() {
 
   // ---- Step 2: Manufacturing masters ----------------------------------------
   console.log("\n🔧 Step 2: Manufacturing Masters (8 Workstations + Operations)");
-  // 2Y Part 5 — Eight real production workstations for Pana Print Shop.
-  // Each maps to a physical machine/area on the production floor.
+  // 2Y-R2 P5 — Eight real production workstations for Pana Print Shop.
+  // Names match the live ERPNext workstations (brain-seeded).
   const WORKSTATIONS = [
-    { name: "Digital Press",    hour_rate: 500 },
-    { name: "Offset Press",     hour_rate: 800 },
-    { name: "Lamination",       hour_rate: 300 },
-    { name: "Cutting",          hour_rate: 200 },
-    { name: "Saddle Binding",   hour_rate: 250 },
-    { name: "Perfect Binding",  hour_rate: 300 },
-    { name: "Spiral Binding",   hour_rate: 250 },
-    { name: "Finishing",        hour_rate: 200 },
+    { name: "Digital Paper Print", hour_rate: 500 },
+    { name: "Offset Print",        hour_rate: 800 },
+    { name: "Banner Print",        hour_rate: 400 },
+    { name: "UV Print",            hour_rate: 450 },
+    { name: "DTF Print",           hour_rate: 350 },
+    { name: "CNC & Laser",         hour_rate: 600 },
+    { name: "Signage",             hour_rate: 300 },
+    { name: "Design Studio",       hour_rate: 200 },
   ];
   for (const ws of WORKSTATIONS) {
     await createIfNotExists("Workstation", ws.name, {
@@ -320,16 +322,16 @@ async function seed() {
       hour_rate: ws.hour_rate,
     });
   }
-  // Operations — one per workstation for simplicity (2Y Part 5).
+  // Operations — one per workstation, name matches workstation (2Y-R2 P5).
   const OPERATIONS = [
-    { name: "Digital Print",    workstation: "Digital Press" },
-    { name: "Offset Print",     workstation: "Offset Press" },
-    { name: "Laminate",         workstation: "Lamination" },
-    { name: "Cut & Trim",       workstation: "Cutting" },
-    { name: "Saddle Stitch",    workstation: "Saddle Binding" },
-    { name: "Perfect Bind",     workstation: "Perfect Binding" },
-    { name: "Spiral Bind",      workstation: "Spiral Binding" },
-    { name: "Finish & Pack",    workstation: "Finishing" },
+    { name: "Digital Paper Print", workstation: "Digital Paper Print" },
+    { name: "Offset Print",        workstation: "Offset Print" },
+    { name: "Banner Print",        workstation: "Banner Print" },
+    { name: "UV Print",            workstation: "UV Print" },
+    { name: "DTF Print",           workstation: "DTF Print" },
+    { name: "CNC & Laser",         workstation: "CNC & Laser" },
+    { name: "Signage",             workstation: "Signage" },
+    { name: "Design Studio",       workstation: "Design Studio" },
   ];
   for (const op of OPERATIONS) {
     await createIfNotExists("Operation", op.name, {
@@ -418,7 +420,7 @@ async function seed() {
       currency: "ETB",
     });
   }
-  console.log("  (Skipped TBD-priced products: SADDLE-BOOKLET, PERFECT-BOOKLET, SPIRAL-BOOKLET, NOTEBOOK, PRINT-CUT-STICKER)");
+  console.log(`  (Skipped TBD-priced products: ${PRICING_TBD.join(", ")})`);
 
   // ---- Step 6: Default BOMs -------------------------------------------------
   console.log("\n⚙️ Step 6: Default BOMs (with operations, submitted)");
@@ -446,8 +448,8 @@ async function seed() {
       })),
       operations: [
         {
-          operation: "Digital Print",
-          workstation: "Digital Press",
+          operation: "Design Studio",
+          workstation: "Design Studio",
           time_in_mins: 30,
         },
       ],
@@ -495,11 +497,11 @@ async function seed() {
   console.log("=".repeat(60));
   console.log(`\n📊 Summary:`);
   console.log(`  • Item Groups:       ${PARENT_GROUPS.length + PRODUCT_GROUPS.length + RAW_GROUPS.length} (parents + children)`);
-  console.log(`  • Manufacturing:     8 Workstations + 8 Operations (2Y Part 5)`);
+  console.log(`  • Manufacturing:     8 Workstations + 8 Operations (2Y-R2 P5)`);
   console.log(`  • Raw Materials:     ${RAW_MATERIALS.length} items (with valuation_rate)`);
   console.log(`  • Finished Goods:    ${FINISHED_GOODS.length} items`);
   console.log(`  • Item Prices:       ${Object.keys(ITEM_PRICES).length} (Standard Selling, ETB)`);
-  console.log(`  • BOMs:              ${Object.keys(createdBoms).length} (submitted, with Print & Finish operation)`);
+  console.log(`  • BOMs:              ${Object.keys(createdBoms).length} (submitted, with Design Studio operation)`);
   console.log(`  • default_bom set:   ${Object.keys(createdBoms).length} items`);
   console.log(`\n⚠️  Items with TBD pricing (need client confirmation):`);
   for (const code of PRICING_TBD) {
@@ -512,7 +514,7 @@ async function seed() {
   console.log("\n🧾 Step 9: Fiscal Custom Fields (Sales Invoice + Purchase Invoice)");
   const FS_FIELD = {
     fieldname: "pana_fs_number",
-    label: "Fiscal Serial Number",
+    label: "FS No",
     fieldtype: "Data",
     insert_after: "po_no",
     reqd: 0,
@@ -521,11 +523,17 @@ async function seed() {
     translatable: 0,
     description: "Government-issued fiscal serial number for this transaction (Ethiopia e-invoicing requirement).",
   };
+  // 2Y-R2 P5 — PI uses bill_no as insert_after (not po_no).
+  const PI_FS_FIELD = { ...FS_FIELD, insert_after: "bill_no" };
+  const FS_FIELDS = {
+    "Sales Invoice": FS_FIELD,
+    "Purchase Invoice": PI_FS_FIELD,
+  };
   for (const dt of ["Sales Invoice", "Purchase Invoice"]) {
     const cfName = `${dt.replace(/ /g, "-")}-${FS_FIELD.fieldname}`.toLowerCase();
     await createIfNotExists("Custom Field", cfName, {
       dt: dt,
-      ...FS_FIELD,
+      ...FS_FIELDS[dt],
     });
   }
 }

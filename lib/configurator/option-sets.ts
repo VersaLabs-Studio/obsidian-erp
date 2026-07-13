@@ -347,7 +347,17 @@ export const OPTION_SETS: Record<string, OptionSet> = {
     item_name: "Notebook",
     category: "Stationery",
     min_qty: 1,
-    pricing: { mode: "additive", basePrice: 0 }, // TODO(client): pricing not in source PDF
+    // 2Y-R3 — real matrix from printonline-et (013_spiral_notebooks_fix):
+    // priced combos are A5/A6 × 50/100 sheets. A4 and 25-sheet combos have no
+    // upstream price yet — the configurator shows a pricing warning for those.
+    pricing: {
+      mode: "matrix",
+      keyOrder: ["Number of Sheets", "Size"],
+      table: {
+        "50|a5": 470, "100|a5": 850,
+        "50|a6": 250, "100|a6": 450,
+      },
+    },
     options: [
       { name: "Size", type: "single", choices: [
         { label: "A4 (29.7 × 21 cm)", value: "a4", price_delta: 0 },

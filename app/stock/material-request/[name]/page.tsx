@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import { PageHeader, LoadingState, ConfirmDialog } from "@/components/smart";
+import { PrintMenu } from "@/components/print/PrintMenu";
 import { StatusBadge } from "@/components/smart/status-badge";
 import { InfoCard, DataPoint } from "@/components/ui/info-card";
 import { Button } from "@/components/ui/button";
@@ -141,6 +142,11 @@ export default function MaterialRequestDetailPage() {
         }}
         actions={
           <div className="flex items-center gap-2">
+            {/* 2Y-R3 P6-replicate — the one real print control (PrintDocument subsystem). */}
+            <PrintMenu
+              doctype="Material Request"
+              doc={mr as unknown as Record<string, unknown>}
+            />
             {isDraft && (
               <>
                 <Button

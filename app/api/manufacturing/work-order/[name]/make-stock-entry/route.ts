@@ -42,6 +42,103 @@ const ALLOWED_PURPOSES = new Set([
   "Manufacture",
 ]);
 
+// ---------------------------------------------------------------------------
+// 2Y-R2 P5 — Implicit warehouse backfill
+// ---------------------------------------------------------------------------
+// ERPNext's make_stock_entry copies warehouses FROM the Work Order into the SE
+// rows. When the WO was created without a wip/fg warehouse (older WOs, or WOs
+// made outside the SO cockpit), those rows come back with an empty
+// `t_warehouse`, and `validate_warehouse` throws
+// "Target warehouse is mandatory for row N". Rather than force the user to pick
+// a warehouse, we resolve the canonical company warehouses server-side and
+// fill ONLY the blanks — never overwriting anything ERPNext set. This keeps
+// warehouse selection fully implicit at the exact point production starts.
+
+/** Extract the company abbr from any warehouse name on the built SE
+ *  (e.g. "Stores - P" → "P"). Used as a fallback when the Company lookup
+ *  fails; the SE rows already carry live, correctly-suffixed names. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function abbrFromDoc(seDoc: any): string {
+  const rows: any[] = Array.isArray(seDoc?.items) ? seDoc.items : [];
+  const candidates = [
+    ...rows.map((r) => r?.s_warehouse),
+    ...rows.map((r) => r?.t_warehouse),
+    seDoc?.from_warehouse,
+    seDoc?.to_warehouse,
+  ];
+  for (const wn of candidates) {
+    if (typeof wn === "string" && wn.includes(" - ")) {
+      return wn.slice(wn.lastIndexOf(" - ") + 3);
+    }
+  }
+  return String(seDoc?.company ?? "").slice(0, 3).toUpperCase();
+}
+
+/** Resolve the canonical `<Kind> - <abbr>` manufacturing warehouses for the
+ *  company. Mirrors /api/stock/warehouses/defaults: abbr comes from the
+ *  Company doc, with the SE's own warehouse suffix as a fallback. */
+async function resolveCompanyWarehouseNames(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  client: any,
+  company: string,
+  fallbackAbbr: string,
+): Promise<{ wip: string; fg: string; stores: string; rawMaterials: string }> {
+  let abbr = fallbackAbbr;
+  try {
+    const resp = await client.call.get("frappe.client.get_value", {
+      doctype: "Company",
+      filters: JSON.stringify({ name: company }),
+      fieldname: "abbr",
+    });
+    const got = (resp?.message ?? resp)?.abbr;
+    if (got) abbr = String(got);
+  } catch {
+    // Company lookup failed — keep the abbr derived from the SE doc.
+  }
+  return {
+    wip: `Work In Progress - ${abbr}`,
+    fg: `Finished Goods - ${abbr}`,
+    stores: `Stores - ${abbr}`,
+    rawMaterials: `Raw Materials - ${abbr}`,
+  };
+}
+
+/** Fill blank warehouses on the ERPNext-built SE, purpose-aware. Transfers
+ *  move every row to WIP; Manufacture only targets the finished/scrap rows. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function backfillWarehouses(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  seDoc: any,
+  purpose: string,
+  wh: { wip: string; fg: string; stores: string; rawMaterials: string },
+): void {
+  const isTransfer = purpose === "Material Transfer for Manufacture";
+  const target = isTransfer ? wh.wip || wh.fg : wh.fg || wh.wip;
+  const source = wh.stores || wh.rawMaterials || wh.wip;
+
+  const rows: any[] = Array.isArray(seDoc?.items) ? seDoc.items : [];
+  for (const row of rows) {
+    if (isTransfer) {
+      // Every row is RM → WIP: both endpoints must be present.
+      if (!row.t_warehouse) row.t_warehouse = target;
+      if (!row.s_warehouse) row.s_warehouse = source;
+    } else {
+      // Manufacture: only finished/scrap rows carry a target warehouse;
+      // consumption rows keep a source only (t_warehouse stays empty).
+      if ((row.is_finished_item || row.is_scrap_item) && !row.t_warehouse) {
+        row.t_warehouse = target;
+      }
+      if (!row.is_finished_item && !row.is_scrap_item && !row.s_warehouse) {
+        row.s_warehouse = wh.wip || source;
+      }
+    }
+  }
+
+  // Header defaults ERPNext uses to fill any row it re-derives on validate.
+  if (isTransfer && !seDoc.from_warehouse) seDoc.from_warehouse = source;
+  if (!seDoc.to_warehouse) seDoc.to_warehouse = target;
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ name: string }> },
@@ -118,6 +215,18 @@ export async function POST(
         { status: 502 },
       );
     }
+
+    // 1b) Backfill any warehouse ERPNext left blank because the source Work
+    //     Order carried no wip/fg warehouse. Without this, `validate_warehouse`
+    //     throws "Target warehouse is mandatory for row N" on submit. We only
+    //     fill blanks, using the canonical company warehouses, so warehouse
+    //     selection stays implicit and automated.
+    const wh = await resolveCompanyWarehouseNames(
+      client,
+      String(seDoc.company ?? ""),
+      abbrFromDoc(seDoc),
+    );
+    backfillWarehouses(seDoc, purpose, wh);
 
     // 2) Insert + submit the fully-formed doc in one server call. ERPNext's
     //    `frappe.client.submit` parses the doc, `get_doc()`s it, and submits —

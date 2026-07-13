@@ -90,7 +90,7 @@ export default function BOMDetailPage() {
   const handleDelete = async () => {
     setShowDelete(false);
     try {
-      const res = await fetch(`/api/resource/BOM/${encodeURIComponent(name)}`, {
+      const res = await fetch(`/api/manufacturing/bom/${encodeURIComponent(name)}`, {
         method: "DELETE",
       });
       if (res.ok) {

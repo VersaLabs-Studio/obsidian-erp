@@ -43,6 +43,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   useFrappeCreate,
+  useFrappeDoc,
   useFrappeList,
   useFrappeOptions,
   useFrappeUpdate,
@@ -102,7 +103,9 @@ export function ReceiveMaterialsModal({
   });
 
   // -- PO-source: load PO + items, per-item received vs ordered --------------
-  const { data: po = [], isLoading: loadingPO } = useFrappeList<{
+  // 2Y-R2 P0 — use the FULL doc (useFrappeDoc), NOT a get_list with the
+  // `items` child field (that 500s: "Unknown column 'items'").
+  const { data: poDoc, isLoading: loadingPO } = useFrappeDoc<{
     name: string;
     items?: Array<{
       name: string;
@@ -114,16 +117,9 @@ export function ReceiveMaterialsModal({
       uom?: string;
       warehouse?: string;
     }>;
-  }>(
-    "Purchase Order",
-    {
-      fields: ["name", "items"],
-      filters: source.kind === "po" ? [["name", "=", source.poName]] : undefined,
-      limit: 1,
-    },
-    { enabled: open && source.kind === "po" },
-  );
-  const poDoc = po[0];
+  }>("Purchase Order", source.kind === "po" ? source.poName : "", {
+    enabled: open && source.kind === "po",
+  });
 
   // -- Idempotency: how many PRs are already submitted against this PO? -----
   const { data: existingPRs = [] } = useFrappeList<{ name: string }>(

@@ -76,7 +76,8 @@ export function PrintDocument({
 }: PrintDocumentProps) {
   const t = getPrintTemplate(doctype, variant);
   const companyName = company?.name || getActiveCompany() || "Pana";
-  const items = Array.isArray(doc.items) ? (doc.items as Row[]) : [];
+  const itemsField = t.itemsField ?? "items";
+  const items = Array.isArray(doc[itemsField]) ? (doc[itemsField] as Row[]) : [];
 
   // Columns actually rendered (drop monetary columns when money is hidden).
   const cols = t.columns.filter((c) => t.showMoney || !c.monetary);

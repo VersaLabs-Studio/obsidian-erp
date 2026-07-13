@@ -316,6 +316,18 @@ const LINKS: FlowLinkDef[] = [
     field: "work_order",
     returnParent: false,
   },
+  // 2Y-R3 — Job Card → Work Order backward edge. A Job Card carries its
+  // parent WO in the `work_order` header field. Without this edge the BFS
+  // from a JC could not expand to WO (and, via the existing WO→SO edge, to
+  // SO), so the JC detail rail left WO + SO dark. Read `jc.work_order` and
+  // verify the WO exists.
+  {
+    from: "Job Card",
+    to: "Work Order",
+    direction: "backward",
+    pattern: "header_link",
+    headerField: "work_order",
+  },
   {
     from: "BOM",
     to: "Work Order",

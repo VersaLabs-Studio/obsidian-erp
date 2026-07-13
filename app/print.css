@@ -19,7 +19,13 @@
 @media print {
   @page {
     size: A4;
-    margin: 14mm 13mm;
+    /* 2Y-R3 — margin: 0 is the best-effort to suppress the browser's
+       automatic print header (URL + page number) and footer (date + page
+       title). Browsers render those in the margin box; with no margin they
+       are far less likely to appear. NOTE: the definitive control is the
+       print dialog's "Headers and footers" checkbox (Chrome/Edge: uncheck
+       it under "More settings") — CSS cannot force that checkbox off. */
+    margin: 0;
   }
 
   /* Isolate the print document: hide everything, then reveal only it.

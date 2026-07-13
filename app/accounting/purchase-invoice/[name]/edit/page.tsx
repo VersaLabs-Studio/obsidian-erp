@@ -1,6 +1,7 @@
-// app/accounting/sales-invoice/[name]/edit/page.tsx
-// Obsidian ERP v4.0 — Edit Sales Invoice (V4 pattern)
-// Mirrors the Customer edit page pattern: Form provider + InfoCard + fields.
+// app/accounting/purchase-invoice/[name]/edit/page.tsx
+// Obsidian ERP v4.0 — Edit Purchase Invoice (V4 pattern, 2Y-R3).
+// Mirrors the Sales Invoice edit page: Form provider + InfoCard + fields.
+// Includes the pana_fs_number (FS No) custom field for editing.
 
 "use client";
 
@@ -30,13 +31,14 @@ import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
 import { useFrappeDoc, useFrappeUpdate } from "@/hooks/generic";
 import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
 import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
-import type { SalesInvoice } from "@/types/doctype-types";
+import { getActiveCompany } from "@/lib/settings/company";
+import type { PurchaseInvoice } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
-// Form model — matches the SI new page's SIForm interface
+// Form model — matches the PI new page's PIForm interface (key fields).
 // ---------------------------------------------------------------------------
-interface SIItem {
+interface PIItem {
   item_code: string;
   item_name?: string;
   description?: string;
@@ -44,28 +46,25 @@ interface SIItem {
   rate: number;
   amount?: number;
   uom?: string;
-  sales_order?: string;
-  so_detail?: string;
-  delivery_note?: string;
-  dn_detail?: string;
+  purchase_order?: string;
+  purchase_receipt?: string;
 }
 
-interface SIForm {
+interface PIForm {
   naming_series: string;
-  customer: string;
-  customer_name?: string;
+  supplier: string;
+  supplier_name?: string;
   company: string;
   posting_date: string;
   due_date: string;
-  delivery_note?: string;
-  po_no?: string;
-  pana_fs_number?: string; // 2Y-R2 P1 — FS No (custom field)
+  bill_no?: string;
+  bill_date?: string;
+  pana_fs_number?: string; // 2Y-R3 — FS No (custom field)
   currency: string;
   conversion_rate: number;
-  selling_price_list?: string;
-  debit_to: string;
+  credit_to: string;
   cost_center?: string;
-  items: SIItem[];
+  items: PIItem[];
 }
 
 const ETB = new Intl.NumberFormat("en-ET", {
@@ -76,27 +75,30 @@ const ETB = new Intl.NumberFormat("en-ET", {
 // ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
-export default function EditSalesInvoicePage() {
+export default function EditPurchaseInvoicePage() {
   const params = useParams();
   const router = useRouter();
   const name = decodeURIComponent(String(params.name));
   const { resolution, showError, dismiss } = useGuidedError();
 
-  const { data: invoice, isLoading, error } = useFrappeDoc<SalesInvoice>(
-    "Sales Invoice",
+  const { data: invoice, isLoading, error } = useFrappeDoc<PurchaseInvoice>(
+    "Purchase Invoice",
     name,
   );
 
-  const form = useForm<SIForm>({
+  const form = useForm<PIForm>({
     defaultValues: {
-      naming_series: "ACC-SINV-.YYYY.-",
-      customer: "",
+      naming_series: "ACC-PINV-.YYYY.-",
+      supplier: "",
       posting_date: "",
       due_date: "",
+      bill_no: "",
+      bill_date: "",
+      pana_fs_number: "",
       currency: "ETB",
       conversion_rate: 1,
-      selling_price_list: "Standard Selling",
-      debit_to: "",
+      credit_to: "",
+      cost_center: "",
       items: [],
     },
   });
@@ -109,7 +111,6 @@ export default function EditSalesInvoicePage() {
   // Hydrate form from the loaded invoice
   useEffect(() => {
     if (!invoice) return;
-    // Cast items to the expected shape since SalesInvoice.items is unknown[]
     const invoiceItems = (invoice.items ?? []) as Array<{
       item_code?: string;
       item_name?: string;
@@ -118,24 +119,22 @@ export default function EditSalesInvoicePage() {
       rate?: number;
       amount?: number;
       uom?: string;
-      sales_order?: string;
-      so_detail?: string;
-      delivery_note?: string;
-      dn_detail?: string;
+      purchase_order?: string;
+      purchase_receipt?: string;
     }>;
     reset({
-      naming_series: invoice.naming_series || "ACC-SINV-.YYYY.-",
-      customer: invoice.customer || "",
-      customer_name: invoice.customer_name || "",
+      naming_series: invoice.naming_series || "ACC-PINV-.YYYY.-",
+      supplier: invoice.supplier || "",
+      supplier_name: invoice.supplier_name || "",
       company: invoice.company || "",
       posting_date: invoice.posting_date || "",
       due_date: invoice.due_date || "",
-      po_no: invoice.po_no || "",
+      bill_no: invoice.bill_no || "",
+      bill_date: invoice.bill_date || "",
       pana_fs_number: (invoice as { pana_fs_number?: string }).pana_fs_number || "",
       currency: invoice.currency || "ETB",
       conversion_rate: invoice.conversion_rate || 1,
-      selling_price_list: invoice.selling_price_list || "Standard Selling",
-      debit_to: invoice.debit_to || "",
+      credit_to: invoice.credit_to || "",
       cost_center: invoice.cost_center || "",
       items: invoiceItems.map((it) => ({
         item_code: it.item_code || "",
@@ -145,15 +144,13 @@ export default function EditSalesInvoicePage() {
         rate: it.rate || 0,
         amount: it.amount || 0,
         uom: it.uom || "Nos",
-        sales_order: it.sales_order || "",
-        so_detail: it.so_detail || "",
-        delivery_note: it.delivery_note || "",
-        dn_detail: it.dn_detail || "",
+        purchase_order: it.purchase_order || "",
+        purchase_receipt: it.purchase_receipt || "",
       })),
     });
   }, [invoice, reset]);
 
-  // -- Live subtotal --------------------------------------------------------
+  // Live subtotal
   const subtotal = useMemo(
     () =>
       (watchedItems ?? []).reduce(
@@ -163,16 +160,16 @@ export default function EditSalesInvoicePage() {
     [watchedItems],
   );
 
-  // -- Persistence ----------------------------------------------------------
-  const updateMutation = useFrappeUpdate<{ data: SalesInvoice }, { name: string; data: Partial<SalesInvoice> }>(
-    "Sales Invoice",
+  // Persistence
+  const updateMutation = useFrappeUpdate<{ data: PurchaseInvoice }, { name: string; data: Partial<PurchaseInvoice> }>(
+    "Purchase Invoice",
     {
       onSuccess: () => {
-        router.push(`/accounting/sales-invoice/${encodeURIComponent(name)}`);
+        router.push(`/accounting/purchase-invoice/${encodeURIComponent(name)}`);
       },
-      successMessage: "Sales Invoice updated successfully",
+      successMessage: "Purchase Invoice updated successfully",
       onError: (err) => {
-        showError(resolveFrappeError(err, { doctype: "Sales Invoice", values: getValues() }));
+        showError(resolveFrappeError(err, { doctype: "Purchase Invoice" }));
       },
     },
   );
@@ -189,14 +186,16 @@ export default function EditSalesInvoicePage() {
     updateMutation.mutate({
       name,
       data: {
-        customer: values.customer,
+        supplier: values.supplier,
         posting_date: values.posting_date,
         due_date: values.due_date,
-        po_no: values.po_no || undefined,
+        bill_no: values.bill_no || undefined,
+        bill_date: values.bill_date || undefined,
         pana_fs_number: values.pana_fs_number || undefined,
         currency: values.currency,
         conversion_rate: values.conversion_rate,
-        debit_to: values.debit_to || undefined,
+        credit_to: values.credit_to || undefined,
+        cost_center: values.cost_center || undefined,
         items: items.map((it) => ({
           item_code: it.item_code,
           item_name: it.item_name,
@@ -205,12 +204,10 @@ export default function EditSalesInvoicePage() {
           rate: it.rate,
           amount: (Number(it.qty) || 0) * (Number(it.rate) || 0),
           uom: it.uom,
-          sales_order: it.sales_order || undefined,
-          so_detail: it.so_detail || undefined,
-          delivery_note: it.delivery_note || undefined,
-          dn_detail: it.dn_detail || undefined,
+          purchase_order: it.purchase_order || undefined,
+          purchase_receipt: it.purchase_receipt || undefined,
         })),
-      } as Partial<SalesInvoice>,
+      } as Partial<PurchaseInvoice>,
     });
   }, [updateMutation, getValues, name]);
 
@@ -218,7 +215,7 @@ export default function EditSalesInvoicePage() {
   if (error || !invoice) {
     return (
       <div className="flex items-center justify-center h-64 bg-destructive/5 rounded-xl border border-destructive/20 p-6">
-        <p className="text-destructive">Sales Invoice not found</p>
+        <p className="text-destructive">Purchase Invoice not found</p>
       </div>
     );
   }
@@ -229,8 +226,8 @@ export default function EditSalesInvoicePage() {
     <div className="space-y-6 pb-12">
       <PageHeader
         title={`Edit: ${invoice.name}`}
-        subtitle={invoice.customer_name || invoice.customer}
-        backHref={`/accounting/sales-invoice/${encodeURIComponent(name)}`}
+        subtitle={invoice.supplier_name || invoice.supplier}
+        backHref={`/accounting/purchase-invoice/${encodeURIComponent(name)}`}
       />
 
       {!isDraft && (
@@ -254,12 +251,14 @@ export default function EditSalesInvoicePage() {
               <InfoCard title="Invoice Details" icon={<UserRound className="h-4 w-4 text-primary" />}>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="col-span-2">
-                    <FormInput
+                    <FormFrappeSelect
                       control={control}
-                      name="customer"
-                      label="Customer"
+                      name="supplier"
+                      label="Supplier"
                       required
-                      placeholder="Customer name..."
+                      doctype="Supplier"
+                      labelField="supplier_name"
+                      placeholder="Supplier name..."
                       disabled={isDraft === false}
                     />
                   </div>
@@ -277,11 +276,16 @@ export default function EditSalesInvoicePage() {
                   />
                   <FormInput
                     control={control}
-                    name="po_no"
-                    label="Customer PO No"
-                    placeholder="Optional reference"
+                    name="bill_no"
+                    label="Supplier Bill No"
+                    placeholder="Vendor's invoice number"
                   />
-                  {/* 2Y-R2 P1 — FS No (custom field) editable in edit form */}
+                  <FormDatePicker
+                    control={control}
+                    name="bill_date"
+                    label="Supplier Bill Date"
+                  />
+                  {/* 2Y-R3 — FS No (custom field) editable in edit form */}
                   <FormInput
                     control={control}
                     name="pana_fs_number"
@@ -290,11 +294,16 @@ export default function EditSalesInvoicePage() {
                   />
                   <FormFrappeSelect
                     control={control}
-                    name="debit_to"
-                    label="Debit To"
+                    name="credit_to"
+                    label="Credit To (Payable Account)"
+                    required
                     doctype="Account"
                     labelField="account_name"
-                    filters={[["Account", "account_type", "=", "Receivable"]]}
+                    filters={[
+                      ["account_type", "=", "Payable"],
+                      ["company", "=", getActiveCompany()],
+                      ["is_group", "=", 0],
+                    ]}
                   />
                 </div>
               </InfoCard>
@@ -319,20 +328,24 @@ export default function EditSalesInvoicePage() {
                         return (
                           <tr key={field.id} className="group">
                             <td className="px-3 py-2 align-top">
-                              <FormField
+                              <FormFrappeSelect
                                 control={control}
                                 name={`items.${index}.item_code`}
-                                render={({ field: f }) => (
-                                  <FormItem>
-                                    <FormControl>
-                                      <Input
-                                        {...f}
-                                        className="h-10 rounded-lg border-0 bg-secondary/30"
-                                        placeholder="Item..."
-                                      />
-                                    </FormControl>
-                                  </FormItem>
-                                )}
+                                hideLabel
+                                doctype="Item"
+                                labelField="item_name"
+                                placeholder="Item..."
+                                filters={[["is_purchase_item", "=", 1]]}
+                                onValueChange={(val, doc) => {
+                                  if (doc) {
+                                    form.setValue(
+                                      `items.${index}.item_name`,
+                                      doc.item_name ?? val,
+                                    );
+                                    if (doc.stock_uom)
+                                      form.setValue(`items.${index}.uom`, doc.stock_uom);
+                                  }
+                                }}
                               />
                             </td>
                             <td className="px-3 py-2 align-top">
@@ -438,7 +451,7 @@ export default function EditSalesInvoicePage() {
                     type="button"
                     variant="outline"
                     className="w-full rounded-xl"
-                    onClick={() => router.push(`/accounting/sales-invoice/${encodeURIComponent(name)}`)}
+                    onClick={() => router.push(`/accounting/purchase-invoice/${encodeURIComponent(name)}`)}
                   >
                     Cancel
                   </Button>

@@ -30,6 +30,7 @@ import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
 import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
 import { PrintShare } from "@/components/ui/print-share";
+import { PrintMenu } from "@/components/print/PrintMenu";
 import { ReceiveMaterialsModal } from "@/components/stock/ReceiveMaterialsModal";
 import { useFlowChain } from "@/hooks/flows/use-flow-chain";
 import { useFrappeDoc, useFrappeUpdate } from "@/hooks/generic";
@@ -224,7 +225,8 @@ export default function PurchaseOrderDetailPage() {
         backHref="/buying/purchase-order"
         actions={
           <div className="flex items-center gap-2">
-            <PrintShare doctype="Purchase Order" name={order.name} />
+            <PrintMenu doctype="Purchase Order" doc={order as unknown as Record<string, unknown>} />
+            <PrintShare doctype="Purchase Order" name={order.name} showPrint={false} />
             {isDraft && (
               <Button
                 size="sm"
