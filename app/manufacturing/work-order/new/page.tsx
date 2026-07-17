@@ -31,7 +31,7 @@ import {
 import { QuickAddField } from "@/components/quick-add/QuickAddField";
 import { Form } from "@/components/ui/form";
 import { FlowWizard } from "@/components/flows/FlowWizard";
-import { useFrappeCreate, useFrappeDoc } from "@/hooks/generic";
+import { useFrappeCreate, useFrappeDoc, useFrappeUpdate } from "@/hooks/generic";
 import {
   getAutoFillMapping,
   applyAutoFill,
@@ -210,13 +210,9 @@ function CreateWorkOrderForm() {
     { data: { name: string } },
     Record<string, unknown>
   >("Work Order", {
-    successMessage: "Work Order created",
-    onSuccess: (res) => {
-      const name = res?.data?.name;
-      if (name) {
-        router.push(`/manufacturing/work-order/${encodeURIComponent(name)}`);
-      }
-    },
+    // 4.1 B2 — no successMessage/onSuccess-nav here: creation is now the first
+    // half of a create→submit sequence handled in handleSubmit, so the toast
+    // and navigation happen after the submit resolves.
     onError: (err) => {
       const r = resolveFrappeError(err, {
         doctype: "Work Order",
@@ -226,7 +222,16 @@ function CreateWorkOrderForm() {
     },
   });
 
-  const handleSubmit = useCallback(() => {
+  // 4.1 B2 — WOs are born submitted on the standalone create path too (the SO
+  // cockpit already does this). The BOM, warehouses and qty are fully resolved
+  // by the time the operator clicks Create, so the extra "open detail → Submit"
+  // hop is pure ceremony. If the submit fails the WO survives as a draft the
+  // detail page's Submit button still covers.
+  const submitMutation = useFrappeUpdate<{ name: string }>("Work Order", {
+    showToast: false,
+  });
+
+  const handleSubmit = useCallback(async () => {
     const values = getValues();
     if (!values.production_item) {
       toast.error("Select an item to manufacture.");
@@ -243,13 +248,36 @@ function CreateWorkOrderForm() {
       setStep(1);
       return;
     }
-    createMutation.mutate({
-      ...values,
-      company: getActiveCompany(),
-      docstatus: 0,
-      status: "Draft",
-    });
-  }, [createMutation, getValues]);
+    let woName: string | undefined;
+    try {
+      const res = await createMutation.mutateAsync({
+        ...values,
+        company: getActiveCompany(),
+        docstatus: 0,
+        status: "Draft",
+      });
+      woName = res?.data?.name;
+    } catch {
+      // createMutation.onError already surfaced the guided dialog.
+      return;
+    }
+    if (!woName) return;
+
+    try {
+      await submitMutation.mutateAsync({
+        name: woName,
+        data: { docstatus: 1, status: "Not Started" },
+      });
+      toast.success(`Work Order ${woName} created and submitted`, {
+        description: "Ready to start production.",
+      });
+    } catch {
+      toast.warning(`Work Order ${woName} created as a draft`, {
+        description: "Submit it from its page when ready.",
+      });
+    }
+    router.push(`/manufacturing/work-order/${encodeURIComponent(woName)}`);
+  }, [createMutation, submitMutation, getValues, router]);
 
   return (
     <div className="space-y-6 pb-12">
@@ -268,7 +296,7 @@ function CreateWorkOrderForm() {
           steps={WIZARD_STEPS}
           formData={watchedAll as unknown as Record<string, unknown>}
           validationResults={validationResults}
-          isSubmitting={createMutation.isPending}
+          isSubmitting={createMutation.isPending || submitMutation.isPending}
           onFormDataChange={() => {}}
           onStepChange={setStep}
           onTriedNextChange={setTriedNextSteps}

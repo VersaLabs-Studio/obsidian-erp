@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useState } from "react";
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -42,9 +43,20 @@ export function ConfirmDialog({
   variant = "default",
   children,
 }: ConfirmDialogProps) {
+  // 2Y-R3 — Internal re-entry guard.  When the parent's `loading` prop flips
+  // to true there is a React-render gap where the button stays enabled.  This
+  // local flag disables the button instantly on the first click so rapid
+  // double-clicks never fire `onConfirm` twice.
+  const [localLoading, setLocalLoading] = useState(false);
+
   const handleConfirm = async () => {
-    await onConfirm();
-    onOpenChange(false);
+    setLocalLoading(true);
+    try {
+      await onConfirm();
+      onOpenChange(false);
+    } finally {
+      setLocalLoading(false);
+    }
   };
 
   return (
@@ -62,7 +74,7 @@ export function ConfirmDialog({
         <AlertDialogFooter className="gap-2 pt-2">
           <AlertDialogCancel
             className="rounded-lg px-4"
-            disabled={loading}
+            disabled={loading || localLoading}
           >
             {cancelText}
           </AlertDialogCancel>
@@ -71,7 +83,7 @@ export function ConfirmDialog({
               e.preventDefault();
               handleConfirm();
             }}
-            disabled={loading}
+            disabled={loading || localLoading}
             className={cn(
               "rounded-lg px-4",
               variant === "destructive"

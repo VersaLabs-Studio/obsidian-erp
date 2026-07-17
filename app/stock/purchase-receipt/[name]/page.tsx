@@ -18,7 +18,6 @@ import {
   Loader2,
   Truck,
   Package,
-  Receipt,
 } from "lucide-react";
 
 import { PageHeader, LoadingState, ConfirmDialog } from "@/components/smart";
@@ -57,9 +56,12 @@ export default function PurchaseReceiptDetailPage() {
 
   const [confirmSubmit, setConfirmSubmit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
+  // 4.1 A3 — one-click "Bill" (PR → Purchase Invoice, submitted).
+  const [confirmBill, setConfirmBill] = useState(false);
+  const [billing, setBilling] = useState(false);
   const { resolution, showError, dismiss } = useGuidedError();
 
-  const { data: pr, isLoading, error } = useFrappeDoc<PurchaseReceipt>(
+  const { data: pr, isLoading, error, refetch } = useFrappeDoc<PurchaseReceipt>(
     "Purchase Receipt",
     name,
   );
@@ -112,6 +114,33 @@ export default function PurchaseReceiptDetailPage() {
     deleteMutation.mutate(name);
   };
 
+  // 4.1 A3 — one-click bill: build+submit a Purchase Invoice from this receipt
+  // via ERPNext's make_purchase_invoice mapper. The PI wizard stays as the
+  // advanced path (edit rates, split, partial billing).
+  const handleBill = async () => {
+    setConfirmBill(false);
+    setBilling(true);
+    try {
+      const res = await fetch(
+        `/api/buying/purchase-receipt/${encodeURIComponent(name)}/bill`,
+        { method: "POST", headers: { "Content-Type": "application/json" } },
+      );
+      const data = await res.json();
+      if (res.ok && data?.success) {
+        toast.success("Vendor bill raised", {
+          description: data?.data?.purchase_invoice,
+        });
+        refetch();
+      } else {
+        toast.error(data?.details || data?.error || "Billing failed");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Billing failed");
+    } finally {
+      setBilling(false);
+    }
+  };
+
   if (isLoading) return <LoadingState />;
   if (error || !pr) {
     return (
@@ -139,8 +168,17 @@ export default function PurchaseReceiptDetailPage() {
       isLoading: updateMutation.isPending,
     },
     isSubmitted && {
-      label: "Create Purchase Invoice",
-      description: "Create bill from this receipt",
+      label: "Bill",
+      description: "Raise the vendor bill from this receipt in one click",
+      onClick: () => setConfirmBill(true),
+      isPrimary: true,
+      isLoading: billing,
+      disabled: !isModuleBuilt("Purchase Invoice"),
+      disabledReason: "Module not available",
+    },
+    isSubmitted && {
+      label: "Purchase Invoice (advanced)",
+      description: "Edit rates, split, or bill partially",
       onClick: () => router.push(`/accounting/purchase-invoice/new?purchase_receipt=${encodeURIComponent(name)}`),
       disabled: !isModuleBuilt("Purchase Invoice"),
       disabledReason: "Module not available",
@@ -185,25 +223,6 @@ export default function PurchaseReceiptDetailPage() {
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </>
-            )}
-            {isSubmitted && (
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!isModuleBuilt("Purchase Invoice")}
-                title={!isModuleBuilt("Purchase Invoice") ? "Module not available" : undefined}
-                asChild={isModuleBuilt("Purchase Invoice")}
-              >
-                {isModuleBuilt("Purchase Invoice") ? (
-                  <Link href={`/accounting/purchase-invoice/new?purchase_receipt=${encodeURIComponent(name)}`}>
-                    <Receipt className="mr-1.5 h-4 w-4" /> Create Invoice
-                  </Link>
-                ) : (
-                  <>
-                    <Receipt className="mr-1.5 h-4 w-4" /> Create Invoice
-                  </>
-                )}
-              </Button>
             )}
           </div>
         }
@@ -338,6 +357,15 @@ export default function PurchaseReceiptDetailPage() {
         confirmText="Delete"
         variant="destructive"
         onConfirm={handleDelete}
+      />
+      <ConfirmDialog
+        open={confirmBill}
+        onOpenChange={setConfirmBill}
+        title="Bill this receipt?"
+        description={`Raises and submits a Purchase Invoice from ${name} for the full received amount (${ETB.format(grandTotal)}).`}
+        confirmText="Raise Bill"
+        loading={billing}
+        onConfirm={handleBill}
       />
       <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
     </div>

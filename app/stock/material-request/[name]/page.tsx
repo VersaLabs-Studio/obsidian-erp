@@ -44,12 +44,16 @@ export default function MaterialRequestDetailPage() {
 
   const [confirmSubmit, setConfirmSubmit] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // 4.1 A4 — one-click "Order (auto)" (MR → Purchase Order, submitted).
+  const [confirmOrder, setConfirmOrder] = useState(false);
+  const [ordering, setOrdering] = useState(false);
   const { resolution, showError, dismiss } = useGuidedError();
 
   const {
     data: mr,
     isLoading,
     error,
+    refetch,
   } = useFrappeDoc<MaterialRequest>("Material Request", name);
 
   const isDraft = mr?.docstatus === 0;
@@ -86,6 +90,34 @@ export default function MaterialRequestDetailPage() {
     await deleteMutation.mutateAsync(name);
   };
 
+  // 4.1 A4 — one-click order: build+submit a Purchase Order from this request
+  // via ERPNext's make_purchase_order mapper (uses the item's default
+  // supplier). The PO wizard stays as the advanced path (pick supplier per
+  // line, split across suppliers, adjust rates).
+  const handleOrder = async () => {
+    setConfirmOrder(false);
+    setOrdering(true);
+    try {
+      const res = await fetch(
+        `/api/buying/material-request/${encodeURIComponent(name)}/order`,
+        { method: "POST", headers: { "Content-Type": "application/json" } },
+      );
+      const data = await res.json();
+      if (res.ok && data?.success) {
+        toast.success("Purchase Order created", {
+          description: data?.data?.purchase_order,
+        });
+        refetch();
+      } else {
+        toast.error(data?.details || data?.error || "Ordering failed");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Ordering failed");
+    } finally {
+      setOrdering(false);
+    }
+  };
+
   const whatsNext = [
     isDraft && {
       label: "Submit Material Request",
@@ -95,8 +127,17 @@ export default function MaterialRequestDetailPage() {
       isLoading: updateMutation.isPending,
     },
     isSubmitted && {
-      label: "Create Purchase Order",
-      description: "Create PO from this request",
+      label: "Order (auto)",
+      description: "Raise a Purchase Order for everything requested, in one click",
+      onClick: () => setConfirmOrder(true),
+      isPrimary: true,
+      isLoading: ordering,
+      disabled: !isModuleBuilt("Purchase Order"),
+      disabledReason: "Module not available",
+    },
+    isSubmitted && {
+      label: "Purchase Order (advanced)",
+      description: "Pick suppliers per line, split, or adjust rates",
       onClick: () => router.push(`/buying/purchase-order/new?material_request=${encodeURIComponent(name)}`),
       disabled: !isModuleBuilt("Purchase Order"),
       disabledReason: "Module not available",
@@ -351,6 +392,15 @@ export default function MaterialRequestDetailPage() {
         variant="destructive"
         onConfirm={handleDelete}
         loading={deleteMutation.isPending}
+      />
+      <ConfirmDialog
+        open={confirmOrder}
+        onOpenChange={setConfirmOrder}
+        title="Order everything requested?"
+        description={`Raises and submits a Purchase Order from ${name} using each item's default supplier. Use the advanced path to choose suppliers per line.`}
+        confirmText="Create Order"
+        loading={ordering}
+        onConfirm={handleOrder}
       />
       <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
     </div>

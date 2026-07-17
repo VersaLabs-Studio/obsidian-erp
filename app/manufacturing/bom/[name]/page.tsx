@@ -87,6 +87,27 @@ export default function BOMDetailPage() {
     );
   };
 
+  // 4.1 B3 — one-click "Submit & Create Work Order". A draft BOM cannot back a
+  // Work Order (ERPNext requires a submitted BOM), so the old flow forced
+  // Submit → then Create WO as two steps — and worse, the is_active-gated
+  // "Create Work Order" action showed for a draft BOM and dead-ended in the WO
+  // wizard. This submits the BOM, then navigates straight to WO creation.
+  const handleSubmitAndCreateWO = () => {
+    updateMutation.mutate(
+      { name, data: { docstatus: 1 } },
+      {
+        onSuccess: () => {
+          toast.success(`BOM ${name} submitted`);
+          router.push(
+            `/manufacturing/work-order/new?bom=${encodeURIComponent(name)}`,
+          );
+        },
+        onError: (err) =>
+          showError(resolveFrappeError(err, { doctype: "BOM" })),
+      },
+    );
+  };
+
   const handleDelete = async () => {
     setShowDelete(false);
     try {
@@ -124,14 +145,25 @@ export default function BOMDetailPage() {
   }
 
   const whatsNext = [
+    // 4.1 B3 — a draft BOM's happy path IS producing with it: submit + jump
+    // straight to Work Order creation in one click.
     isDraft && {
-      label: "Submit BOM",
-      description: "Submit this BOM to make it available for Work Orders",
-      onClick: () => setConfirmSubmit(true),
+      label: "Submit & Create Work Order",
+      description: "Submit this BOM and start a production job with it",
+      onClick: handleSubmitAndCreateWO,
       isPrimary: true,
       isLoading: updateMutation.isPending,
+      disabled: !isModuleBuilt("Work Order"),
+      disabledReason: "Work Order module not available",
     },
-    isActive && {
+    isDraft && {
+      label: "Submit BOM only",
+      description: "Submit this BOM without creating a Work Order yet",
+      onClick: () => setConfirmSubmit(true),
+      isLoading: updateMutation.isPending,
+    },
+    // Only a truly submitted + active BOM can back a Work Order.
+    isSubmitted && isActive && {
       label: "Create Work Order",
       description: "Start production using this BOM",
       onClick: () =>
@@ -140,7 +172,7 @@ export default function BOMDetailPage() {
         ),
       isPrimary: true,
       disabled: !isModuleBuilt("Work Order"),
-      disabledReason: "Coming soon",
+      disabledReason: "Work Order module not available",
     },
     {
       label: "Duplicate BOM",
@@ -195,7 +227,7 @@ export default function BOMDetailPage() {
                 Submit
               </Button>
             )}
-            {isActive && (
+            {isSubmitted && isActive && (
               <Button
                 size="sm"
                 onClick={() =>

@@ -226,6 +226,35 @@ export default function SalesOrderDetailPage() {
     [completeWOMutation, refetchWO, showError],
   );
 
+  // 2Y-R3 — Start WO: call ERPNext's start_work method (direct PATCH on
+  // status is rejected by ERPNext's validation).
+  const [startingWO, setStartingWO] = useState<string | null>(null);
+
+  const handleStartWO = useCallback(
+    async (woName: string) => {
+      setStartingWO(woName);
+      try {
+        const res = await fetch(
+          `/api/manufacturing/work-order/${encodeURIComponent(woName)}/start`,
+          { method: "POST" },
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.success) {
+          throw new Error(data?.error || "Failed to start Work Order");
+        }
+        toast.success(`Work Order ${woName} started`, {
+          description: "Production is now in progress.",
+        });
+        await refetchWO();
+      } catch (err) {
+        showError(resolveFrappeError(err, { doctype: "Work Order" }));
+      } finally {
+        setStartingWO(null);
+      }
+    },
+    [refetchWO, showError],
+  );
+
   // -- BOM lookup for WO creation (default BOM per production item) ----------
   const soItemCodes = useMemo(() => {
     const items = (order?.items ?? []) as Array<{ item_code: string }>;
@@ -771,7 +800,9 @@ export default function SalesOrderDetailPage() {
                       jobCards={jobCards ?? []}
                       submittingWO={submittingWO}
                       completingWO={completingWO}
+                      startingWO={startingWO}
                       onSubmitWorkOrder={handleSubmitWorkOrder}
+                      onStartWorkOrder={handleStartWO}
                       onCompleteWorkOrder={handleCompleteWO}
                       onJobCardCreated={refetchJobCards}
                     />
@@ -1079,7 +1110,9 @@ function LinkedWOCard({
   jobCards,
   submittingWO,
   completingWO,
+  startingWO,
   onSubmitWorkOrder,
+  onStartWorkOrder,
   onCompleteWorkOrder,
   onJobCardCreated,
 }: {
@@ -1087,7 +1120,9 @@ function LinkedWOCard({
   jobCards: JobCard[];
   submittingWO: string | null;
   completingWO: string | null;
+  startingWO: string | null;
   onSubmitWorkOrder: (name: string) => void;
+  onStartWorkOrder: (name: string) => void;
   onCompleteWorkOrder: (name: string) => void;
   onJobCardCreated?: () => void;
 }) {
@@ -1097,6 +1132,7 @@ function LinkedWOCard({
   const [createJCOpen, setCreateJCOpen] = useState(false);
   const isWoDraft = wo.docstatus === 0;
   const isWoCompleted = wo.status === "Completed";
+  const isWoNotStarted = !isWoDraft && !isWoCompleted && wo.status === "Not Started";
   const woJCs = jobCards.filter((jc) => jc.work_order === wo.name);
   const allJCsCompleted = woJCs.length > 0 && woJCs.every((jc) => jc.status === "Completed");
   // 2Y-R3 — a Job Card can be created once the WO is submitted (not a draft).
@@ -1148,6 +1184,22 @@ function LinkedWOCard({
                 <Send className="mr-1.5 h-4 w-4" />
               )}
               Submit
+            </Button>
+          )}
+          {isWoNotStarted && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-amber-500/50 text-amber-600 hover:bg-amber-500/10 dark:text-amber-400"
+              onClick={() => onStartWorkOrder(wo.name)}
+              disabled={startingWO === wo.name}
+            >
+              {startingWO === wo.name ? (
+                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+              ) : (
+                <Play className="mr-1.5 h-4 w-4" />
+              )}
+              Start
             </Button>
           )}
           {!isWoDraft && !isWoCompleted && allJCsCompleted && (

@@ -25,7 +25,7 @@ import {
 import { QuickAddField } from "@/components/quick-add/QuickAddField";
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
 import { FlowWizard } from "@/components/flows/FlowWizard";
-import { useFrappeCreate } from "@/hooks/generic";
+import { useFrappeCreate, useFrappeUpdate } from "@/hooks/generic";
 import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
 import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
 import { getActiveCompany } from "@/lib/settings/company";
@@ -219,21 +219,21 @@ export default function NewMaterialRequestPage() {
 
   const { resolution, showError, dismiss } = useGuidedError();
 
+  // v4.1 C1 — born-submitted: create then submit in one action so a
+  // Material Request lands ready-to-order (mirrors the SO cockpit + WO
+  // create path). Degrades to "created as a draft" if the submit fails.
   const createMutation = useFrappeCreate<
     { data: { name: string } },
     Record<string, unknown>
   >("Material Request", {
-    successMessage: "Material Request created",
-    onSuccess: (res) => {
-      const name = res?.data?.name;
-      if (name) {
-        router.push(`/stock/material-request/${encodeURIComponent(name)}`);
-      }
-    },
+    showToast: false,
     onError: (err) => showError(resolveFrappeError(err, { doctype: "Material Request" })),
   });
+  const submitMutation = useFrappeUpdate<{ name: string }>("Material Request", {
+    showToast: false,
+  });
 
-  const handleSubmit = useCallback(() => {
+  const handleSubmit = useCallback(async () => {
     const values = getValues();
     const items = (values.items ?? []).filter(
       (it) => it.item_code && Number(it.qty) > 0
@@ -243,7 +243,7 @@ export default function NewMaterialRequestPage() {
       setStep(1);
       return;
     }
-    createMutation.mutate({
+    const res = await createMutation.mutateAsync({
       ...values,
       company: getActiveCompany(),
       items: items.map((it) => ({
@@ -252,7 +252,19 @@ export default function NewMaterialRequestPage() {
         warehouse: it.warehouse || values.set_warehouse,
       })),
     });
-  }, [createMutation, getValues]);
+    const mrName = res?.data?.name;
+    if (!mrName) return; // create failed — onError already surfaced the guide
+    try {
+      await submitMutation.mutateAsync({
+        name: mrName,
+        data: { docstatus: 1 },
+      });
+      toast.success("Material Request created and submitted");
+    } catch {
+      toast.warning("Material Request created as a draft — review and submit it.");
+    }
+    router.push(`/stock/material-request/${encodeURIComponent(mrName)}`);
+  }, [createMutation, submitMutation, getValues, router]);
 
   return (
     <div className="space-y-6 pb-12">
@@ -268,14 +280,14 @@ export default function NewMaterialRequestPage() {
             steps={WIZARD_STEPS}
             formData={watchedAll as unknown as Record<string, unknown>}
             validationResults={validationResults}
-            isSubmitting={createMutation.isPending}
+            isSubmitting={createMutation.isPending || submitMutation.isPending}
             onFormDataChange={() => {}}
             onStepChange={setStep}
             onTriedNextChange={setTriedNextSteps}
             onSubmit={handleSubmit}
             onCancel={() => router.back()}
-            submitLabel="Create Material Request"
-            submittingLabel="Creating..."
+            submitLabel="Create & Submit"
+            submittingLabel="Submitting..."
             renderStep={(s) => {
               if (s.id === "step1") {
                 return (

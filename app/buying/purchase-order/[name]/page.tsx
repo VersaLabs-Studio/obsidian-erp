@@ -63,6 +63,9 @@ export default function PurchaseOrderDetailPage() {
   const [confirmReject, setConfirmReject] = useState(false);
   // 2P Part 2.6 — ReceiveMaterialsModal trigger
   const [openReceive, setOpenReceive] = useState(false);
+  // 4.1 A2 — one-click "Receive & Bill" (PR → submit → PI → submit).
+  const [confirmReceiveBill, setConfirmReceiveBill] = useState(false);
+  const [receivingBill, setReceivingBill] = useState(false);
   const { resolution, showError, dismiss } = useGuidedError();
 
   const {
@@ -130,6 +133,39 @@ export default function PurchaseOrderDetailPage() {
     );
   };
 
+  // 4.1 A2 — one-click receive + bill: chain PR (submit) → PI (submit) via
+  // ERPNext's own mappers. The "Receive items" modal (receipt only) and the
+  // PI wizard remain as the advanced/partial paths.
+  const handleReceiveAndBill = async () => {
+    setConfirmReceiveBill(false);
+    setReceivingBill(true);
+    try {
+      const res = await fetch(
+        `/api/buying/purchase-order/${encodeURIComponent(name)}/receive-and-bill`,
+        { method: "POST", headers: { "Content-Type": "application/json" } },
+      );
+      const data = await res.json();
+      if (res.ok && data?.success) {
+        toast.success("Received and billed", {
+          description: `${data?.data?.purchase_receipt} · ${data?.data?.purchase_invoice}`,
+        });
+        refetch();
+      } else if (data?.data?.purchase_receipt) {
+        // Partial success — the receipt is real; billing failed.
+        toast.warning("Received — billing failed", {
+          description: data?.details || "Bill the receipt from its detail page.",
+        });
+        refetch();
+      } else {
+        toast.error(data?.details || data?.error || "Receive & Bill failed");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Receive & Bill failed");
+    } finally {
+      setReceivingBill(false);
+    }
+  };
+
   if (isLoading) return <LoadingState />;
   if (error || !order) {
     return (
@@ -153,8 +189,8 @@ export default function PurchaseOrderDetailPage() {
 
   const whatsNext = [
     isDraft && {
-      label: "Submit for Approval",
-      description: "Send this order for approval",
+      label: "Submit Order",
+      description: "Submit — ready to receive & bill",
       onClick: () => setConfirmSubmit(true),
       isPrimary: true,
       isLoading: updateMutation.isPending,
@@ -172,14 +208,22 @@ export default function PurchaseOrderDetailPage() {
       onClick: () => setConfirmReject(true),
       isLoading: updateMutation.isPending,
     },
+    // 4.1 A2 — the one-click happy path: receive AND bill in a single act.
     isSubmitted && {
-      label: "Receive items",
-      description: "Record goods receipt from supplier",
-      // 2P Part 2.6 — open the ReceiveMaterialsModal (one-click) instead
-      // of deep-linking to the PR wizard. The modal does the create+submit
-      // and routes to the new PR detail on success.
-      onClick: () => setOpenReceive(true),
+      label: "Receive & Bill",
+      description: "Book the goods in and raise the vendor bill in one click",
+      onClick: () => setConfirmReceiveBill(true),
       isPrimary: true,
+      isLoading: receivingBill,
+      disabled:
+        !isModuleBuilt("Purchase Receipt") || !isModuleBuilt("Purchase Invoice"),
+      disabledReason: "Receipt or Invoice module not available",
+    },
+    isSubmitted && {
+      label: "Receive only (advanced)",
+      description: "Record a goods receipt without billing (partial receipts)",
+      // 2P Part 2.6 — ReceiveMaterialsModal: create+submit the PR only.
+      onClick: () => setOpenReceive(true),
       disabled: !isModuleBuilt("Purchase Receipt"),
       disabledReason: "Module not available",
     },
@@ -423,9 +467,18 @@ export default function PurchaseOrderDetailPage() {
         open={confirmSubmit}
         onOpenChange={setConfirmSubmit}
         title="Submit this Purchase Order?"
-        description="Submitting will send this order for approval. This cannot be undone without cancelling."
+        description="Submitting locks the order and makes it ready to receive & bill. This cannot be undone without cancelling."
         confirmText="Submit"
         onConfirm={handleSubmit}
+      />
+      <ConfirmDialog
+        open={confirmReceiveBill}
+        onOpenChange={setConfirmReceiveBill}
+        title="Receive & Bill this order?"
+        description={`Books all ordered goods into stock (Purchase Receipt) and raises the vendor bill (Purchase Invoice) for ${name}, submitting both. Use "Receive only" for partial receipts.`}
+        confirmText="Receive & Bill"
+        loading={receivingBill}
+        onConfirm={handleReceiveAndBill}
       />
       <ConfirmDialog
         open={confirmApprove}
