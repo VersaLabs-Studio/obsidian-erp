@@ -14,6 +14,7 @@ import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErr
 import {
   Send,
   Ban,
+  Trash2,
   Loader2,
   Package,
   CheckCircle2,
@@ -58,13 +59,12 @@ export default function PurchaseOrderDetailPage() {
   const router = useRouter();
   const name = decodeURIComponent(String(params.name));
 
-  const [confirmSubmit, setConfirmSubmit] = useState(false);
-  const [confirmApprove, setConfirmApprove] = useState(false);
   const [confirmReject, setConfirmReject] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   // 2P Part 2.6 — ReceiveMaterialsModal trigger
   const [openReceive, setOpenReceive] = useState(false);
-  // 4.1 A2 — one-click "Receive & Bill" (PR → submit → PI → submit).
-  const [confirmReceiveBill, setConfirmReceiveBill] = useState(false);
+  // E1 F1 — Receive & Bill direct-action; kept as loading state.
   const [receivingBill, setReceivingBill] = useState(false);
   const { resolution, showError, dismiss } = useGuidedError();
 
@@ -89,7 +89,6 @@ export default function PurchaseOrderDetailPage() {
   const isSubmitted = order?.docstatus === 1;
 
   const handleSubmit = () => {
-    setConfirmSubmit(false);
     updateMutation.mutate(
       { name, data: { docstatus: 1, status: "To Receive and Bill" } },
       {
@@ -104,7 +103,6 @@ export default function PurchaseOrderDetailPage() {
   };
 
   const handleApprove = () => {
-    setConfirmApprove(false);
     updateMutation.mutate(
       { name, data: { status: "Approved" } },
       {
@@ -133,11 +131,42 @@ export default function PurchaseOrderDetailPage() {
     );
   };
 
+  const handleCancel = () => {
+    setConfirmCancel(false);
+    updateMutation.mutate(
+      { name, data: { docstatus: 2, status: "Cancelled" } },
+      {
+        onSuccess: () => {
+          toast.success(`Purchase Order ${name} cancelled`);
+          refetch();
+        },
+        onError: (err) =>
+          showError(resolveFrappeError(err, { doctype: "Purchase Order" })),
+      },
+    );
+  };
+
+  const handleDelete = async () => {
+    setConfirmDelete(false);
+    try {
+      const res = await fetch(`/api/buying/purchase-order/${encodeURIComponent(name)}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        toast.success("Purchase Order deleted");
+        router.push("/buying/purchase-order");
+      } else {
+        const body = await res.json().catch(() => ({}));
+        showError(resolveFrappeError(body, { doctype: "Purchase Order" }));
+      }
+    } catch (err) {
+      showError(resolveFrappeError(err, { doctype: "Purchase Order" }));
+    }
+  };
+
   // 4.1 A2 — one-click receive + bill: chain PR (submit) → PI (submit) via
-  // ERPNext's own mappers. The "Receive items" modal (receipt only) and the
-  // PI wizard remain as the advanced/partial paths.
+  // ERPNext's own mappers. Direct fire on button click (E1/F1 happy-path).
   const handleReceiveAndBill = async () => {
-    setConfirmReceiveBill(false);
     setReceivingBill(true);
     try {
       const res = await fetch(
@@ -191,14 +220,14 @@ export default function PurchaseOrderDetailPage() {
     isDraft && {
       label: "Submit Order",
       description: "Submit — ready to receive & bill",
-      onClick: () => setConfirmSubmit(true),
+      onClick: handleSubmit,
       isPrimary: true,
       isLoading: updateMutation.isPending,
     },
     isPendingApproval && {
       label: "Approve Order",
       description: "Approve this purchase order",
-      onClick: () => setConfirmApprove(true),
+      onClick: handleApprove,
       isPrimary: true,
       isLoading: updateMutation.isPending,
     },
@@ -212,7 +241,7 @@ export default function PurchaseOrderDetailPage() {
     isSubmitted && {
       label: "Receive & Bill",
       description: "Book the goods in and raise the vendor bill in one click",
-      onClick: () => setConfirmReceiveBill(true),
+      onClick: handleReceiveAndBill,
       isPrimary: true,
       isLoading: receivingBill,
       disabled:
@@ -274,7 +303,7 @@ export default function PurchaseOrderDetailPage() {
             {isDraft && (
               <Button
                 size="sm"
-                onClick={() => setConfirmSubmit(true)}
+                onClick={handleSubmit}
                 disabled={updateMutation.isPending}
               >
                 {updateMutation.isPending ? (
@@ -289,7 +318,7 @@ export default function PurchaseOrderDetailPage() {
               <>
                 <Button
                   size="sm"
-                  onClick={() => setConfirmApprove(true)}
+                  onClick={handleApprove}
                   disabled={updateMutation.isPending}
                 >
                   {updateMutation.isPending ? (
@@ -314,21 +343,19 @@ export default function PurchaseOrderDetailPage() {
                 variant="outline"
                 size="sm"
                 className="text-destructive hover:text-destructive"
-                onClick={() => {
-                  updateMutation.mutate(
-                    { name, data: { docstatus: 2, status: "Cancelled" } },
-                    {
-                      onSuccess: () => {
-                        toast.success(`Purchase Order ${name} cancelled`);
-                        refetch();
-                      },
-                      onError: (err) =>
-                        showError(resolveFrappeError(err, { doctype: "Purchase Order" })),
-                    },
-                  );
-                }}
+                onClick={() => setConfirmCancel(true)}
               >
                 <Ban className="mr-1.5 h-4 w-4" /> Cancel
+              </Button>
+            )}
+            {isDraft && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-destructive hover:text-destructive"
+                onClick={() => setConfirmDelete(true)}
+              >
+                <Trash2 className="mr-1.5 h-4 w-4" /> Delete
               </Button>
             )}
           </div>
@@ -464,31 +491,6 @@ export default function PurchaseOrderDetailPage() {
       </div>
 
       <ConfirmDialog
-        open={confirmSubmit}
-        onOpenChange={setConfirmSubmit}
-        title="Submit this Purchase Order?"
-        description="Submitting locks the order and makes it ready to receive & bill. This cannot be undone without cancelling."
-        confirmText="Submit"
-        onConfirm={handleSubmit}
-      />
-      <ConfirmDialog
-        open={confirmReceiveBill}
-        onOpenChange={setConfirmReceiveBill}
-        title="Receive & Bill this order?"
-        description={`Books all ordered goods into stock (Purchase Receipt) and raises the vendor bill (Purchase Invoice) for ${name}, submitting both. Use "Receive only" for partial receipts.`}
-        confirmText="Receive & Bill"
-        loading={receivingBill}
-        onConfirm={handleReceiveAndBill}
-      />
-      <ConfirmDialog
-        open={confirmApprove}
-        onOpenChange={setConfirmApprove}
-        title="Approve this Purchase Order?"
-        description="Approving this order will allow it to proceed to receipt and billing."
-        confirmText="Approve"
-        onConfirm={handleApprove}
-      />
-      <ConfirmDialog
         open={confirmReject}
         onOpenChange={setConfirmReject}
         title="Reject this Purchase Order?"
@@ -496,6 +498,25 @@ export default function PurchaseOrderDetailPage() {
         confirmText="Reject"
         variant="destructive"
         onConfirm={handleReject}
+      />
+      <ConfirmDialog
+        open={confirmCancel}
+        onOpenChange={setConfirmCancel}
+        title="Cancel this Purchase Order?"
+        description="Cancelling reverses the order. Linked documents must be cancelled first."
+        confirmText="Cancel Order"
+        variant="destructive"
+        onConfirm={handleCancel}
+      />
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="Delete this Purchase Order?"
+        description={`Are you sure you want to delete "${order.name}"? This action cannot be undone.`}
+        confirmText="Delete"
+        variant="destructive"
+        onConfirm={handleDelete}
+        loading={updateMutation.isPending}
       />
       <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
       <ReceiveMaterialsModal

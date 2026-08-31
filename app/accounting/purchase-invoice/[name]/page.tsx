@@ -16,6 +16,7 @@ import {
   Edit3,
   Send,
   Ban,
+  Trash2,
   Loader2,
   Package,
   Truck,
@@ -61,6 +62,7 @@ export default function PurchaseInvoiceDetailPage() {
   const [confirmCancel, setConfirmCancel] = useState(false);
   // 4.1 A1 — one-click "Mark as Paid" (vendor bill → Payment Entry, Pay).
   const [confirmPaid, setConfirmPaid] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [payMode, setPayMode] = useState("Cash");
   const [paying, setPaying] = useState(false);
   const { resolution, showError, dismiss } = useGuidedError();
@@ -153,6 +155,24 @@ export default function PurchaseInvoiceDetailPage() {
     }
   };
 
+  const handleDelete = async () => {
+    setConfirmDelete(false);
+    try {
+      const res = await fetch(`/api/accounting/purchase-invoice/${encodeURIComponent(name)}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        toast.success("Purchase Invoice deleted");
+        router.push("/accounting/purchase-invoice");
+      } else {
+        const body = await res.json().catch(() => ({}));
+        showError(resolveFrappeError(body, { doctype: "Purchase Invoice" }));
+      }
+    } catch (err) {
+      showError(resolveFrappeError(err, { doctype: "Purchase Invoice" }));
+    }
+  };
+
   if (isLoading) return <LoadingState />;
   if (error || !invoice) {
     return (
@@ -178,14 +198,14 @@ export default function PurchaseInvoiceDetailPage() {
     isDraft && {
       label: "Submit Invoice",
       description: "Lock the invoice and post to ledger",
-      onClick: () => setConfirmSubmit(true),
+      onClick: handleSubmit,
       isPrimary: true,
       isLoading: updateMutation.isPending,
     },
     isUnpaid && {
       label: "Mark as Paid",
       description: "Record full payment in one click (defaults to Cash)",
-      onClick: () => setConfirmPaid(true),
+      onClick: handleMarkAsPaid,
       isPrimary: true,
       isLoading: paying,
       disabled: !isModuleBuilt("Payment Entry"),
@@ -222,7 +242,7 @@ export default function PurchaseInvoiceDetailPage() {
                 </Button>
                 <Button
                   size="sm"
-                  onClick={() => setConfirmSubmit(true)}
+                  onClick={handleSubmit}
                   disabled={updateMutation.isPending}
                 >
                   {updateMutation.isPending ? (
@@ -235,14 +255,24 @@ export default function PurchaseInvoiceDetailPage() {
               </>
             )}
             {isSubmitted && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-destructive hover:text-destructive"
-                onClick={() => setConfirmCancel(true)}
-              >
-                <Ban className="mr-1.5 h-4 w-4" /> Cancel
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => setConfirmCancel(true)}
+                >
+                  <Ban className="mr-1.5 h-4 w-4" /> Cancel
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => setConfirmDelete(true)}
+                >
+                  <Trash2 className="mr-1.5 h-4 w-4" /> Delete
+                </Button>
+              </>
             )}
             <PrintMenu doctype="Purchase Invoice" doc={invoice as unknown as Record<string, unknown>} />
             <PrintShare doctype="Purchase Invoice" name={name} showPrint={false} />
@@ -415,6 +445,15 @@ export default function PurchaseInvoiceDetailPage() {
           />
         </div>
       </ConfirmDialog>
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="Delete this Purchase Invoice?"
+        description={`Are you sure you want to delete "${invoice.name}"? This action cannot be undone.`}
+        confirmText="Delete"
+        variant="destructive"
+        onConfirm={handleDelete}
+      />
       <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
     </div>
   );

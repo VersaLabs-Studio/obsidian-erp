@@ -37,7 +37,6 @@ import { useMakeFrom } from "@/hooks/flows/use-make-from";
 import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
 import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
 import { getActiveCompany } from "@/lib/settings/company";
-import { resolvePrefillWarehouses } from "@/lib/stock/warehouse-defaults";
 import {
   getAutoFillMapping,
   applyAutoFill,
@@ -89,7 +88,6 @@ const EMPTY_ITEM: PRItem = {
   rate: 0,
   amount: 0,
   uom: "Nos",
-  warehouse: "",
 };
 
 const WIZARD_STEPS: WizardStep[] = [
@@ -241,22 +239,6 @@ export default function NewPurchaseReceiptPage() {
     });
   }, [poDraft, purchaseOrder, purchaseOrderId, reset, getValues]);
 
-  // 2X P0-A — Prefill default receipt warehouse from saved settings (source
-  // of truth), with canonical fallback. Replaces resolveCompanyWarehouses().
-  // Also: the saved-settings route is user-scoped, so non-admin sessions get
-  // the value (previously the admin-gate on the canonical route silently
-  // returned nothing for non-admin users).
-  useEffect(() => {
-    if (poDraft || purchaseOrder) return;
-    const cur = getValues("set_warehouse");
-    if (cur) return;
-    resolvePrefillWarehouses()
-      .then((w) => {
-        if (w.stores) setValue("set_warehouse", w.stores);
-      })
-      .catch(() => {});
-  }, [poDraft, purchaseOrder, getValues, setValue]);
-
   const isAuto = useCallback(
     (field: string) => autoFilledFields.has(field),
     [autoFilledFields],
@@ -309,6 +291,11 @@ export default function NewPurchaseReceiptPage() {
       setStep(1);
       return;
     }
+    // 2Y-R3 — propagate the header `set_warehouse` to every item that
+    // lacks a per-row warehouse. Server-side warehouse backfill (in the PR
+    // create API route) fills any remaining blanks with the default Stores
+    // warehouse, so items always reach ERPNext with a warehouse.
+    const headerWarehouse = values.set_warehouse || "";
     createMutation.mutate({
       ...values,
       company: getActiveCompany(),
@@ -316,7 +303,7 @@ export default function NewPurchaseReceiptPage() {
         ...it,
         amount: (Number(it.qty) || 0) * (Number(it.rate) || 0),
         idx: idx + 1,
-        warehouse: it.warehouse,
+        warehouse: it.warehouse || headerWarehouse,
         doctype: "Purchase Receipt Item",
       })),
       docstatus: 0,
@@ -402,17 +389,6 @@ export default function NewPurchaseReceiptPage() {
                           placeholder="Link to PO..."
                         />
                       </FieldWrap>
-                      {/* 2X P0-A — visible warehouse field so the prefill is not
-                          invisible. Previously set_warehouse only appeared in the
-                          read-only review step, making the prefill seem absent. */}
-                      <QuickAddField
-                        control={control}
-                        name="set_warehouse"
-                        label="Receiving Warehouse"
-                        doctype="Warehouse"
-                        placeholder="Where goods arrive..."
-                        filters={[["is_group", "=", 0]]}
-                      />
                     </div>
                   </div>
                 );
@@ -444,7 +420,6 @@ export default function NewPurchaseReceiptPage() {
                             <th className="px-3 py-2.5 text-right font-semibold">Qty</th>
                             <th className="px-3 py-2.5 text-right font-semibold">Rate</th>
                             <th className="px-3 py-2.5 text-right font-semibold">Amount</th>
-                            <th className="px-3 py-2.5 text-left font-semibold">Warehouse</th>
                             <th className="w-10" />
                           </tr>
                         </thead>
@@ -499,20 +474,6 @@ export default function NewPurchaseReceiptPage() {
                                 </td>
                                 <td className="px-3 py-3 text-right align-middle font-semibold tabular-nums text-foreground">
                                   {ETB.format(qty * rate)}
-                                </td>
-                                <td className="px-3 py-2 align-top">
-                                  <FieldWrap
-                                    error={triedNextSteps.has(step) ? validationResults?.step2?.errors?.[`items.${index}.warehouse`] : undefined}
-                                  >
-                                    <QuickAddField
-                                      control={control}
-                                      name={`items.${index}.warehouse`}
-                                      doctype="Warehouse"
-                                      hideLabel
-                                      placeholder="WH..."
-                                      filters={[["is_group", "=", 0]]}
-                                    />
-                                  </FieldWrap>
                                 </td>
                                 <td className="px-2 py-2 text-center align-middle">
                                   <Button
@@ -589,7 +550,6 @@ export default function NewPurchaseReceiptPage() {
                           <th className="px-6 py-2.5 text-right font-semibold">Qty</th>
                           <th className="px-6 py-2.5 text-right font-semibold">Rate</th>
                           <th className="px-6 py-2.5 text-right font-semibold">Amount</th>
-                          <th className="px-6 py-2.5 text-left font-semibold">Warehouse</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border/40">
@@ -599,7 +559,6 @@ export default function NewPurchaseReceiptPage() {
                             <td className="px-6 py-3 text-right tabular-nums">{item.qty} {item.uom}</td>
                             <td className="px-6 py-3 text-right tabular-nums">{ETB.format(item.rate ?? 0)}</td>
                             <td className="px-6 py-3 text-right font-medium tabular-nums">{ETB.format((item.qty || 0) * (item.rate || 0))}</td>
-                            <td className="px-6 py-3 text-muted-foreground">{item.warehouse || v.set_warehouse || "—"}</td>
                           </tr>
                         ))}
                       </tbody>

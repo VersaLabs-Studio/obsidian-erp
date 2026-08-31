@@ -10,6 +10,7 @@ import {
   Edit3,
   Send,
   Ban,
+  Trash2,
   Loader2,
   Package,
 } from "lucide-react";
@@ -55,6 +56,7 @@ export default function SalesInvoiceDetailPage() {
   const [confirmCancel, setConfirmCancel] = useState(false);
   // 2Z D3 — one-click "Mark as Paid" (server-side get_payment_entry + submit).
   const [confirmPaid, setConfirmPaid] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [payMode, setPayMode] = useState("Cash");
   const [paying, setPaying] = useState(false);
   const { resolution, showError, dismiss } = useGuidedError();
@@ -135,6 +137,24 @@ export default function SalesInvoiceDetailPage() {
     }
   };
 
+  const handleDelete = async () => {
+    setConfirmDelete(false);
+    try {
+      const res = await fetch(`/api/accounting/sales-invoice/${encodeURIComponent(name)}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        toast.success("Sales Invoice deleted");
+        router.push("/accounting/sales-invoice");
+      } else {
+        const body = await res.json().catch(() => ({}));
+        showError(resolveFrappeError(body, { doctype: "Sales Invoice" }));
+      }
+    } catch (err) {
+      showError(resolveFrappeError(err, { doctype: "Sales Invoice" }));
+    }
+  };
+
   if (isLoading) return <LoadingState />;
   if (error || !invoice) {
     return (
@@ -160,14 +180,14 @@ export default function SalesInvoiceDetailPage() {
     isDraft && {
       label: "Submit Invoice",
       description: "Lock the invoice and post accounting entries",
-      onClick: () => setConfirmSubmit(true),
+      onClick: handleSubmit,
       isPrimary: true,
       isLoading: updateMutation.isPending,
     },
     isUnpaid && {
       label: "Mark as Paid",
       description: `Record full payment of ${ETB.format(invoice.outstanding_amount ?? 0)} in one click`,
-      onClick: () => setConfirmPaid(true),
+      onClick: handleMarkAsPaid,
       isPrimary: true,
       disabled: !isModuleBuilt("Payment Entry"),
       disabledReason: "Payment Entry module not yet available",
@@ -208,7 +228,7 @@ export default function SalesInvoiceDetailPage() {
                 </Button>
                 <Button
                   size="sm"
-                  onClick={() => setConfirmSubmit(true)}
+                  onClick={handleSubmit}
                   disabled={updateMutation.isPending}
                 >
                   {updateMutation.isPending ? (
@@ -221,14 +241,24 @@ export default function SalesInvoiceDetailPage() {
               </>
             )}
             {isSubmitted && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-destructive hover:text-destructive"
-                onClick={() => setConfirmCancel(true)}
-              >
-                <Ban className="mr-1.5 h-4 w-4" /> Cancel
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => setConfirmCancel(true)}
+                >
+                  <Ban className="mr-1.5 h-4 w-4" /> Cancel
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => setConfirmDelete(true)}
+                >
+                  <Trash2 className="mr-1.5 h-4 w-4" /> Delete
+                </Button>
+              </>
             )}
           </div>
         }
@@ -428,6 +458,15 @@ export default function SalesInvoiceDetailPage() {
           />
         </div>
       </ConfirmDialog>
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="Delete this Sales Invoice?"
+        description={`Are you sure you want to delete "${invoice.name}"? This action cannot be undone.`}
+        confirmText="Delete"
+        variant="destructive"
+        onConfirm={handleDelete}
+      />
       <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
     </div>
   );

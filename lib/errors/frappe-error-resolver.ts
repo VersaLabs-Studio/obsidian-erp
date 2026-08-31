@@ -115,6 +115,44 @@ const strategies: ErrorStrategy[] = [
     },
   },
 
+  // 2Y-R5 P1 — DATE_VALIDATION. ERPNext's `validate_from_to_dates` raises
+  // "<Field A> must be after <Field B>" (or "must be before"). Previously fell
+  // through to GENERIC_FALLBACK ("The server rejected this action"), hiding
+  // the real cause. Surface the exact field pair as a guided message so the
+  // operator knows which dates to fix.
+  {
+    code: "DATE_VALIDATION",
+    match: (m) =>
+      /must be (after|before|>=|>|<=|<)\s+(the\s+)?(Date|Posting)/i.test(m) &&
+      /date/i.test(m),
+    resolve: (msg) => {
+      // Parse: "<Field A> must be after <Field B>" — the two field names
+      // bracket the verb phrase.
+      const pair = msg.match(/^(.+?)\s+must\s+(be\s+)?(after|before|>=|>|<=|<)\s+(?:the\s+)?(.+)$/i);
+      const fieldA = pair?.[1]?.trim() ?? "The start date";
+      const verb = pair?.[3]?.toLowerCase() ?? "after";
+      const fieldB = pair?.[4]?.trim() ?? "the end date";
+      const isAfter = verb === "after" || verb === ">" || verb === ">=";
+      return {
+        title: `${fieldA} must be ${verb} ${fieldB}`,
+        explanation: `${fieldA} must come ${verb} ${fieldB}. Move ${fieldA} ${isAfter ? "to a later date" : "to an earlier date"} (or adjust ${fieldB}), then try again.`,
+        details: [
+          `${fieldA}: currently too ${isAfter ? "early" : "late"} relative to ${fieldB}`,
+          `Check both dates on the record before retrying.`,
+        ],
+        severity: "warning",
+        actions: [
+          {
+            label: "Dismiss",
+            kind: "dismiss" as const,
+            variant: "ghost" as const,
+            run: () => {},
+          },
+        ],
+      };
+    },
+  },
+
   // MANDATORY_MISSING
   {
     code: "MANDATORY_MISSING",

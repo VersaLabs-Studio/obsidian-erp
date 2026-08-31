@@ -21,6 +21,7 @@ import { useFrappeCreate, useFrappeDoc } from "@/hooks/generic";
 import { useGuidedError } from "@/components/errors/GuidedErrorDialog";
 import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
 import { getActiveCompany } from "@/lib/settings/company";
+import { resolvePrefillWarehouses } from "@/lib/stock/warehouse-defaults";
 import { toast } from "sonner";
 import type { WorkOrder, JobCard } from "@/types/doctype-types";
 
@@ -47,6 +48,9 @@ export function CreateJobCardModal({
     "Job Card",
     { showToast: false },
   );
+  // v4.2.1 — while warehouse defaults are being resolved we disable the
+  // create button so a double-click can't fire two identical Job Cards.
+  const [resolvingWarehouses, setResolvingWarehouses] = useState(false);
 
   // 2Y-R3 — Fetch the FULL Work Order doc independently so we always have
   // the `operations` child table, even if the parent's list row doesn't
@@ -95,8 +99,37 @@ export function CreateJobCardModal({
     [woOperations],
   );
 
-  const handleCreate = useCallback(() => {
+  // v4.2.1 — FIX: `wip_warehouse` was taken only from the Work Order doc
+  // (`wo.wip_warehouse || ""`), which sent "" when the WO list-row fallback
+  // was in play (full doc not loaded) or the WO carried no WIP warehouse —
+  // ERPNext then rejected the Job Card with "WIP Warehouse is required".
+  // Warehouses are now resolved IMPLICITLY via the canonical resolver
+  // (saved settings → computed company warehouses → fg fallback), exactly
+  // like the SO cockpit's Work Order create. The modal stays warehouse-free
+  // for the operator; the defaults are applied under the hood.
+  const handleCreate = useCallback(async () => {
     if (!operation || !workstation) return;
+
+    setResolvingWarehouses(true);
+    let wipWarehouse = "";
+    try {
+      const wh = await resolvePrefillWarehouses();
+      const fgWarehouse = wh.fg || "";
+      wipWarehouse = wo.wip_warehouse || wh.wip || fgWarehouse;
+    } catch {
+      wipWarehouse = wo.wip_warehouse || "";
+    }
+    setResolvingWarehouses(false);
+
+    if (!wipWarehouse) {
+      toast.error("Job Card creation failed", {
+        description:
+          "WIP Warehouse is required but no default is configured. Set one in Stock Settings / Manufacturing Settings (warehouse defaults) and try again.",
+        duration: 12_000,
+      });
+      return;
+    }
+
     const payload = {
       naming_series: "JOB-.YYYY.-",
       work_order: wo.name,
@@ -107,7 +140,7 @@ export function CreateJobCardModal({
       for_quantity: Number(wo.qty) || 1,
       bom_no: wo.bom_no || "",
       company: wo.company || getActiveCompany(),
-      wip_warehouse: wo.wip_warehouse || "",
+      wip_warehouse: wipWarehouse,
       posting_date: new Date().toISOString().split("T")[0],
       expected_start_date: new Date().toISOString().slice(0, 19).replace("T", " "),
       employee: employee
@@ -226,13 +259,21 @@ export function CreateJobCardModal({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleCreate} disabled={!operation || !workstation || createMutation.isPending}>
-            {createMutation.isPending ? (
+          <Button
+            onClick={handleCreate}
+            disabled={
+              !operation ||
+              !workstation ||
+              createMutation.isPending ||
+              resolvingWarehouses
+            }
+          >
+            {createMutation.isPending || resolvingWarehouses ? (
               <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
             ) : (
               <Plus className="mr-1.5 h-4 w-4" />
             )}
-            Create Job Card
+            {resolvingWarehouses ? "Resolving…" : "Create Job Card"}
           </Button>
         </DialogFooter>
       </DialogContent>

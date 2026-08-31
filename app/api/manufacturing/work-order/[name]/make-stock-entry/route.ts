@@ -33,111 +33,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { frappeClient } from "@/lib/frappe-client";
 import { getRequestClient } from "@/lib/auth/resolve-user";
-
-const MAKE_STOCK_ENTRY =
-  "erpnext.manufacturing.doctype.work_order.work_order.make_stock_entry";
+// 2Y-R5 — doc building (ERPNext's own make_stock_entry + implicit warehouse
+// backfill) now lives in the shared builder so the START/STOP lifecycle route
+// reuses the exact same logic. Semantics unchanged from this route's 2P
+// live-fix version; only the submission flow ("insert+submit in one shot")
+// stays route-local here.
+import {
+  buildAndSubmitStockEntry,
+  extractRawMessage,
+} from "@/lib/manufacturing/stock-entry-builder";
 
 const ALLOWED_PURPOSES = new Set([
   "Material Transfer for Manufacture",
   "Manufacture",
 ]);
-
-// ---------------------------------------------------------------------------
-// 2Y-R2 P5 — Implicit warehouse backfill
-// ---------------------------------------------------------------------------
-// ERPNext's make_stock_entry copies warehouses FROM the Work Order into the SE
-// rows. When the WO was created without a wip/fg warehouse (older WOs, or WOs
-// made outside the SO cockpit), those rows come back with an empty
-// `t_warehouse`, and `validate_warehouse` throws
-// "Target warehouse is mandatory for row N". Rather than force the user to pick
-// a warehouse, we resolve the canonical company warehouses server-side and
-// fill ONLY the blanks — never overwriting anything ERPNext set. This keeps
-// warehouse selection fully implicit at the exact point production starts.
-
-/** Extract the company abbr from any warehouse name on the built SE
- *  (e.g. "Stores - P" → "P"). Used as a fallback when the Company lookup
- *  fails; the SE rows already carry live, correctly-suffixed names. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function abbrFromDoc(seDoc: any): string {
-  const rows: any[] = Array.isArray(seDoc?.items) ? seDoc.items : [];
-  const candidates = [
-    ...rows.map((r) => r?.s_warehouse),
-    ...rows.map((r) => r?.t_warehouse),
-    seDoc?.from_warehouse,
-    seDoc?.to_warehouse,
-  ];
-  for (const wn of candidates) {
-    if (typeof wn === "string" && wn.includes(" - ")) {
-      return wn.slice(wn.lastIndexOf(" - ") + 3);
-    }
-  }
-  return String(seDoc?.company ?? "").slice(0, 3).toUpperCase();
-}
-
-/** Resolve the canonical `<Kind> - <abbr>` manufacturing warehouses for the
- *  company. Mirrors /api/stock/warehouses/defaults: abbr comes from the
- *  Company doc, with the SE's own warehouse suffix as a fallback. */
-async function resolveCompanyWarehouseNames(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  client: any,
-  company: string,
-  fallbackAbbr: string,
-): Promise<{ wip: string; fg: string; stores: string; rawMaterials: string }> {
-  let abbr = fallbackAbbr;
-  try {
-    const resp = await client.call.get("frappe.client.get_value", {
-      doctype: "Company",
-      filters: JSON.stringify({ name: company }),
-      fieldname: "abbr",
-    });
-    const got = (resp?.message ?? resp)?.abbr;
-    if (got) abbr = String(got);
-  } catch {
-    // Company lookup failed — keep the abbr derived from the SE doc.
-  }
-  return {
-    wip: `Work In Progress - ${abbr}`,
-    fg: `Finished Goods - ${abbr}`,
-    stores: `Stores - ${abbr}`,
-    rawMaterials: `Raw Materials - ${abbr}`,
-  };
-}
-
-/** Fill blank warehouses on the ERPNext-built SE, purpose-aware. Transfers
- *  move every row to WIP; Manufacture only targets the finished/scrap rows. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function backfillWarehouses(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  seDoc: any,
-  purpose: string,
-  wh: { wip: string; fg: string; stores: string; rawMaterials: string },
-): void {
-  const isTransfer = purpose === "Material Transfer for Manufacture";
-  const target = isTransfer ? wh.wip || wh.fg : wh.fg || wh.wip;
-  const source = wh.stores || wh.rawMaterials || wh.wip;
-
-  const rows: any[] = Array.isArray(seDoc?.items) ? seDoc.items : [];
-  for (const row of rows) {
-    if (isTransfer) {
-      // Every row is RM → WIP: both endpoints must be present.
-      if (!row.t_warehouse) row.t_warehouse = target;
-      if (!row.s_warehouse) row.s_warehouse = source;
-    } else {
-      // Manufacture: only finished/scrap rows carry a target warehouse;
-      // consumption rows keep a source only (t_warehouse stays empty).
-      if ((row.is_finished_item || row.is_scrap_item) && !row.t_warehouse) {
-        row.t_warehouse = target;
-      }
-      if (!row.is_finished_item && !row.is_scrap_item && !row.s_warehouse) {
-        row.s_warehouse = wh.wip || source;
-      }
-    }
-  }
-
-  // Header defaults ERPNext uses to fill any row it re-derives on validate.
-  if (isTransfer && !seDoc.from_warehouse) seDoc.from_warehouse = source;
-  if (!seDoc.to_warehouse) seDoc.to_warehouse = target;
-}
 
 export async function POST(
   request: NextRequest,
@@ -189,65 +98,29 @@ export async function POST(
       );
     }
 
-    // 1) Ask ERPNext to BUILD the Stock Entry — the same call the desk
-    //    Start/Finish buttons make. `qty` is the fg_completed_qty (the qty to
-    //    transfer/manufacture); when omitted ERPNext defaults to the WO's
-    //    remaining qty. The returned dict is unsaved and fully linked.
-    const args: Record<string, unknown> = {
-      work_order_id: workOrderId,
-      purpose,
-    };
-    if (typeof body.qty === "number" && body.qty > 0) {
-      args.qty = body.qty;
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const built: any = await (client.call as any).get(MAKE_STOCK_ENTRY, args);
-    const seDoc = built?.message ?? built;
-    if (!seDoc || typeof seDoc !== "object") {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Empty draft from ERPNext",
-          details: `make_stock_entry returned no document for '${workOrderId}'.`,
-          statusCode: 502,
-        },
-        { status: 502 },
-      );
-    }
-
-    // 1b) Backfill any warehouse ERPNext left blank because the source Work
-    //     Order carried no wip/fg warehouse. Without this, `validate_warehouse`
-    //     throws "Target warehouse is mandatory for row N" on submit. We only
-    //     fill blanks, using the canonical company warehouses, so warehouse
-    //     selection stays implicit and automated.
-    const wh = await resolveCompanyWarehouseNames(
+    // 1+2) Build + submit via the shared builder. 2Y-R6 — UOM fraction blocks
+    //    are resolved IMPLICITLY (flag flip + retry) instead of erroring.
+    //    on_submit then runs `update_work_order_qty()` with the proper
+    //    linkage, so the WO flips to "In Process" (transfer) / "Completed"
+    //    (manufacture).
+    const { name: seName, fixedUoms } = await buildAndSubmitStockEntry(
       client,
-      String(seDoc.company ?? ""),
-      abbrFromDoc(seDoc),
+      workOrderId,
+      purpose as "Material Transfer for Manufacture" | "Manufacture",
+      typeof body.qty === "number" && body.qty > 0 ? body.qty : undefined,
     );
-    backfillWarehouses(seDoc, purpose, wh);
-
-    // 2) Insert + submit the fully-formed doc in one server call. ERPNext's
-    //    `frappe.client.submit` parses the doc, `get_doc()`s it, and submits —
-    //    inserting first because it's new. on_submit then runs
-    //    `update_work_order_qty()` with the proper linkage, so the WO flips to
-    //    "In Process" (transfer) / "Completed" (manufacture).
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const submitted: any = await (client.call as any).post("frappe.client.submit", {
-      doc: JSON.stringify(seDoc),
-    });
-    const result = submitted?.message ?? submitted;
-    const seName: string | undefined = result?.name;
 
     return NextResponse.json(
       {
         success: true,
         data: { name: seName ?? null, purpose },
         message:
-          purpose === "Manufacture"
+          (purpose === "Manufacture"
             ? "Production finished — finished goods declared."
-            : "Production started — materials transferred to WIP.",
+            : "Production started — materials transferred to WIP.") +
+          (fixedUoms.length > 0
+            ? ` (Auto-enabled fractional quantities for UOM: ${fixedUoms.join(", ")})`
+            : ""),
       },
       { status: 201 },
     );
@@ -255,9 +128,11 @@ export async function POST(
     // 2S Part 1 — graceful error for UOM fraction constraint. ERPNext raises
     // "Quantity (0.6) cannot be a fraction. To allow this, disable 'Must be
     // Whole Number' in UOM." when a BOM raw material has a fractional qty but
-    // its UOM has must_be_whole_number = 1. Surface a guided error with a deep
-    // link to Stock → Settings → UOM instead of the generic "Something went wrong."
-    const errMessage = error instanceof Error ? error.message : String(error);
+    // its UOM has must_be_whole_number = 1. 2Y-R6 — this is now only the
+    // FALLBACK: buildAndSubmitStockEntry resolves it implicitly first; we get
+    // here when the UOM couldn't be unlocked (e.g. permissions). Surface a
+    // guided error with a deep link to Stock → Settings → UOM.
+    const errMessage = extractRawMessage(error);
     if (
       errMessage.includes("cannot be a fraction") ||
       errMessage.includes("Must be Whole Number")

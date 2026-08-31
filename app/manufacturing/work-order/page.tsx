@@ -3,8 +3,10 @@
 // app/manufacturing/work-order/page.tsx
 // Work Order List — KPICard + StatusBadge + card grid. OKLCH semantic tokens only.
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { motion } from "framer-motion";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -21,6 +23,7 @@ import {
   CheckCircle2,
   Clock,
   ArrowRight,
+  Loader2,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -61,28 +64,67 @@ function WorkOrderCard({
   onView,
   onEdit,
   onDelete,
+  onSelect,
+  onStart,
+  onFinish,
+  isSelected,
 }: {
   wo: WorkOrder;
   index: number;
   onView: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onSelect?: (wo: WorkOrder) => void;
+  onStart?: (wo: WorkOrder) => void;
+  onFinish?: (wo: WorkOrder) => void;
+  isSelected?: boolean;
 }) {
   const displayStatus = getDisplayStatus(wo);
   const isDraft = wo.docstatus === 0;
   const progress = wo.qty > 0 ? ((wo.produced_qty || 0) / wo.qty) * 100 : 0;
 
   return (
-    <div
+    <motion.div
+      variants={{
+        hidden: { opacity: 0, y: 20 },
+        show: { opacity: 1, y: 0, transition: { duration: 0.3, ease: [0.25, 0.1, 0.25, 1] } },
+      }}
+      initial="hidden"
+      animate="show"
       className={cn(
         "group relative bg-card rounded-2xl border border-border/50",
         "hover:border-primary/20 hover:shadow-xl hover:shadow-primary/5",
-        "transition-all duration-300 cursor-pointer overflow-hidden",
-        "animate-slide-up",
+        "transition-all duration-300 overflow-hidden",
       )}
       style={{ animationDelay: `${index * 40}ms` }}
       onClick={onView}
     >
+      {/* Checkbox for bulk selection */}
+      {onSelect && (
+        <div
+          className="absolute top-3 left-3 z-10"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <label className="flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={isSelected ?? false}
+              onChange={() => onSelect(wo)}
+              className="sr-only"
+            />
+            <div className={cn(
+              "w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors",
+              isSelected
+                ? "bg-primary border-primary"
+                : "border-muted-foreground/30 bg-card/80",
+            )}>
+              {isSelected && (
+                <CheckCircle2 className="h-3.5 w-3.5 text-primary-foreground" />
+              )}
+            </div>
+          </label>
+        </div>
+      )}
       <div className="p-5">
         <div className="flex items-start justify-between mb-4">
           <div className="space-y-1">
@@ -214,8 +256,38 @@ function WorkOrderCard({
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+
+        {/* E3 — Card footer: Start / Finish quick actions */}
+        <div className="pt-3 border-t border-border/30 flex items-center gap-2 px-5 pb-4">
+          {displayStatus === "Not Started" && onStart && (
+            <Button
+              size="sm"
+              variant="outline"
+              className={cn("h-8 text-xs flex-1", "border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10 dark:text-emerald-400")}
+              onClick={(e) => {
+                e.stopPropagation();
+                onStart(wo);
+              }}
+            >
+              <Play className="mr-1.5 h-3 w-3" /> Start
+            </Button>
+          )}
+          {displayStatus === "In Process" && onFinish && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs flex-1 border-blue-500/30 text-blue-600 hover:bg-blue-500/10 dark:text-blue-400"
+              onClick={(e) => {
+                e.stopPropagation();
+                onFinish(wo);
+              }}
+            >
+              <CheckCircle2 className="mr-1.5 h-3 w-3" /> Finish
+            </Button>
+          )}
+        </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -224,6 +296,10 @@ export default function WorkOrderListPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [deleteTarget, setDeleteTarget] = useState<WorkOrder | null>(null);
+  // E3 — Bulk selection for Start Selected / Finish Selected operations.
+  const [selectedWos, setSelectedWos] = useState<Set<string>>(new Set());
+  const [bulkStarting, setBulkStarting] = useState(false);
+  const [bulkFinishing, setBulkFinishing] = useState(false);
 
   const {
     data: workOrders,
@@ -289,6 +365,77 @@ export default function WorkOrderListPage() {
     if (!deleteTarget) return;
     await deleteMutation.mutateAsync(deleteTarget.name);
   };
+
+  // E3 — Bulk selection toggles
+  const handleToggleSelect = useCallback((wo: WorkOrder) => {
+    setSelectedWos((prev) => {
+      const next = new Set(prev);
+      if (next.has(wo.name)) {
+        next.delete(wo.name);
+      } else {
+        next.add(wo.name);
+      }
+      return next;
+    });
+  }, []);
+
+  // E3 — Bulk start all selected WOs via /start API
+  const handleBulkStartAll = useCallback(async () => {
+    setBulkStarting(true);
+    try {
+      const items = workOrders?.filter((w) => selectedWos.has(w.name)) ?? [];
+      for (const wo of items) {
+        try {
+          const res = await fetch(`/api/manufacturing/work-order/${encodeURIComponent(wo.name)}/start`, {
+            method: "POST",
+          });
+          if (res.ok) {
+            toast.success(`Work Order ${wo.name} started`, {
+              description: "Production is now in progress.",
+            });
+          } else {
+            const data = await res.json().catch(() => ({}));
+            toast.error(`Failed to start ${wo.name}: ${data?.error || "Unknown error"}`);
+          }
+        } catch {
+          toast.error(`Failed to start ${wo.name}`);
+        }
+      }
+      setSelectedWos(new Set());
+      refetch();
+    } finally {
+      setBulkStarting(false);
+    }
+  }, [selectedWos, workOrders, refetch]);
+
+  // E3 — Inline start on individual card
+  const handleCardStart = useCallback((wo: WorkOrder) => {
+    setSelectedWos((prev) => {
+      const next = new Set(prev);
+      next.add(wo.name);
+      return next;
+    });
+    handleToggleSelect(wo);
+    // Trigger direct start
+    fetch(`/api/manufacturing/work-order/${encodeURIComponent(wo.name)}/start`, {
+      method: "POST",
+    })
+      .then((res) => {
+        if (res.ok) {
+          toast.success(`Work Order ${wo.name} started`);
+        } else {
+          toast.error(`Failed to start ${wo.name}`);
+        }
+      })
+      .catch(() => toast.error(`Failed to start ${wo.name}`))
+      .finally(() => refetch());
+  }, [refetch]);
+
+  const handleCardFinish = useCallback((wo: WorkOrder) => {
+    toast.info(`Mark ${wo.name} as finished from its detail page`, {
+      duration: 3000,
+    });
+  }, []);
 
   if (isLoading) return <LoadingState type="cards" count={6} />;
 
@@ -389,6 +536,10 @@ export default function WorkOrderListPage() {
                 router.push(`/manufacturing/work-order/${encodeURIComponent(wo.name)}/edit`)
               }
               onDelete={() => setDeleteTarget(wo)}
+              onSelect={handleToggleSelect}
+              onStart={handleCardStart}
+              onFinish={handleCardFinish}
+              isSelected={selectedWos.has(wo.name)}
             />
           ))}
         </div>
@@ -404,6 +555,43 @@ export default function WorkOrderListPage() {
         onConfirm={handleDeleteConfirm}
         loading={deleteMutation.isPending}
       />
+
+      {/* E3 — Bulk Start Selected bar */}
+      {selectedWos.size > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50"
+        >
+          <div className="bg-card border border-border/60 shadow-2xl rounded-2xl px-5 py-3 flex items-center gap-4">
+            <span className="text-sm font-medium text-foreground whitespace-nowrap">
+              {selectedWos.size} selected
+            </span>
+            <Button
+              size="sm"
+              variant="default"
+              onClick={handleBulkStartAll}
+              disabled={bulkStarting}
+              className="rounded-full shadow-lg shadow-emerald-500/20"
+            >
+              {bulkStarting ? (
+                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+              ) : (
+                <Play className="mr-1.5 h-4 w-4" />
+              )}
+              Start Selected
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setSelectedWos(new Set())}
+              className="rounded-full"
+            >
+              Clear
+            </Button>
+          </div>
+        </motion.div>
+      )}
     </div>
   );
 }

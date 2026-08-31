@@ -224,12 +224,11 @@ describe("Purchase Receipt — Phase 2H module availability", () => {
     expect(result.valid).toBe(true);
   });
 
-  it("Purchase Receipt step2 requires warehouse per item", () => {
+  it("Purchase Receipt step2 does NOT require warehouse per item (implicit backfill)", () => {
     const result = validateWizardStep("Purchase Receipt", "step2", {
       items: [{ item_code: "ITEM-001", qty: 5, rate: 10 }],
     });
-    expect(result.valid).toBe(false);
-    expect(result.errors["items.0.warehouse"]).toBeDefined();
+    expect(result.valid).toBe(true);
   });
 });
 

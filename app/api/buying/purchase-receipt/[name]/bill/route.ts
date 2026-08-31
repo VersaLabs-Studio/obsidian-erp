@@ -27,6 +27,33 @@ function resetPaymentSchedule(doc: any): void {
   doc.payment_due_date = null;
 }
 
+/** 2Y-R3 — If the PI links back to a Purchase Order that is still a draft,
+ *  ERPNext's `check_prev_docstatus` rejects the PI submit with "Purchase
+ *  Order X is not submitted". Submit the PO first so the bill can land.
+ *  The PO link lives on BOTH the PI header (`purchase_order`) and on each
+ *  item row (`items[].purchase_order`) — ERPNext checks the item-level link,
+ *  so we must scan both. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function ensurePOLinkSubmitted(client: any, piDoc: any): Promise<void> {
+  const poNames = new Set<string>();
+  if (piDoc?.purchase_order) poNames.add(String(piDoc.purchase_order));
+  for (const row of Array.isArray(piDoc?.items) ? piDoc.items : []) {
+    if (row?.purchase_order) poNames.add(String(row.purchase_order));
+  }
+  for (const poName of poNames) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const po: any = await (client.call as any).get("frappe.client.get", {
+      doctype: "Purchase Order",
+      name: poName,
+    });
+    const doc = po?.message ?? po;
+    if (!doc || doc.docstatus === 1) continue; // already submitted (or missing)
+    await (client.call as any).post("frappe.client.submit", {
+      doc: JSON.stringify({ doctype: "Purchase Order", name: poName }),
+    });
+  }
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ name: string }> },
@@ -76,6 +103,10 @@ export async function POST(
       );
     }
     resetPaymentSchedule(piDoc);
+
+    // 2Y-R3 — If the PI links to a Purchase Order (header or item row) that
+    // is still a draft, submit it first (ERPNext rejects the PI otherwise).
+    await ensurePOLinkSubmitted(client, piDoc);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const submittedPI: any = await (client.call as any).post(

@@ -212,14 +212,19 @@ interface NotifyOptions {
  * for any CRUD/operation event that should appear in the notification panel.
  */
 export function notify(kind: NotifyKind, opts: NotifyOptions): void {
-  // 1. Fire the ephemeral toast
+  // 1. Fire the ephemeral toast. 2Y-R5 P10 — surface `detail` as the sonner
+  // `description`. Previously the detail (e.g. Frappe's "Date of Joining must
+  // be after Date of Birth") was persisted ONLY to the notification panel,
+  // so the visible toast said just "Failed to create Employee" with no
+  // resolution message — the operator had to open the panel to learn why.
   const duration = opts.duration ?? (kind === "error" ? 6000 : 4000);
+  const description = opts.detail;
   if (kind === "success") {
-    sonnerToast.success(opts.message, { duration });
+    sonnerToast.success(opts.message, { duration, description });
   } else if (kind === "error") {
-    sonnerToast.error(opts.message, { duration });
+    sonnerToast.error(opts.message, { duration, description });
   } else {
-    sonnerToast.info(opts.message, { duration });
+    sonnerToast.info(opts.message, { duration, description });
   }
 
   // 2. Persist to the notification store (panel)

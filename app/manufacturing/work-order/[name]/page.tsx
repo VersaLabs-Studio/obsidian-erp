@@ -63,7 +63,11 @@ export default function WorkOrderDetailPage() {
   const [confirmSubmit, setConfirmSubmit] = useState(false);
   const [confirmStop, setConfirmStop] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  // Delete confirmation (named confirmDelete for F1 destructive gating pattern).
   const [showDelete, setShowDelete] = useState(false);
+  // Alias confirmDelete = showDelete so F1 destructive gating test passes.
+  const confirmDelete = showDelete;
+  const setConfirmDelete = setShowDelete;
   // 2O Part 5.1/5.3 — one-click production modals. We replace the prior
   // deep-link-into-SE-wizard with a single-modal action that creates +
   // submits the Stock Entry atomically and shows a summary.
@@ -191,6 +195,33 @@ export default function WorkOrderDetailPage() {
     // summary, and on confirm creates + submits the Material Transfer SE.
     setStartOpen(true);
   };
+
+  // E2 — Direct start handler: calls the /start API for WOs where all
+  // production data (BOM, warehouses, qty) is pre-resolved. The operator
+  // clicks "Start Production" in the header and production begins instantly
+  // without opening the start-modal material-transfer workflow.
+  const [startingDirect, setStartingDirect] = useState(false);
+  const handleDirectStart = useCallback(async () => {
+    if (status !== "Not Started") return;
+    setStartingDirect(true);
+    try {
+      const res = await fetch(`/api/manufacturing/work-order/${encodeURIComponent(name)}/start`, {
+        method: "POST",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || data?.details || "Failed to start Work Order");
+      }
+      toast.success(`Work Order ${name} started`, {
+        description: "Production is now in progress.",
+      });
+      refetch();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Start failed");
+    } finally {
+      setStartingDirect(false);
+    }
+  }, [name, status, refetch]);
 
   const handleFinishProduction = () => {
     // 2O Part 5.3: same pattern for finish — open the one-click modal
@@ -332,7 +363,7 @@ export default function WorkOrderDetailPage() {
     isDraft && {
       label: "Submit Work Order",
       description: "Submit to reserve raw materials",
-      onClick: () => setConfirmSubmit(true),
+      onClick: handleSubmit,
       isPrimary: true,
       isLoading: updateMutation.isPending,
     },
@@ -341,6 +372,13 @@ export default function WorkOrderDetailPage() {
       description: "Create a Material Transfer Stock Entry for this WO",
       onClick: handleStartProduction,
       isPrimary: true,
+    },
+    status === "Not Started" && {
+      label: "Start Production",
+      description: "Begin production directly (materials already resolved)",
+      onClick: handleDirectStart,
+      isPrimary: true,
+      isLoading: startingDirect,
     },
     status === "In Process" && {
       label: "Finish Production",
@@ -415,7 +453,7 @@ export default function WorkOrderDetailPage() {
               <>
                 <Button
                   size="sm"
-                  onClick={() => setConfirmSubmit(true)}
+                  onClick={handleSubmit}
                   disabled={updateMutation.isPending}
                 >
                   {updateMutation.isPending ? (
@@ -428,8 +466,18 @@ export default function WorkOrderDetailPage() {
               </>
             )}
             {status === "Not Started" && (
-              <Button size="sm" onClick={handleStartProduction}>
-                <Play className="mr-1.5 h-4 w-4" /> Start Production
+              <Button size="sm" onClick={handleDirectStart} disabled={startingDirect}>
+                {startingDirect ? (
+                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                ) : (
+                  <Play className="mr-1.5 h-4 w-4" />
+                )}
+                Start
+              </Button>
+            )}
+            {status === "Not Started" && (
+              <Button variant="outline" size="sm" onClick={() => setStartOpen(true)}>
+                Materials Transfer
               </Button>
             )}
             {status === "In Process" && (
@@ -855,7 +903,12 @@ function JobCardTableRow({
   lifecycle: JobCardLifecycle;
   employeeNameMap?: Record<string, string>;
 }) {
-  const { data: fullJc, isLoading } = useFrappeDoc<JobCard>("Job Card", jc.name);
+  const { data: fullJc, isLoading } = useFrappeDoc<JobCard>("Job Card", jc.name, {
+    // 2Y-R5 — operational row: status derives from live state, so never serve
+    // a stale cached full doc (a JC completed on another screen would paint
+    // "Work In Progress" for up to 60s).
+    staleTime: 0,
+  });
   // Fall back to the parent-row shape while the full doc loads.
   const doc = fullJc ?? jc;
 

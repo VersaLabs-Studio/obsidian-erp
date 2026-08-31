@@ -22,6 +22,45 @@ import { getRequestClient } from "@/lib/auth/resolve-user";
 const MAKE_PURCHASE_ORDER =
   "erpnext.stock.doctype.material_request.material_request.make_purchase_order";
 
+// 2Y-R3 — Warehouse backfill for PO items when the MR has no warehouse.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function backfillPOWarehouses(poDoc: any, storesWarehouse: string): void {
+  if (!storesWarehouse) return;
+  const rows: any[] = Array.isArray(poDoc?.items) ? poDoc.items : [];
+  for (const row of rows) {
+    if (!row.warehouse) row.warehouse = storesWarehouse;
+  }
+  if (!poDoc.set_warehouse) poDoc.set_warehouse = storesWarehouse;
+}
+
+// 2Y-R3 — Resolve the receiving warehouse for backfill. Honors the UI
+// warehouse-defaults setting (Stock Settings.default_warehouse) first, then
+// falls back to the canonical "Stores - <abbr>" name.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function resolveReceivingWarehouse(client: any, company: string): Promise<string> {
+  try {
+    const stockResp: any = await (client.call as any).get(
+      "frappe.client.get_value",
+      { doctype: "Stock Settings", filters: { name: "Stock Settings" }, fieldname: "default_warehouse" },
+    );
+    const saved = (stockResp?.message ?? stockResp)?.default_warehouse as string | undefined;
+    if (saved) return saved;
+  } catch {
+    /* best-effort */
+  }
+  try {
+    const companyResp: any = await (client.call as any).get(
+      "frappe.client.get_value",
+      { doctype: "Company", filters: { name: company }, fieldname: "abbr" },
+    );
+    const abbr = (companyResp?.message ?? companyResp)?.abbr as string | undefined;
+    if (abbr) return `Stores - ${abbr}`;
+  } catch {
+    /* best-effort */
+  }
+  return "";
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ name: string }> },
@@ -88,6 +127,11 @@ export async function POST(
         { status: 422 },
       );
     }
+
+    // 2Y-R3 — Backfill warehouse on PO items (the MR might not have one).
+    // Honors the UI warehouse-defaults setting, canonical fallback second.
+    const storesWarehouse = await resolveReceivingWarehouse(client, poDoc.company);
+    backfillPOWarehouses(poDoc, storesWarehouse);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const submittedPO: any = await (client.call as any).post(

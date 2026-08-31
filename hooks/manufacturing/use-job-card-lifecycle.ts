@@ -16,6 +16,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useFrappeUpdate } from "@/hooks/generic";
 import type { JobCard } from "@/types/doctype-types";
 import { toast } from "sonner";
@@ -36,126 +37,136 @@ export function useJobCardLifecycle(
   onChanged: () => void | Promise<void>,
   showError: (resolution: GuidedResolution) => void,
 ): JobCardLifecycle {
-  const assignJCMutation = useFrappeUpdate<JobCard>("Job Card", { showToast: false });
-  const lifecycleJCMutation = useFrappeUpdate<JobCard>("Job Card", { showToast: false });
-  const wsJCMutation = useFrappeUpdate<JobCard>("Job Card", { showToast: false });
   const [activeJc, setActiveJc] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
+  // 2Y-R5 P8 — After ANY successful JC mutation, drop every cached Job Card /
+  // Work Order query by doctype prefix and force mounted observers to refetch.
+  // The Start/Complete path goes through raw fetch (no useFrappeMutation), so
+  // without this the SO cockpit / WO detail kept pre-mutation statuses until a
+  // manual browser refresh. Centralized HERE so every caller inherits correct
+  // cache behavior (`refetchType: "all"` hits active full-doc queries like
+  // ["Job Card","doc",name] that belong to no list key).
+  const invalidateLifecycleCaches = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: ["Job Card"], refetchType: "all" });
+    await queryClient.invalidateQueries({ queryKey: ["Work Order"], refetchType: "all" });
+  }, [queryClient]);
+
+  // Assign-workstation still uses the generic REST PUT — a simple top-level
+  // field write (no child-row update). Employee assignment and Start/Complete
+  // go through the server lifecycle route (see below).
+  const wsJCMutation = useFrappeUpdate<JobCard>("Job Card", { showToast: false });
+
+  // v4.2.1 — Start/Complete now go through the server lifecycle route
+  // (/api/manufacturing/job-card/[name]/lifecycle) which fetches the FRESH doc
+  // and closes the open time_log by name via frappe.client.set. The previous
+  // REST PUT (db.updateDoc) silently failed to update the existing child row,
+  // so Complete returned 200 but the status stayed "Work In Progress".
+  const lifecycle = useCallback(
+    async (jc: JobCard, action: "start" | "complete") => {
+      setActiveJc(jc.name);
+      try {
+        const res = await fetch(
+          `/api/manufacturing/job-card/${encodeURIComponent(jc.name)}/lifecycle`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action }),
+          },
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.success) {
+          throw new Error(
+            data?.details || data?.error || `Failed to ${action} Job Card`,
+          );
+        }
+        toast.success(
+          `Job Card ${jc.name} ${action === "start" ? "started" : "completed"}`,
+        );
+        // 2Y-R6 — the lifecycle route auto-completes the parent WO when this
+        // was its last open Job Card. Celebrate it so the operator isn't
+        // surprised by the WO flipping to Completed.
+        if (data?.workOrderAutoCompleted?.workOrder) {
+          toast.success(
+            `Work Order ${data.workOrderAutoCompleted.workOrder} auto-completed`,
+            { description: "All Job Cards are done — finished goods declared." },
+          );
+        } else if (data?.autoCompleteError) {
+          toast.warning(
+            "Work Order could not be completed automatically",
+            { description: `${data.autoCompleteError} — use Complete Work Order manually.` },
+          );
+        }
+        await onChanged();
+        await invalidateLifecycleCaches();
+      } catch (err) {
+        showError(resolveFrappeError(err, { doctype: "Job Card" }));
+      } finally {
+        setActiveJc(null);
+      }
+    },
+    [onChanged, showError, invalidateLifecycleCaches],
+  );
+
+  // 2Y-R6b — Employee assignment ALSO goes through the server lifecycle route
+  // now. The generic REST PUT fails on SUBMITTED Job Cards ("No permission for
+  // Job Card Time Log") when replacing the employee table with fresh rows; the
+  // route swaps the link in place on the existing row instead. REPLACE
+  // semantics: one operator per Job Card.
   const handleAssignEmployee = useCallback(
-    (jc: JobCard, employeeId: string, employeeName?: string) => {
+    async (jc: JobCard, employeeId: string, employeeName?: string) => {
       if (!employeeId) return;
-      const existing = (Array.isArray(jc.employee) ? jc.employee : [])
+      const existingIds = (Array.isArray(jc.employee) ? jc.employee : [])
         .map((r) =>
           typeof r === "object" && r && "employee" in r
             ? (r as { employee: string }).employee
             : null,
         )
         .filter(Boolean) as string[];
-      if (existing.includes(employeeId)) {
+      if (existingIds.length === 1 && existingIds[0] === employeeId) {
         toast.info(`${employeeName || employeeId} is already assigned to ${jc.name}.`);
         return;
       }
-      // 2X P0-D — include employee_name so the chip shows the name, not the ID.
-      const rows = [...existing, employeeId].map((id) => ({
-        employee: id,
-        employee_name: id === employeeId && employeeName ? employeeName : undefined,
-      }));
       setActiveJc(jc.name);
-      assignJCMutation.mutate(
-        { name: jc.name, data: { employee: rows } },
-        {
-          onSuccess: async () => {
-            toast.success(`Assigned ${employeeName || employeeId} to ${jc.name}`);
-            await onChanged();
-            setActiveJc(null);
+      try {
+        const res = await fetch(
+          `/api/manufacturing/job-card/${encodeURIComponent(jc.name)}/lifecycle`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "assign_employee",
+              employeeId,
+              employeeName,
+            }),
           },
-          onError: (err) => {
-            setActiveJc(null);
-            showError(resolveFrappeError(err, { doctype: "Job Card" }));
-          },
-        },
-      );
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.success) {
+          throw new Error(
+            data?.details || data?.error || "Failed to assign employee",
+          );
+        }
+        toast.success(`Assigned ${employeeName || employeeId} to ${jc.name}`);
+        await onChanged();
+        await invalidateLifecycleCaches();
+      } catch (err) {
+        showError(resolveFrappeError(err, { doctype: "Job Card" }));
+      } finally {
+        setActiveJc(null);
+      }
     },
-    [assignJCMutation, onChanged, showError],
+    [onChanged, showError, invalidateLifecycleCaches],
   );
 
   const handleStartJob = useCallback(
-    (jc: JobCard) => {
-      const employees = Array.isArray(jc.employee) ? jc.employee : [];
-      if (employees.length === 0) {
-        toast.error("Assign an employee before starting this Job Card.");
-        return;
-      }
-      const employeeId = (employees[0] as { employee?: string })?.employee || "";
-      const existingLogs = Array.isArray(jc.time_logs) ? jc.time_logs : [];
-      const newTimeLog = {
-        employee: employeeId,
-        from_time: new Date().toISOString().slice(0, 19).replace("T", " "),
-        completed_qty: 0,
-      };
-      setActiveJc(jc.name);
-      lifecycleJCMutation.mutate(
-        {
-          name: jc.name,
-          data: {
-            status: "Work In Progress",
-            time_logs: [...(existingLogs as unknown[]), newTimeLog],
-          },
-        },
-        {
-          onSuccess: async () => {
-            toast.success(`Job Card ${jc.name} started`);
-            await onChanged();
-            setActiveJc(null);
-          },
-          onError: (err) => {
-            setActiveJc(null);
-            showError(resolveFrappeError(err, { doctype: "Job Card" }));
-          },
-        },
-      );
-    },
-    [lifecycleJCMutation, onChanged, showError],
+    (jc: JobCard) => lifecycle(jc, "start"),
+    [lifecycle],
   );
 
   const handleCompleteJob = useCallback(
-    (jc: JobCard) => {
-      const now = new Date().toISOString().slice(0, 19).replace("T", " ");
-      const forQty = Number(jc.for_quantity ?? 0);
-      const existingLogs = Array.isArray(jc.time_logs)
-        ? (jc.time_logs as Array<Record<string, unknown>>)
-        : [];
-      const updatedLogs = existingLogs.map((log, idx) => {
-        const isOpen = !log.to_time;
-        if (isOpen || idx === existingLogs.length - 1) {
-          return { ...log, to_time: now, completed_qty: forQty };
-        }
-        return log;
-      });
-      setActiveJc(jc.name);
-      lifecycleJCMutation.mutate(
-        {
-          name: jc.name,
-          data: {
-            status: "Completed",
-            total_completed_qty: forQty,
-            time_logs: updatedLogs,
-          },
-        },
-        {
-          onSuccess: async () => {
-            toast.success(`Job Card ${jc.name} completed`);
-            await onChanged();
-            setActiveJc(null);
-          },
-          onError: (err) => {
-            setActiveJc(null);
-            showError(resolveFrappeError(err, { doctype: "Job Card" }));
-          },
-        },
-      );
-    },
-    [lifecycleJCMutation, onChanged, showError],
+    (jc: JobCard) => lifecycle(jc, "complete"),
+    [lifecycle],
   );
 
   const handleAssignWorkstation = useCallback(
@@ -168,16 +179,17 @@ export function useJobCardLifecycle(
           onSuccess: async () => {
             toast.success(`Workstation ${workstation} assigned to ${jc.name}`);
             await onChanged();
+            await invalidateLifecycleCaches();
             setActiveJc(null);
           },
-          onError: (err) => {
+          onError: () => {
             setActiveJc(null);
-            showError(resolveFrappeError(err, { doctype: "Job Card" }));
+            showError(resolveFrappeError(new Error("Failed to assign workstation"), { doctype: "Job Card" }));
           },
         },
       );
     },
-    [wsJCMutation, onChanged, showError],
+    [wsJCMutation, onChanged, showError, invalidateLifecycleCaches],
   );
 
   return {

@@ -156,15 +156,6 @@ const navigation = [
         href: "/buying/purchase-order",
         icon: ClipboardList,
       },
-      // 2R Part 8 — RFQ: the module is implemented (list/new/detail pages
-      // exist) but absent from the sidebar. Wire it in between PO and PR
-      // (the natural procure-to-pay order: request quotations → order →
-      // receive → invoice).
-      {
-        title: "Requests for Quotation",
-        href: "/buying/request-for-quotation",
-        icon: FileText,
-      },
       // Procure-to-pay continues: receive goods, then bill them. Both
       // pages live in their owning modules (stock / accounting) but the
       // buyer's workflow runs through here, so we surface them in Buying.

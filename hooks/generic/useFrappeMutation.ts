@@ -157,6 +157,15 @@ export function useFrappeMutation<TData = unknown, TVariables = unknown>(
         queryKey: [getApiPath(doctype)],
         refetchType: "all",
       });
+      // 2Y-R3 — Invalidate the FlowRail so it auto-refreshes after every
+      // mutation. The rail's queryKey is ["flows", "resolve", doctype, name,
+      // flowId] — invalidating the ["flows", "resolve"] prefix matches it.
+      // Without this, the rail stayed stale after submit/cancel/one-click
+      // actions until manual reload.
+      queryClient.invalidateQueries({
+        queryKey: ["flows", "resolve"],
+        refetchType: "all",
+      });
       config?.invalidateKeys?.forEach((key) => {
         queryClient.invalidateQueries({ queryKey: key, refetchType: "all" });
       });

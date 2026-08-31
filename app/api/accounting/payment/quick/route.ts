@@ -66,7 +66,30 @@ export async function POST(request: NextRequest) {
   }
   // 4.1 A1 — default to Sales Invoice so existing 2Z callers are unchanged.
   const invoiceDoctype = body.doctype?.trim() || "Sales Invoice";
-  const modeOfPayment = body.mode_of_payment?.trim() || "Cash";
+
+  // D1 — read the configured default Mode of Payment from Accounts Settings
+  // (`custom_default_mode_of_payment`); fall back to the operator's override
+  // or the legacy literal "Cash". This preserves backward compatibility while
+  // giving SMEs a one-time setting for the common cash settlement workflow.
+  const configuredMode = body.mode_of_payment?.trim();
+  let modeOfPayment = configuredMode || "Cash";
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const settingsResp: any = await (client.call as any).get(
+      "frappe.client.get_value",
+      {
+        doctype: "Accounts Settings",
+        filters: { name: "Accounts Settings" },
+        fieldname: "custom_default_mode_of_payment",
+      },
+    );
+    const saved = (settingsResp?.message ?? settingsResp)?.custom_default_mode_of_payment as
+      | string
+      | undefined;
+    if (saved && !configuredMode) modeOfPayment = String(saved);
+  } catch {
+    /* best-effort — keep operator's override or Cash */
+  }
 
   try {
     // 1) ERPNext builds the Payment Entry — references, amounts, accounts,

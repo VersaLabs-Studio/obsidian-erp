@@ -385,10 +385,9 @@ export default function NewPurchaseOrderPage() {
       return;
     }
     // 2L P0-A: propagate the header `set_warehouse` to every item that
-    // lacks a per-row warehouse. Frappe's Purchase Order Item requires
-    // `warehouse` per row; the wizard exposes a single header "Receipt
-    // Warehouse" (`set_warehouse`). When the user only fills the header,
-    // each item is given the header value here.
+    // lacks a per-row warehouse. Server-side warehouse backfill (in the
+    // PO create API route) fills any remaining blanks with the default
+    // Stores warehouse, so items always reach ERPNext with a warehouse.
     const headerWarehouse = values.set_warehouse || "";
     createMutation.mutate({
       ...values,

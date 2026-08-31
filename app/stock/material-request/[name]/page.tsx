@@ -9,6 +9,7 @@ import {
   Send,
   Trash2,
   Package,
+  Ban,
 } from "lucide-react";
 
 import { PageHeader, LoadingState, ConfirmDialog } from "@/components/smart";
@@ -44,6 +45,7 @@ export default function MaterialRequestDetailPage() {
 
   const [confirmSubmit, setConfirmSubmit] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
   // 4.1 A4 — one-click "Order (auto)" (MR → Purchase Order, submitted).
   const [confirmOrder, setConfirmOrder] = useState(false);
   const [ordering, setOrdering] = useState(false);
@@ -90,6 +92,18 @@ export default function MaterialRequestDetailPage() {
     await deleteMutation.mutateAsync(name);
   };
 
+  const handleCancel = () => {
+    setConfirmCancel(false);
+    updateMutation.mutate(
+      { name, data: { docstatus: 2 } },
+      {
+        onSuccess: () => toast.success(`Material Request ${name} cancelled`),
+        onError: (err) =>
+          showError(resolveFrappeError(err, { doctype: "Material Request" })),
+      },
+    );
+  };
+
   // 4.1 A4 — one-click order: build+submit a Purchase Order from this request
   // via ERPNext's make_purchase_order mapper (uses the item's default
   // supplier). The PO wizard stays as the advanced path (pick supplier per
@@ -122,14 +136,14 @@ export default function MaterialRequestDetailPage() {
     isDraft && {
       label: "Submit Material Request",
       description: "Submit for procurement processing",
-      onClick: () => setConfirmSubmit(true),
+      onClick: handleSubmit,
       isPrimary: true,
       isLoading: updateMutation.isPending,
     },
     isSubmitted && {
       label: "Order (auto)",
       description: "Raise a Purchase Order for everything requested, in one click",
-      onClick: () => setConfirmOrder(true),
+      onClick: handleOrder,
       isPrimary: true,
       isLoading: ordering,
       disabled: !isModuleBuilt("Purchase Order"),
@@ -199,8 +213,16 @@ export default function MaterialRequestDetailPage() {
                   <Trash2 className="mr-1.5 h-4 w-4" /> Delete
                 </Button>
                 <Button
+                  variant="outline"
                   size="sm"
-                  onClick={() => setConfirmSubmit(true)}
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => setConfirmCancel(true)}
+                >
+                  <Ban className="mr-1.5 h-4 w-4" /> Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleSubmit}
                   disabled={updateMutation.isPending}
                 >
                   <Send className="mr-1.5 h-4 w-4" /> Submit
@@ -376,31 +398,23 @@ export default function MaterialRequestDetailPage() {
       </div>
 
       <ConfirmDialog
-        open={confirmSubmit}
-        onOpenChange={setConfirmSubmit}
-        title="Submit this Material Request?"
-        description="Submitting locks the request and enables procurement processing. This cannot be undone without cancelling."
-        confirmText="Submit"
-        onConfirm={handleSubmit}
+        open={confirmCancel}
+        onOpenChange={setConfirmCancel}
+        title="Cancel this Material Request?"
+        description="Cancelling reverses the request. This action cannot be undone."
+        confirmText="Cancel"
+        variant="destructive"
+        onConfirm={handleCancel}
       />
       <ConfirmDialog
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
         title="Delete this Material Request?"
-        description="This action cannot be undone. Only draft requests can be deleted."
+        description={`Are you sure you want to delete "${mr.name}"? This action cannot be undone.`}
         confirmText="Delete"
         variant="destructive"
         onConfirm={handleDelete}
         loading={deleteMutation.isPending}
-      />
-      <ConfirmDialog
-        open={confirmOrder}
-        onOpenChange={setConfirmOrder}
-        title="Order everything requested?"
-        description={`Raises and submits a Purchase Order from ${name} using each item's default supplier. Use the advanced path to choose suppliers per line.`}
-        confirmText="Create Order"
-        loading={ordering}
-        onConfirm={handleOrder}
       />
       <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
     </div>

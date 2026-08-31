@@ -15,6 +15,7 @@ import {
   Edit3,
   Send,
   Trash2,
+  Ban,
   Loader2,
   Truck,
   Package,
@@ -56,6 +57,8 @@ export default function PurchaseReceiptDetailPage() {
 
   const [confirmSubmit, setConfirmSubmit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
   // 4.1 A3 — one-click "Bill" (PR → Purchase Invoice, submitted).
   const [confirmBill, setConfirmBill] = useState(false);
   const [billing, setBilling] = useState(false);
@@ -114,6 +117,36 @@ export default function PurchaseReceiptDetailPage() {
     deleteMutation.mutate(name);
   };
 
+  const handleConfirmDelete = async () => {
+    setConfirmDelete(false);
+    try {
+      const res = await fetch(`/api/stock/purchase-receipt/${encodeURIComponent(name)}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        toast.success("Purchase Receipt deleted");
+        router.push("/stock/purchase-receipt");
+      } else {
+        const body = await res.json().catch(() => ({}));
+        showError(resolveFrappeError(body, { doctype: "Purchase Receipt" }));
+      }
+    } catch (err) {
+      showError(resolveFrappeError(err, { doctype: "Purchase Receipt" }));
+    }
+  };
+
+  const handleCancel = () => {
+    setConfirmCancel(false);
+    updateMutation.mutate(
+      { name, data: { docstatus: 2 } },
+      {
+        onSuccess: () => toast.success(`Purchase Receipt ${name} cancelled`),
+        onError: (err) =>
+          showError(resolveFrappeError(err, { doctype: "Purchase Receipt" })),
+      },
+    );
+  };
+
   // 4.1 A3 — one-click bill: build+submit a Purchase Invoice from this receipt
   // via ERPNext's make_purchase_invoice mapper. The PI wizard stays as the
   // advanced path (edit rates, split, partial billing).
@@ -163,14 +196,14 @@ export default function PurchaseReceiptDetailPage() {
     isDraft && {
       label: "Submit Purchase Receipt",
       description: "Confirm receipt and add stock",
-      onClick: () => setConfirmSubmit(true),
+      onClick: handleSubmit,
       isPrimary: true,
       isLoading: updateMutation.isPending,
     },
     isSubmitted && {
       label: "Bill",
       description: "Raise the vendor bill from this receipt in one click",
-      onClick: () => setConfirmBill(true),
+      onClick: handleBill,
       isPrimary: true,
       isLoading: billing,
       disabled: !isModuleBuilt("Purchase Invoice"),
@@ -204,7 +237,7 @@ export default function PurchaseReceiptDetailPage() {
                 </Button>
                 <Button
                   size="sm"
-                  onClick={() => setConfirmSubmit(true)}
+                  onClick={handleSubmit}
                   disabled={updateMutation.isPending}
                 >
                   {updateMutation.isPending ? (
@@ -218,9 +251,17 @@ export default function PurchaseReceiptDetailPage() {
                   variant="ghost"
                   size="icon"
                   className="text-destructive hover:text-destructive"
-                  onClick={() => setShowDelete(true)}
+                  onClick={() => setConfirmDelete(true)}
                 >
                   <Trash2 className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => setConfirmCancel(true)}
+                >
+                  <Ban className="mr-1.5 h-4 w-4" /> Cancel
                 </Button>
               </>
             )}
@@ -342,30 +383,22 @@ export default function PurchaseReceiptDetailPage() {
       </div>
 
       <ConfirmDialog
-        open={confirmSubmit}
-        onOpenChange={setConfirmSubmit}
-        title="Submit this Purchase Receipt?"
-        description="Submitting confirms receipt and adds stock. This cannot be undone without cancelling."
-        confirmText="Submit"
-        onConfirm={handleSubmit}
+        open={confirmCancel}
+        onOpenChange={setConfirmCancel}
+        title="Cancel this Purchase Receipt?"
+        description="Cancelling reverses the accounting entries. This action cannot be undone."
+        confirmText="Cancel"
+        variant="destructive"
+        onConfirm={handleCancel}
       />
       <ConfirmDialog
-        open={showDelete}
-        onOpenChange={setShowDelete}
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
         title="Delete this Purchase Receipt?"
-        description="This action cannot be undone."
+        description={`Are you sure you want to delete "${pr.name}"? This action cannot be undone.`}
         confirmText="Delete"
         variant="destructive"
-        onConfirm={handleDelete}
-      />
-      <ConfirmDialog
-        open={confirmBill}
-        onOpenChange={setConfirmBill}
-        title="Bill this receipt?"
-        description={`Raises and submits a Purchase Invoice from ${name} for the full received amount (${ETB.format(grandTotal)}).`}
-        confirmText="Raise Bill"
-        loading={billing}
-        onConfirm={handleBill}
+        onConfirm={handleConfirmDelete}
       />
       <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
     </div>

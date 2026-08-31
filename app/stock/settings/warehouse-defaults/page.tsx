@@ -11,7 +11,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
-import { Warehouse, ArrowLeft, Save, Loader2, RotateCcw, Eye, EyeOff } from "lucide-react";
+import { Warehouse, ArrowLeft, Save, Loader2, RotateCcw, Eye, EyeOff, ShieldAlert } from "lucide-react";
 
 import { PageHeader } from "@/components/smart";
 import { InfoCard } from "@/components/ui/info-card";
@@ -46,19 +46,32 @@ export default function WarehouseDefaultsPage() {
   const { data: defaults, isLoading } = useWarehouseDefaults();
   const updateMutation = useUpdateWarehouseDefaults();
 
-  const form = useForm<WarehouseDefaults>({
+  const form = useForm<{
+    sourceWarehouse: string;
+    fgWarehouse: string;
+    wipWarehouse: string;
+    scrapWarehouse: string;
+    allowNegativeStock: boolean;
+  }>({
     defaultValues: {
       sourceWarehouse: "",
       fgWarehouse: "",
       wipWarehouse: "",
       scrapWarehouse: "",
+      allowNegativeStock: false,
     },
   });
 
   // Hydrate form when defaults load
   useEffect(() => {
     if (defaults) {
-      form.reset(defaults);
+      form.reset({
+        sourceWarehouse: defaults.sourceWarehouse,
+        fgWarehouse: defaults.fgWarehouse,
+        wipWarehouse: defaults.wipWarehouse,
+        scrapWarehouse: defaults.scrapWarehouse,
+        allowNegativeStock: defaults.allowNegativeStock ?? false,
+      });
     }
   }, [defaults, form]);
 
@@ -74,7 +87,13 @@ export default function WarehouseDefaultsPage() {
     });
   };
 
-  const handleSubmit = (data: WarehouseDefaults) => {
+  const handleSubmit = (data: {
+    sourceWarehouse: string;
+    fgWarehouse: string;
+    wipWarehouse: string;
+    scrapWarehouse: string;
+    allowNegativeStock: boolean;
+  }) => {
     updateMutation.mutate(data, {
       onSuccess: () => {
         toast.success("Warehouse defaults saved", {
@@ -159,6 +178,31 @@ export default function WarehouseDefaultsPage() {
                   filters={[["company", "=", company], ["is_group", "=", 0]]}
                   placeholder="Select scrap warehouse..."
                 />
+              </div>
+
+              {/* 2Y-R3 — Allow Negative Stock toggle (G1) */}
+              <div className="mt-4 flex items-center gap-3 rounded-xl border border-border/50 bg-secondary/20 p-4">
+                <ShieldAlert className="h-5 w-5 shrink-0 text-amber-500" />
+                <div className="flex flex-1 items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">
+                      Allow Negative Stock
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Permit transactions that reduce stock below zero. Useful for
+                      fast-moving SMEs that bill before physical receipt.
+                    </p>
+                  </div>
+                  <label className="relative inline-flex cursor-pointer items-center">
+                    <input
+                      type="checkbox"
+                      className="peer sr-only"
+                      {...form.register("allowNegativeStock")}
+                    />
+                    <div className="h-6 w-11 rounded-full bg-secondary peer-checked:bg-primary transition-colors" />
+                    <div className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5" />
+                  </label>
+                </div>
               </div>
 
               <div className="mt-6 flex items-center justify-end gap-3">

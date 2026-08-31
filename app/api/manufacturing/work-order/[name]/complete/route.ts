@@ -1,22 +1,20 @@
-// app/api/manufacturing/work-order/[name]/start/route.ts
-// 2Y-R5 — Start a Work Order: transitions from "Not Started" → "In Process".
+// app/api/manufacturing/work-order/[name]/complete/route.ts
+// 2Y-R5 — Complete a Work Order from the SO cockpit once every Job Card is
+// done. Transitions the submitted WO to "Completed" and declares finished
+// goods.
 //
-// WHY NOT `start_work` / a status PUT:
-//   - The previous version called the internal method
-//     `...work_order.work_order.start_work`, which does NOT exist as a
-//     whitelisted API on this install → AttributeError 417 (2Y-R5 find).
-//   - A direct PATCH of `status` is rejected by ERPNext on submitted docs
-//     ("Not allowed to change Status after submission").
-//   ERPNext's own desk "Start" button actually builds and submits a
-//   "Material Transfer for Manufacture" Stock Entry; `on_submit` then credits
-//   `material_transferred_for_manufacturing` and flips the WO to "In Process".
-//   We do exactly that via the shared builder (`buildSeDoc`) — the same
-//   proven path as /make-stock-entry — so no private WO invariants are
-//   re-derived by hand.
+// WHY NOT a status PUT:
+//   The cockpit previously PUT { status: "Completed" } via the generic CRUD
+//   factory. ERPNext rejects direct status writes on submitted docs with
+//   UpdateAfterSubmitError: "Not allowed to change Status after submission
+//   from Not Started to Completed" (417). ERPNext's own desk "Finish" button
+//   instead builds and submits a "Manufacture" Stock Entry; `on_submit`
+//   credits produced_qty / fg_completed_qty and derives status = "Completed"
+//   when the WO quantity is fully manufactured. We do exactly that via the
+//   shared builder (`buildSeDoc`) — the mirror of /start.
 //
-// 4.1 B1 — per-request user-scoped client (fail closed 401). This is the
-// canonical "Start" action wired from BOTH the SO cockpit and the WO detail
-// page, so it must run under the operator's own permissions.
+// RBAC — per-request user-scoped client (fail closed 401), consistent with
+// every other lifecycle route.
 
 import { NextRequest, NextResponse } from "next/server";
 import { frappeClient } from "@/lib/frappe-client";
@@ -50,31 +48,28 @@ export async function POST(
   try {
     const workOrderId = decodeURIComponent(name);
 
-    // Build + submit the Material Transfer SE with ERPNext's own doc builder.
-    // 2Y-R6 — UOMMustBeIntegerError (fractional BOM qty vs whole-number UOM)
-    // is resolved IMPLICITLY: the builder flips the UOM flag and retries, so
-    // the operator never sees the config error. on_submit →
-    // update_work_order_qty() advances the WO to "In Process".
+    // Build + submit the Manufacture SE (FG declaration) with ERPNext's own
+    // doc builder. 2Y-R6 — UOM fraction blocks are resolved implicitly by the
+    // shared builder (flag flip + retry). on_submit → update_work_order_qty()
+    // marks the WO Completed when fully produced.
     const { name: seName, fixedUoms } = await buildAndSubmitStockEntry(
       client,
       workOrderId,
-      "Material Transfer for Manufacture",
+      "Manufacture",
     );
 
     return NextResponse.json({
       success: true,
       data: { name: seName ?? null, workOrder: workOrderId },
       message:
-        "Production started — materials transferred to WIP." +
+        "Production finished — finished goods declared." +
         (fixedUoms.length > 0
           ? ` (Auto-enabled fractional quantities for UOM: ${fixedUoms.join(", ")})`
           : ""),
     });
   } catch (error) {
-    // Guided fallback for the UOM-fraction block when implicit resolution
-    // couldn't run (e.g. no UOM write permission). extractRawMessage reads
-    // _server_messages — Error.message alone is often just "There was an
-    // error."
+    // Same UOM-fraction guided fallback as /start — used only when implicit
+    // resolution couldn't run (extractRawMessage reads _server_messages).
     const errMessage = extractRawMessage(error);
     if (
       errMessage.includes("cannot be a fraction") ||

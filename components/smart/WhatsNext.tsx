@@ -10,7 +10,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { SkeletonLine } from "@/components/ui/skeleton";
-import { ArrowRight, Sparkles } from "lucide-react";
+import { ArrowRight, Loader2, Sparkles } from "lucide-react";
 
 interface WhatsNextAction {
   /** Action label */
@@ -117,7 +117,14 @@ export function WhatsNext({ actions, className, isLoading = false }: WhatsNextPr
                   </span>
                 )}
               </div>
-              <ArrowRight className="h-3 w-3 ml-2 flex-shrink-0" />
+              {/* 2Z-R7 — loading feed: an in-flight action shows a spinner in
+                  place of the arrow, so a slow server chain (e.g. Deliver &
+                  Invoice building + submitting two docs) is never silent. */}
+              {action.isLoading ? (
+                <Loader2 className="h-3.5 w-3.5 ml-2 flex-shrink-0 animate-spin text-primary" />
+              ) : (
+                <ArrowRight className="h-3 w-3 ml-2 flex-shrink-0" />
+              )}
             </Button>
           );
 

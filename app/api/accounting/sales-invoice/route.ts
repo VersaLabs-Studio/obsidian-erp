@@ -12,6 +12,9 @@ const { listHandler, createHandler } = createCrudHandlers("Sales Invoice", {
       "posting_date",
       "due_date",
       "status",
+      // 2Z-R7b — required by the SO cockpit's Mark-Paid gating
+      // (outstandingInvoices filters on docstatus === 1).
+      "docstatus",
       "grand_total",
       "outstanding_amount",
       "currency",

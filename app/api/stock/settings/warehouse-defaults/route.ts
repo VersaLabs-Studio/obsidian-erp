@@ -54,6 +54,7 @@ export async function GET(request: NextRequest) {
         fgWarehouse: String(m.default_fg_warehouse ?? ""),
         wipWarehouse: String(m.default_wip_warehouse ?? ""),
         scrapWarehouse: String(m.default_scrap_warehouse ?? ""),
+        allowNegativeStock: Boolean(s.allow_negative_stock),
       },
     });
   } catch (error) {
@@ -71,6 +72,7 @@ export async function PUT(request: NextRequest) {
       fgWarehouse?: string;
       wipWarehouse?: string;
       scrapWarehouse?: string;
+      allowNegativeStock?: boolean;
     };
 
     // ERPNext clears a Link field when sent null (an empty string can trip
@@ -90,6 +92,7 @@ export async function PUT(request: NextRequest) {
       ),
       client.db.updateDoc("Stock Settings", "Stock Settings", {
         default_warehouse: orNull(body.sourceWarehouse),
+        allow_negative_stock: body.allowNegativeStock ? 1 : 0,
       }),
     ]);
 
@@ -100,6 +103,7 @@ export async function PUT(request: NextRequest) {
         fgWarehouse: body.fgWarehouse ?? "",
         wipWarehouse: body.wipWarehouse ?? "",
         scrapWarehouse: body.scrapWarehouse ?? "",
+        allowNegativeStock: body.allowNegativeStock ?? false,
       },
     });
   } catch (error) {
