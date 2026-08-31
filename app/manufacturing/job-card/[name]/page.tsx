@@ -32,8 +32,9 @@ import {
   GuidedErrorDialog,
   useGuidedError,
 } from "@/components/errors/GuidedErrorDialog";
-import { useFrappeDoc, useFrappeUpdate } from "@/hooks/generic";
+import { useFrappeDoc, useFrappeOptions } from "@/hooks/generic";
 import { PrintShare } from "@/components/ui/print-share";
+import { PrintMenu } from "@/components/print/PrintMenu";
 import { FrappeSelect } from "@/components/smart/frappe-select";
 import type { JobCard } from "@/types/doctype-types";
 
@@ -62,163 +63,166 @@ export default function JobCardDetailPage() {
     isLoading,
     error,
     refetch,
-  } = useFrappeDoc<JobCard>("Job Card", name);
+  } = useFrappeDoc<JobCard>("Job Card", name, {
+    // 2Y-R5 P7 — the detail page is an operational view (status, time logs,
+    // buttons all derive from live state). A 60s stale cache can paint a
+    // stale "Work In Progress" after a lifecycle call ran on another screen
+    // or after a server-side submit. Fresh on every mount.
+    staleTime: 0,
+  });
+
+  // Resolve employee IDs → names so the detail page always shows a human-
+  // readable name, even when the child row lacks `employee_name` (e.g. JCs
+  // auto-created by the WO submit). Mirrors the SO cockpit pattern.
+  const { data: employeeOptions } = useFrappeOptions("Employee", {
+    labelField: "employee_name",
+    limit: 1000,
+  });
+  const employeeNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const o of employeeOptions ?? []) {
+      if (o.value) map[o.value] = (o.label as string) || o.value;
+    }
+    return map;
+  }, [employeeOptions]);
 
   const { result: chain, isLoading: chainLoading } = useFlowChain(
     "Job Card",
     name,
   );
 
-  const updateMutation = useFrappeUpdate<JobCard>("Job Card", {
-    showToast: false,
-  });
-
-  // 2X P0-B — separate mutation for lifecycle transitions (start/complete)
-  // that write time_logs data, vs the employee-assignment mutation.
-  const lifecycleMutation = useFrappeUpdate<JobCard>("Job Card", {
-    showToast: false,
-  });
-
   const status = jc?.status || "Open";
   const [busy, setBusy] = useState(false);
 
-  // 2X P0-B — Job Card lifecycle via useFrappeUpdate (resource PUT through
-  // our proxy). The Frappe controller recomputes status from time_logs on
-  // each PUT, so we write the CORRECT time_logs data so the controller
-  // naturally agrees with our intended status:
-  //   Start: append a new time_log {employee, from_time, completed_qty: 0}
-  //   Complete: update the open time_log row with {to_time, completed_qty}
-  // This replaces the broken frappe.client.set_value RPC that 404'd.
-
+  // 2X P0-B — Job Card lifecycle (Start/Complete) now goes through the server
+  // lifecycle route which fetches the FRESH doc and closes the open time_log
+  // by name via frappe.client.set. The previous REST PUT silently failed to
+  // update the existing child row, so Complete returned 200 but the status
+  // stayed "Work In Progress".
   const handleStart = async () => {
     if (!jc) return;
-
-    // Require an assigned employee before starting.
-    const employees = Array.isArray(jc.employee) ? jc.employee : [];
-    if (employees.length === 0) {
-      toast.error("Assign an employee before starting this Job Card.");
-      return;
-    }
-
     setBusy(true);
-    const now = new Date().toISOString().slice(0, 19).replace("T", " ");
-    const employeeId = (employees[0] as { employee?: string })?.employee || "";
-
-    const existingLogs = Array.isArray(jc.time_logs) ? jc.time_logs : [];
-    const newTimeLog = {
-      employee: employeeId,
-      from_time: now,
-      completed_qty: 0,
-    };
-
-    lifecycleMutation.mutate(
-      {
-        name,
-        data: {
-          status: "Work In Progress",
-          time_logs: [...(existingLogs as unknown[]), newTimeLog],
+    try {
+      const res = await fetch(
+        `/api/manufacturing/job-card/${encodeURIComponent(name)}/lifecycle`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "start" }),
         },
-      },
-      {
-        onSuccess: () => {
-          toast.success("Job Card started");
-          refetch();
-          setBusy(false);
-        },
-        onError: (err) => {
-          setBusy(false);
-          showError(resolveFrappeError(err, { doctype: "Job Card" }));
-        },
-      },
-    );
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.details || data?.error || "Failed to start Job Card");
+      }
+      toast.success("Job Card started");
+      await refetch();
+    } catch (err) {
+      showError(resolveFrappeError(err, { doctype: "Job Card" }));
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleComplete = async () => {
     if (!jc) return;
     setBusy(true);
-    const now = new Date().toISOString().slice(0, 19).replace("T", " ");
-    const forQty = Number(jc.for_quantity ?? 0);
-
-    // Update the open time_log row (last one with no to_time).
-    const existingLogs = Array.isArray(jc.time_logs)
-      ? (jc.time_logs as Array<Record<string, unknown>>)
-      : [];
-    const updatedLogs = existingLogs.map((log, idx) => {
-      const isOpen = !log.to_time;
-      if (isOpen || idx === existingLogs.length - 1) {
-        return { ...log, to_time: now, completed_qty: forQty };
+    try {
+      const res = await fetch(
+        `/api/manufacturing/job-card/${encodeURIComponent(name)}/lifecycle`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "complete" }),
+        },
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.details || data?.error || "Failed to complete Job Card");
       }
-      return log;
-    });
-
-    lifecycleMutation.mutate(
-      {
-        name,
-        data: {
-          status: "Completed",
-          total_completed_qty: forQty,
-          time_logs: updatedLogs,
-        },
-      },
-      {
-        onSuccess: () => {
-          toast.success("Job Card completed");
-          refetch();
-          setBusy(false);
-        },
-        onError: (err) => {
-          setBusy(false);
-          showError(resolveFrappeError(err, { doctype: "Job Card" }));
-        },
-      },
-    );
+      toast.success("Job Card completed");
+      // 2Y-R6 — surface the WO auto-completion triggered by this route.
+      if (data?.workOrderAutoCompleted?.workOrder) {
+        toast.success(
+          `Work Order ${data.workOrderAutoCompleted.workOrder} auto-completed`,
+          { description: "All Job Cards are done — finished goods declared." },
+        );
+      } else if (data?.autoCompleteError) {
+        toast.warning("Work Order could not be completed automatically", {
+          description: `${data.autoCompleteError} — use Complete Work Order manually.`,
+        });
+      }
+      await refetch();
+    } catch (err) {
+      showError(resolveFrappeError(err, { doctype: "Job Card" }));
+    } finally {
+      setBusy(false);
+    }
   };
 
-  // Employee chip assignment — append to the union row table (Table
-  // MultiSelect child), same shape the WO detail JC row writes.
-  // 2X P0-D — include employee_name so the chip shows name, not ID.
-  const assignEmployee = (employeeId: string, employeeName?: string) => {
+  // Employee assignment — 2Y-R6b: goes through the server lifecycle route
+  // (action "assign_employee"), NOT the generic REST PUT. On SUBMITTED Job
+  // Cards the PUT path fails with "No permission for Job Card Time Log"; the
+  // route swaps the employee link in place on the existing child row (the
+  // same update-by-name pattern Start/Complete use). One employee per Job
+  // Card: picking REPLACES any previous assignment.
+  const assignEmployee = async (employeeId: string, employeeName?: string) => {
     if (!employeeId || !jc) return;
-    const existing = (Array.isArray(jc.employee) ? jc.employee : [])
+    const current = (Array.isArray(jc.employee) ? jc.employee : [])
       .map((r: unknown) =>
         typeof r === "object" && r && "employee" in r
           ? (r as { employee: string }).employee
           : null,
       )
-      .filter(Boolean) as string[];
-    if (existing.includes(employeeId)) return;
-    const rows = [...existing, employeeId].map((id) => ({
-      employee: id,
-      employee_name: id === employeeId && employeeName ? employeeName : undefined,
-    }));
+      .find(Boolean);
+    if (current === employeeId) return;
     setBusy(true);
-    updateMutation.mutate(
-      { name, data: { employee: rows } },
-      {
-        onSuccess: () => {
-          toast.success(`Employee assigned to ${name}`);
-          refetch();
-          setBusy(false);
+    try {
+      const res = await fetch(
+        `/api/manufacturing/job-card/${encodeURIComponent(name)}/lifecycle`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "assign_employee",
+            employeeId,
+            employeeName,
+          }),
         },
-        onError: (err) => {
-          setBusy(false);
-          showError(resolveFrappeError(err, { doctype: "Job Card" }));
-        },
-      },
-    );
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.details || data?.error || "Failed to assign employee");
+      }
+      toast.success(`Employee assigned to ${name}`);
+      await refetch();
+    } catch (err) {
+      showError(resolveFrappeError(err, { doctype: "Job Card" }));
+    } finally {
+      setBusy(false);
+    }
   };
 
   const assignedEmployees = useMemo(() => {
     if (!jc || !Array.isArray(jc.employee)) return [];
     return jc.employee
-      .map((r: unknown) =>
-        typeof r === "object" && r && "employee_name" in r
-          ? (r as { employee_name: string; employee?: string }).employee_name
-          : typeof r === "object" && r && "employee" in r
-            ? (r as { employee: string }).employee
-            : null,
-      )
+      .map((r: unknown) => {
+        if (typeof r !== "object" || !r) return null;
+        const row = r as { employee?: string; employee_name?: string };
+        const id = row.employee;
+        return row.employee_name || (id && employeeNameMap?.[id]) || id || null;
+      })
       .filter(Boolean) as string[];
+  }, [jc, employeeNameMap]);
+
+  // Raw employee ID (first child row) — drives the selector's `value` so the
+  // current assignee is shown and re-selecting swaps them.
+  const currentEmployeeId = useMemo(() => {
+    if (!jc || !Array.isArray(jc.employee)) return "";
+    const first = jc.employee[0] as
+      | { employee?: string }
+      | undefined;
+    return first?.employee ?? "";
   }, [jc]);
 
   const whatsNext = [
@@ -313,7 +317,8 @@ export default function JobCardDetailPage() {
           backHref="/manufacturing/job-card"
           actions={
             <div className="flex items-center gap-2">
-              <PrintShare doctype="Job Card" name={name} />
+              <PrintMenu doctype="Job Card" doc={jc as unknown as Record<string, unknown>} />
+              <PrintShare doctype="Job Card" name={name} showPrint={false} />
               {status === "Open" && (
                 <Button size="sm" onClick={handleStart} disabled={busy}>
                   {busy ? (
@@ -457,6 +462,7 @@ export default function JobCardDetailPage() {
                   <FrappeSelect
                     doctype="Employee"
                     labelField="employee_name"
+                    value={currentEmployeeId}
                     placeholder="Assign employee…"
                     disabled={busy}
                     onChange={(val, doc) => assignEmployee(val, (doc as { label?: string })?.label)}

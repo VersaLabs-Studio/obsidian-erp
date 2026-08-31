@@ -13,7 +13,7 @@
 
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import { Printer, FileText, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,6 +24,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { PrintDocument } from "@/components/print/PrintDocument";
 import type { PrintVariant } from "@/lib/print/print-config";
+import {
+  getActivePrintId,
+  setActivePrintId,
+  subscribeActivePrintId,
+} from "@/lib/print/print-active";
 
 const VARIANT_META: Record<
   PrintVariant,
@@ -59,25 +64,33 @@ export function PrintMenu({
 }: PrintMenuProps) {
   // The variant currently rendered into the print DOM.
   const [active, setActive] = useState<PrintVariant>(variants[0] ?? "standard");
-  // When set, an effect fires window.print() after the doc commits.
-  const pendingPrint = useRef(false);
-
-  useEffect(() => {
-    if (!pendingPrint.current) return;
-    pendingPrint.current = false;
-    // The <PrintDocument> for `active` is now in the DOM.
-    window.print();
-  }, [active]);
+  // Stable id for this PrintMenu instance (used to coordinate which doc
+  // prints — only the active one mounts a PrintDocument).
+  const myId = useId();
+  const activeId = useSyncExternalStore(subscribeActivePrintId, getActivePrintId);
+  const isActive = activeId === myId;
 
   function print(variant: PrintVariant) {
-    if (variant === active) {
-      // Already rendered — print on the next frame so layout is settled.
+    if (isActive && variant === active) {
+      // Already the active printer with this variant — just print.
       requestAnimationFrame(() => window.print());
       return;
     }
-    pendingPrint.current = true;
     setActive(variant);
+    // Mark THIS menu as the one that should render its PrintDocument.
+    setActivePrintId(myId);
   }
+
+  // Once this menu is the active printer and its variant is committed, the
+  // PrintDocument is in the DOM — fire the print dialog, then release.
+  useEffect(() => {
+    if (!isActive) return;
+    const raf = requestAnimationFrame(() => {
+      window.print();
+      setActivePrintId(null);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [isActive, active]);
 
   const single = variants.length <= 1;
 
@@ -130,8 +143,11 @@ export function PrintMenu({
         </DropdownMenu>
       )}
 
-      {/* Print-only document (hidden on screen via app/print.css). */}
-      <PrintDocument doctype={doctype} variant={active} doc={doc} company={company} />
+      {/* Print-only document (hidden on screen via app/print.css). Only the
+          active printer mounts its doc, so window.print() shows just this one. */}
+      {isActive && (
+        <PrintDocument doctype={doctype} variant={active} doc={doc} company={company} />
+      )}
     </>
   );
 }

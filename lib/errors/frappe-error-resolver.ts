@@ -115,6 +115,44 @@ const strategies: ErrorStrategy[] = [
     },
   },
 
+  // 2Y-R5 P1 — DATE_VALIDATION. ERPNext's `validate_from_to_dates` raises
+  // "<Field A> must be after <Field B>" (or "must be before"). Previously fell
+  // through to GENERIC_FALLBACK ("The server rejected this action"), hiding
+  // the real cause. Surface the exact field pair as a guided message so the
+  // operator knows which dates to fix.
+  {
+    code: "DATE_VALIDATION",
+    match: (m) =>
+      /must be (after|before|>=|>|<=|<)\s+(the\s+)?(Date|Posting)/i.test(m) &&
+      /date/i.test(m),
+    resolve: (msg) => {
+      // Parse: "<Field A> must be after <Field B>" — the two field names
+      // bracket the verb phrase.
+      const pair = msg.match(/^(.+?)\s+must\s+(be\s+)?(after|before|>=|>|<=|<)\s+(?:the\s+)?(.+)$/i);
+      const fieldA = pair?.[1]?.trim() ?? "The start date";
+      const verb = pair?.[3]?.toLowerCase() ?? "after";
+      const fieldB = pair?.[4]?.trim() ?? "the end date";
+      const isAfter = verb === "after" || verb === ">" || verb === ">=";
+      return {
+        title: `${fieldA} must be ${verb} ${fieldB}`,
+        explanation: `${fieldA} must come ${verb} ${fieldB}. Move ${fieldA} ${isAfter ? "to a later date" : "to an earlier date"} (or adjust ${fieldB}), then try again.`,
+        details: [
+          `${fieldA}: currently too ${isAfter ? "early" : "late"} relative to ${fieldB}`,
+          `Check both dates on the record before retrying.`,
+        ],
+        severity: "warning",
+        actions: [
+          {
+            label: "Dismiss",
+            kind: "dismiss" as const,
+            variant: "ghost" as const,
+            run: () => {},
+          },
+        ],
+      };
+    },
+  },
+
   // MANDATORY_MISSING
   {
     code: "MANDATORY_MISSING",
@@ -656,6 +694,83 @@ const strategies: ErrorStrategy[] = [
             label: "Dismiss",
             kind: "dismiss",
             variant: "ghost",
+            run: () => {},
+          },
+        ],
+      };
+    },
+  },
+
+  // 2Y-R3 — ITEM_NOT_PURCHASEABLE / ITEM_NOT_SALESABLE. ERPNext's
+  // buying/selling controller raises "Following item X is not marked as
+  // purchase item" (or "sales item") when a line item's `is_purchase_item`
+  // / `is_sales_item` flag is off. Previously this fell through to
+  // GENERIC_FALLBACK ("The server rejected this action"), hiding the real
+  // cause. We surface the item + the exact flag to toggle in Item master.
+  {
+    code: "ITEM_NOT_PURCHASEABLE",
+    match: (m) =>
+      /is not marked as (purchase|sales) item/i.test(m) ||
+      /not marked as (purchase|sales) item/i.test(m),
+    resolve: (msg) => {
+      const itemMatch = msg.match(/item\s+([A-Z0-9][A-Z0-9\-_ ]*?)\s+is not marked/i);
+      const item = itemMatch?.[1]?.trim() ?? "this item";
+      const kind = /sales/i.test(msg) ? "sales" : "purchase";
+      const flag = kind === "sales" ? "Is Sales Item" : "Is Purchase Item";
+      return {
+        title: `Item not enabled for ${kind}`,
+        explanation: `The item "${item}" is not marked as a ${kind} item, so it can't be used on this transaction. Enable "${flag}" on the Item master, then try again.`,
+        details: [
+          `Item: ${item}`,
+          `Missing flag: ${flag}`,
+          'Open the Item and tick the flag under the "Item" section, then save.',
+        ],
+        severity: "warning",
+        actions: [
+          {
+            label: "Open Item",
+            kind: "navigate",
+            variant: "default",
+            href: `/stock/item/${encodeURIComponent(item)}`,
+            run: () => {
+              window.location.href = `/stock/item/${encodeURIComponent(item)}`;
+            },
+          },
+          {
+            label: "Dismiss",
+            kind: "dismiss",
+            variant: "ghost",
+            run: () => {},
+          },
+        ],
+      };
+    },
+  },
+
+  // 2Y-R3 — EXPENSE_HEAD_CHANGED_INFO. ERPNext emits an *info* msgprint
+  // ("Row N: Expense Head changed to Stock Received But Not Billed - P as no
+  // Purchase Receipt is created against Item X…") during Purchase Invoice
+  // creation. It is a benign accounting note (raise_exception falsy), NOT a
+  // failure — the invoice IS created. Previously it fell through to
+  // GENERIC_FALLBACK ("The server rejected this action"), scaring the user.
+  // We surface it as severity "info" so the GuidedErrorDialog shows a calm
+  // toast with a Dismiss action instead of a hard error dialog.
+  {
+    code: "EXPENSE_HEAD_CHANGED_INFO",
+    match: (m) =>
+      /Expense Head changed to Stock Received But Not Billed/i.test(m) ||
+      /no Purchase Receipt is created against Item/i.test(m),
+    resolve: (msg) => {
+      return {
+        title: "Expense account auto-set",
+        explanation:
+          "ERPNext automatically set the expense account because no Purchase Receipt exists yet for this item. This is normal — the account will update once a Purchase Receipt is created.",
+        severity: "warning",
+        actions: [
+          {
+            label: "OK",
+            kind: "dismiss",
+            variant: "default",
             run: () => {},
           },
         ],

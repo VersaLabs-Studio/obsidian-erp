@@ -14,6 +14,7 @@ import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErr
 import {
   Send,
   Ban,
+  Trash2,
   Loader2,
   Package,
   CheckCircle2,
@@ -30,6 +31,7 @@ import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
 import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
 import { PrintShare } from "@/components/ui/print-share";
+import { PrintMenu } from "@/components/print/PrintMenu";
 import { ReceiveMaterialsModal } from "@/components/stock/ReceiveMaterialsModal";
 import { useFlowChain } from "@/hooks/flows/use-flow-chain";
 import { useFrappeDoc, useFrappeUpdate } from "@/hooks/generic";
@@ -57,11 +59,13 @@ export default function PurchaseOrderDetailPage() {
   const router = useRouter();
   const name = decodeURIComponent(String(params.name));
 
-  const [confirmSubmit, setConfirmSubmit] = useState(false);
-  const [confirmApprove, setConfirmApprove] = useState(false);
   const [confirmReject, setConfirmReject] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   // 2P Part 2.6 — ReceiveMaterialsModal trigger
   const [openReceive, setOpenReceive] = useState(false);
+  // E1 F1 — Receive & Bill direct-action; kept as loading state.
+  const [receivingBill, setReceivingBill] = useState(false);
   const { resolution, showError, dismiss } = useGuidedError();
 
   const {
@@ -85,7 +89,6 @@ export default function PurchaseOrderDetailPage() {
   const isSubmitted = order?.docstatus === 1;
 
   const handleSubmit = () => {
-    setConfirmSubmit(false);
     updateMutation.mutate(
       { name, data: { docstatus: 1, status: "To Receive and Bill" } },
       {
@@ -100,7 +103,6 @@ export default function PurchaseOrderDetailPage() {
   };
 
   const handleApprove = () => {
-    setConfirmApprove(false);
     updateMutation.mutate(
       { name, data: { status: "Approved" } },
       {
@@ -129,6 +131,70 @@ export default function PurchaseOrderDetailPage() {
     );
   };
 
+  const handleCancel = () => {
+    setConfirmCancel(false);
+    updateMutation.mutate(
+      { name, data: { docstatus: 2, status: "Cancelled" } },
+      {
+        onSuccess: () => {
+          toast.success(`Purchase Order ${name} cancelled`);
+          refetch();
+        },
+        onError: (err) =>
+          showError(resolveFrappeError(err, { doctype: "Purchase Order" })),
+      },
+    );
+  };
+
+  const handleDelete = async () => {
+    setConfirmDelete(false);
+    try {
+      const res = await fetch(`/api/buying/purchase-order/${encodeURIComponent(name)}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        toast.success("Purchase Order deleted");
+        router.push("/buying/purchase-order");
+      } else {
+        const body = await res.json().catch(() => ({}));
+        showError(resolveFrappeError(body, { doctype: "Purchase Order" }));
+      }
+    } catch (err) {
+      showError(resolveFrappeError(err, { doctype: "Purchase Order" }));
+    }
+  };
+
+  // 4.1 A2 — one-click receive + bill: chain PR (submit) → PI (submit) via
+  // ERPNext's own mappers. Direct fire on button click (E1/F1 happy-path).
+  const handleReceiveAndBill = async () => {
+    setReceivingBill(true);
+    try {
+      const res = await fetch(
+        `/api/buying/purchase-order/${encodeURIComponent(name)}/receive-and-bill`,
+        { method: "POST", headers: { "Content-Type": "application/json" } },
+      );
+      const data = await res.json();
+      if (res.ok && data?.success) {
+        toast.success("Received and billed", {
+          description: `${data?.data?.purchase_receipt} · ${data?.data?.purchase_invoice}`,
+        });
+        refetch();
+      } else if (data?.data?.purchase_receipt) {
+        // Partial success — the receipt is real; billing failed.
+        toast.warning("Received — billing failed", {
+          description: data?.details || "Bill the receipt from its detail page.",
+        });
+        refetch();
+      } else {
+        toast.error(data?.details || data?.error || "Receive & Bill failed");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Receive & Bill failed");
+    } finally {
+      setReceivingBill(false);
+    }
+  };
+
   if (isLoading) return <LoadingState />;
   if (error || !order) {
     return (
@@ -152,16 +218,16 @@ export default function PurchaseOrderDetailPage() {
 
   const whatsNext = [
     isDraft && {
-      label: "Submit for Approval",
-      description: "Send this order for approval",
-      onClick: () => setConfirmSubmit(true),
+      label: "Submit Order",
+      description: "Submit — ready to receive & bill",
+      onClick: handleSubmit,
       isPrimary: true,
       isLoading: updateMutation.isPending,
     },
     isPendingApproval && {
       label: "Approve Order",
       description: "Approve this purchase order",
-      onClick: () => setConfirmApprove(true),
+      onClick: handleApprove,
       isPrimary: true,
       isLoading: updateMutation.isPending,
     },
@@ -171,14 +237,22 @@ export default function PurchaseOrderDetailPage() {
       onClick: () => setConfirmReject(true),
       isLoading: updateMutation.isPending,
     },
+    // 4.1 A2 — the one-click happy path: receive AND bill in a single act.
     isSubmitted && {
-      label: "Receive items",
-      description: "Record goods receipt from supplier",
-      // 2P Part 2.6 — open the ReceiveMaterialsModal (one-click) instead
-      // of deep-linking to the PR wizard. The modal does the create+submit
-      // and routes to the new PR detail on success.
-      onClick: () => setOpenReceive(true),
+      label: "Receive & Bill",
+      description: "Book the goods in and raise the vendor bill in one click",
+      onClick: handleReceiveAndBill,
       isPrimary: true,
+      isLoading: receivingBill,
+      disabled:
+        !isModuleBuilt("Purchase Receipt") || !isModuleBuilt("Purchase Invoice"),
+      disabledReason: "Receipt or Invoice module not available",
+    },
+    isSubmitted && {
+      label: "Receive only (advanced)",
+      description: "Record a goods receipt without billing (partial receipts)",
+      // 2P Part 2.6 — ReceiveMaterialsModal: create+submit the PR only.
+      onClick: () => setOpenReceive(true),
       disabled: !isModuleBuilt("Purchase Receipt"),
       disabledReason: "Module not available",
     },
@@ -224,11 +298,12 @@ export default function PurchaseOrderDetailPage() {
         backHref="/buying/purchase-order"
         actions={
           <div className="flex items-center gap-2">
-            <PrintShare doctype="Purchase Order" name={order.name} />
+            <PrintMenu doctype="Purchase Order" doc={order as unknown as Record<string, unknown>} />
+            <PrintShare doctype="Purchase Order" name={order.name} showPrint={false} />
             {isDraft && (
               <Button
                 size="sm"
-                onClick={() => setConfirmSubmit(true)}
+                onClick={handleSubmit}
                 disabled={updateMutation.isPending}
               >
                 {updateMutation.isPending ? (
@@ -243,7 +318,7 @@ export default function PurchaseOrderDetailPage() {
               <>
                 <Button
                   size="sm"
-                  onClick={() => setConfirmApprove(true)}
+                  onClick={handleApprove}
                   disabled={updateMutation.isPending}
                 >
                   {updateMutation.isPending ? (
@@ -268,21 +343,19 @@ export default function PurchaseOrderDetailPage() {
                 variant="outline"
                 size="sm"
                 className="text-destructive hover:text-destructive"
-                onClick={() => {
-                  updateMutation.mutate(
-                    { name, data: { docstatus: 2, status: "Cancelled" } },
-                    {
-                      onSuccess: () => {
-                        toast.success(`Purchase Order ${name} cancelled`);
-                        refetch();
-                      },
-                      onError: (err) =>
-                        showError(resolveFrappeError(err, { doctype: "Purchase Order" })),
-                    },
-                  );
-                }}
+                onClick={() => setConfirmCancel(true)}
               >
                 <Ban className="mr-1.5 h-4 w-4" /> Cancel
+              </Button>
+            )}
+            {isDraft && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-destructive hover:text-destructive"
+                onClick={() => setConfirmDelete(true)}
+              >
+                <Trash2 className="mr-1.5 h-4 w-4" /> Delete
               </Button>
             )}
           </div>
@@ -418,22 +491,6 @@ export default function PurchaseOrderDetailPage() {
       </div>
 
       <ConfirmDialog
-        open={confirmSubmit}
-        onOpenChange={setConfirmSubmit}
-        title="Submit this Purchase Order?"
-        description="Submitting will send this order for approval. This cannot be undone without cancelling."
-        confirmText="Submit"
-        onConfirm={handleSubmit}
-      />
-      <ConfirmDialog
-        open={confirmApprove}
-        onOpenChange={setConfirmApprove}
-        title="Approve this Purchase Order?"
-        description="Approving this order will allow it to proceed to receipt and billing."
-        confirmText="Approve"
-        onConfirm={handleApprove}
-      />
-      <ConfirmDialog
         open={confirmReject}
         onOpenChange={setConfirmReject}
         title="Reject this Purchase Order?"
@@ -441,6 +498,25 @@ export default function PurchaseOrderDetailPage() {
         confirmText="Reject"
         variant="destructive"
         onConfirm={handleReject}
+      />
+      <ConfirmDialog
+        open={confirmCancel}
+        onOpenChange={setConfirmCancel}
+        title="Cancel this Purchase Order?"
+        description="Cancelling reverses the order. Linked documents must be cancelled first."
+        confirmText="Cancel Order"
+        variant="destructive"
+        onConfirm={handleCancel}
+      />
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="Delete this Purchase Order?"
+        description={`Are you sure you want to delete "${order.name}"? This action cannot be undone.`}
+        confirmText="Delete"
+        variant="destructive"
+        onConfirm={handleDelete}
+        loading={updateMutation.isPending}
       />
       <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
       <ReceiveMaterialsModal

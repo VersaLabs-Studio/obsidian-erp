@@ -51,6 +51,13 @@ export interface PrintTemplate {
   headerFields: HeaderField[];
   /** Item columns, left-to-right. */
   columns: PrintColumn[];
+  /**
+   * Field on the doc that holds the printable line rows. Defaults to
+   * "items". Some doctypes carry their lines in a differently-named child
+   * table (Work Order → "required_items", Job Card → "time_logs"), so the
+   * template names the real field here.
+   */
+  itemsField?: string;
   /** Whether monetary columns + the totals block render. */
   showMoney: boolean;
   /** Whether to render the totals block (subtotal/tax/grand). */
@@ -176,14 +183,9 @@ const TEMPLATES: Record<string, PrintTemplate> = {
       { key: "name", label: "Receipt No" },
       { key: "posting_date", label: "Date", format: "date" },
     ],
-    columns: [
-      { key: "item_code", label: "Item", align: "left", type: "text" },
-      { key: "qty", label: "Qty", align: "right", type: "qty" },
-      { key: "uom", label: "UOM", align: "left", type: "text" },
-      { key: "warehouse", label: "Warehouse", align: "left", type: "text" },
-    ],
-    showMoney: false,
-    showTotals: false,
+    columns: MONEY_COLS,
+    showMoney: true,
+    showTotals: true,
     signatures: ["Received By", "Store Keeper"],
   },
   "Delivery Note": {
@@ -218,6 +220,83 @@ const TEMPLATES: Record<string, PrintTemplate> = {
     showMoney: true,
     showTotals: false,
     signatures: ["Received By", "Authorized Signature"],
+  },
+  // 2Y-R3 — Work Order: lines live in `required_items` (not `items`), and
+  // the party is the production item (optionally the linked customer).
+  "Work Order": {
+    title: "WORK ORDER",
+    partyLabel: "Producing",
+    partyNameField: "item_name",
+    partyIdField: "production_item",
+    partyAddressField: "customer_name",
+    headerFields: [
+      { key: "name", label: "WO No" },
+      { key: "posting_date", label: "Date", format: "date" },
+      { key: "expected_delivery_date", label: "Due Date", format: "date" },
+      { key: "status", label: "Status" },
+      { key: "qty", label: "Qty", format: "text" },
+    ],
+    itemsField: "required_items",
+    columns: [
+      { key: "item_code", label: "Item", align: "left", type: "text" },
+      { key: "item_name", label: "Description", align: "left", type: "text" },
+      { key: "required_qty", label: "Required", align: "right", type: "qty" },
+      { key: "transferred_qty", label: "Transferred", align: "right", type: "qty" },
+      { key: "consumed_qty", label: "Consumed", align: "right", type: "qty" },
+    ],
+    showMoney: false,
+    showTotals: false,
+    signatures: ["Prepared By", "Production Supervisor"],
+  },
+  // 2Y-R3 — Material Request: internal requisition, no prices (an MR carries
+  // no rates); the "party" slot shows the request purpose.
+  "Material Request": {
+    title: "MATERIAL REQUEST",
+    partyLabel: "Purpose",
+    partyNameField: "material_request_type",
+    partyIdField: "material_request_type",
+    headerFields: [
+      { key: "name", label: "MR No" },
+      { key: "transaction_date", label: "Date", format: "date" },
+      { key: "schedule_date", label: "Required By", format: "date" },
+      { key: "status", label: "Status" },
+    ],
+    columns: [
+      { key: "item_code", label: "Item", align: "left", type: "text" },
+      { key: "item_name", label: "Description", align: "left", type: "text" },
+      { key: "qty", label: "Qty", align: "right", type: "qty" },
+      { key: "uom", label: "UOM", align: "left", type: "text" },
+      { key: "schedule_date", label: "Required By", align: "left", type: "text" },
+    ],
+    showMoney: false,
+    showTotals: false,
+    signatures: ["Requested By", "Approved By"],
+  },
+  // 2Y-R3 — Job Card: no line-item table; print the time logs (employee,
+  // from/to time, completed qty) so the shop floor has a real record.
+  "Job Card": {
+    title: "JOB CARD",
+    partyLabel: "Work Order",
+    partyNameField: "work_order",
+    partyIdField: "work_order",
+    partyAddressField: "operation",
+    headerFields: [
+      { key: "name", label: "Job Card No" },
+      { key: "operation", label: "Operation" },
+      { key: "workstation", label: "Workstation" },
+      { key: "status", label: "Status" },
+      { key: "for_quantity", label: "For Qty", format: "text" },
+    ],
+    itemsField: "time_logs",
+    columns: [
+      { key: "employee", label: "Employee", align: "left", type: "text" },
+      { key: "from_time", label: "Start", align: "left", type: "text" },
+      { key: "to_time", label: "End", align: "left", type: "text" },
+      { key: "completed_qty", label: "Completed", align: "right", type: "qty" },
+    ],
+    showMoney: false,
+    showTotals: false,
+    signatures: ["Operator", "Supervisor"],
   },
 };
 

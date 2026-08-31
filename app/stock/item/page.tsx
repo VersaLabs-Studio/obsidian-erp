@@ -6,7 +6,7 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
-import { Plus, Box, MoreVertical, Pencil, Trash2, Eye, Package } from "lucide-react";
+import { Plus, Box, MoreVertical, Pencil, Trash2, Eye, Package, ListFilter, ArrowUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -21,7 +21,8 @@ import {
   ConfirmDialog,
 } from "@/components/smart";
 import { InfoCard, DataPoint } from "@/components/ui/info-card";
-import { useFrappeList, useFrappeDelete } from "@/hooks/generic";
+import { SearchableSelect } from "@/components/ui/searchable-select";
+import { useFrappeList, useFrappeDelete, useFrappeOptions } from "@/hooks/generic";
 import { ListErrorState } from "@/components/ui/list-error-state";
 import type { Item } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
@@ -144,6 +145,25 @@ export default function ItemsListPage() {
   const prefersReducedMotion = useReducedMotion();
   const [search, setSearch] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<Item | null>(null);
+  // 2Y-R3 — Filter / sort / order controls.
+  const [itemGroup, setItemGroup] = useState("");
+  const [typeFilter, setTypeFilter] = useState<"all" | "stock" | "service">("all");
+  const [sortField, setSortField] = useState<"modified" | "item_code" | "item_name" | "creation">("modified");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+
+  // Item Group options for the filter dropdown.
+  const { data: itemGroups } = useFrappeOptions("Item Group", {
+    labelField: "item_group_name",
+    limit: 500,
+  });
+
+  const filters = useMemo(() => {
+    const f: [string, string, unknown][] = [];
+    if (itemGroup) f.push(["item_group", "=", itemGroup]);
+    if (typeFilter === "stock") f.push(["is_stock_item", "=", 1]);
+    if (typeFilter === "service") f.push(["is_stock_item", "=", 0]);
+    return f;
+  }, [itemGroup, typeFilter]);
 
   const {
     data: items = [],
@@ -161,8 +181,10 @@ export default function ItemsListPage() {
       "is_stock_item",
       "disabled",
       "modified",
+      "creation",
     ],
-    orderBy: { field: "modified", order: "desc" },
+    filters,
+    orderBy: { field: sortField, order: sortOrder },
     limit: 200,
   });
 
@@ -205,6 +227,22 @@ export default function ItemsListPage() {
     return <ListErrorState error={error} label="items" />;
   }
 
+  const groupOptions = [
+    { value: "", label: "All Groups" },
+    ...(itemGroups ?? []).map((g) => ({ value: g.value, label: String(g.label) })),
+  ];
+  const typeOptions = [
+    { value: "all", label: "All Types" },
+    { value: "stock", label: "Stock Items" },
+    { value: "service", label: "Service Items" },
+  ];
+  const sortOptions = [
+    { value: "modified", label: "Last Modified" },
+    { value: "creation", label: "Date Created" },
+    { value: "item_code", label: "Item Code" },
+    { value: "item_name", label: "Item Name" },
+  ];
+
   return (
     <div className="space-y-6">
       <ConfirmDialog
@@ -236,6 +274,65 @@ export default function ItemsListPage() {
           </Button>
         }
       />
+
+      {/* 2Y-R3 — Filter / Sort / Order toolbar */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <ListFilter className="h-4 w-4" />
+          <span className="font-medium">Filter</span>
+        </div>
+        <div className="w-44">
+          <SearchableSelect
+            options={groupOptions}
+            value={itemGroup}
+            onValueChange={setItemGroup}
+            placeholder="Item group"
+          />
+        </div>
+        <div className="w-40">
+          <SearchableSelect
+            options={typeOptions}
+            value={typeFilter}
+            onValueChange={(v) => setTypeFilter(v as "all" | "stock" | "service")}
+            placeholder="Type"
+          />
+        </div>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground ml-2">
+          <ArrowUpDown className="h-4 w-4" />
+          <span className="font-medium">Sort</span>
+        </div>
+        <div className="w-44">
+          <SearchableSelect
+            options={sortOptions}
+            value={sortField}
+            onValueChange={(v) => setSortField(v as typeof sortField)}
+            placeholder="Sort by"
+          />
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setSortOrder((o) => (o === "asc" ? "desc" : "asc"))}
+          className="rounded-full"
+        >
+          {sortOrder === "asc" ? "Ascending" : "Descending"}
+        </Button>
+        {(itemGroup || typeFilter !== "all" || sortField !== "modified" || sortOrder !== "desc") && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setItemGroup("");
+              setTypeFilter("all");
+              setSortField("modified");
+              setSortOrder("desc");
+            }}
+            className="rounded-full"
+          >
+            Reset
+          </Button>
+        )}
+      </div>
 
       {/* KPI Bar */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

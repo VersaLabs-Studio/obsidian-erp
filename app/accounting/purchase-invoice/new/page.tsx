@@ -319,6 +319,7 @@ export default function NewPurchaseInvoicePage() {
     { data: { name: string } },
     Record<string, unknown>
   >("Purchase Invoice", {
+    showToast: false,
     successMessage: "Purchase Invoice created",
     onSuccess: (res) => {
       const name = res?.data?.name;

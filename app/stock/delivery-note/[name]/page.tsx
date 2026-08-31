@@ -91,7 +91,7 @@ export default function DeliveryNoteDetailPage() {
   const isSubmitted = dn?.docstatus === 1;
 
   const handleSubmit = () => {
-    setConfirmSubmit(false);
+    
     updateMutation.mutate(
       { name, data: { docstatus: 1 } },
       {
@@ -129,7 +129,7 @@ export default function DeliveryNoteDetailPage() {
     isDraft && {
       label: "Submit Delivery Note",
       description: "Confirm delivery and deduct stock",
-      onClick: () => setConfirmSubmit(true),
+      onClick: handleSubmit,
       isPrimary: true,
       isLoading: updateMutation.isPending,
     },
@@ -168,7 +168,7 @@ export default function DeliveryNoteDetailPage() {
                 </Button>
                 <Button
                   size="sm"
-                  onClick={() => setConfirmSubmit(true)}
+                  onClick={handleSubmit}
                   disabled={updateMutation.isPending}
                 >
                   {updateMutation.isPending ? (

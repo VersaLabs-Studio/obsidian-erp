@@ -32,6 +32,7 @@ import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMe
 import { useFlowChain } from "@/hooks/flows/use-flow-chain";
 import { useFrappeDoc, useFrappeUpdate, useFrappeDelete } from "@/hooks/generic";
 import { PrintShare } from "@/components/ui/print-share";
+import { PrintMenu } from "@/components/print/PrintMenu";
 import type { StockEntry } from "@/types/doctype-types";
 
 const ETB = new Intl.NumberFormat("en-ET", { style: "currency", currency: "ETB" });
@@ -146,7 +147,8 @@ export default function StockEntryDetailPage() {
         }}
         actions={
           <div className="flex items-center gap-2">
-            <PrintShare doctype="Stock Entry" name={name} />
+            <PrintMenu doctype="Stock Entry" doc={se as unknown as Record<string, unknown>} />
+            <PrintShare doctype="Stock Entry" name={name} showPrint={false} />
             {isDraft && (
               <>
                 <Button variant="outline" size="sm" asChild>

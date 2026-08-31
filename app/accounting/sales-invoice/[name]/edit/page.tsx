@@ -59,6 +59,7 @@ interface SIForm {
   due_date: string;
   delivery_note?: string;
   po_no?: string;
+  pana_fs_number?: string; // 2Y-R2 P1 — FS No (custom field)
   currency: string;
   conversion_rate: number;
   selling_price_list?: string;
@@ -130,6 +131,7 @@ export default function EditSalesInvoicePage() {
       posting_date: invoice.posting_date || "",
       due_date: invoice.due_date || "",
       po_no: invoice.po_no || "",
+      pana_fs_number: (invoice as { pana_fs_number?: string }).pana_fs_number || "",
       currency: invoice.currency || "ETB",
       conversion_rate: invoice.conversion_rate || 1,
       selling_price_list: invoice.selling_price_list || "Standard Selling",
@@ -191,6 +193,7 @@ export default function EditSalesInvoicePage() {
         posting_date: values.posting_date,
         due_date: values.due_date,
         po_no: values.po_no || undefined,
+        pana_fs_number: values.pana_fs_number || undefined,
         currency: values.currency,
         conversion_rate: values.conversion_rate,
         debit_to: values.debit_to || undefined,
@@ -207,7 +210,7 @@ export default function EditSalesInvoicePage() {
           delivery_note: it.delivery_note || undefined,
           dn_detail: it.dn_detail || undefined,
         })),
-      },
+      } as Partial<SalesInvoice>,
     });
   }, [updateMutation, getValues, name]);
 
@@ -277,6 +280,13 @@ export default function EditSalesInvoicePage() {
                     name="po_no"
                     label="Customer PO No"
                     placeholder="Optional reference"
+                  />
+                  {/* 2Y-R2 P1 — FS No (custom field) editable in edit form */}
+                  <FormInput
+                    control={control}
+                    name="pana_fs_number"
+                    label="FS No"
+                    placeholder="Fiscal serial number"
                   />
                   <FormFrappeSelect
                     control={control}

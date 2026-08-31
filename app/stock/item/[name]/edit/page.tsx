@@ -64,8 +64,6 @@ interface ItemForm {
   weight_uom?: string;
   is_stock_item: boolean;
   is_fixed_asset: boolean;
-  is_sales_item: boolean;
-  is_purchase_item: boolean;
   has_batch_no: boolean;
   has_serial_no: boolean;
   disabled: boolean;
@@ -94,8 +92,6 @@ const itemFormSchema = z.object({
   weight_uom: z.string().optional(),
   is_stock_item: z.boolean(),
   is_fixed_asset: z.boolean(),
-  is_sales_item: z.boolean(),
-  is_purchase_item: z.boolean(),
   has_batch_no: z.boolean(),
   has_serial_no: z.boolean(),
   disabled: z.boolean(),
@@ -170,8 +166,6 @@ export default function EditItemPage() {
       weight_uom: "Kg",
       is_stock_item: true,
       is_fixed_asset: false,
-      is_sales_item: true,
-      is_purchase_item: true,
       has_batch_no: false,
       has_serial_no: false,
       disabled: false,
@@ -212,8 +206,6 @@ export default function EditItemPage() {
       weight_uom: String(doc.weight_uom ?? "Kg") || undefined,
       is_stock_item: Number(doc.is_stock_item ?? 1) === 1,
       is_fixed_asset: Number(doc.is_fixed_asset ?? 0) === 1,
-      is_sales_item: Number(doc.is_sales_item ?? 1) === 1,
-      is_purchase_item: Number(doc.is_purchase_item ?? 1) === 1,
       has_batch_no: Number(doc.has_batch_no ?? 0) === 1,
       has_serial_no: Number(doc.has_serial_no ?? 0) === 1,
       disabled: Number(doc.disabled ?? 0) === 1,
@@ -265,8 +257,9 @@ export default function EditItemPage() {
       weight_per_unit: values.weight_per_unit || 0,
       is_stock_item: values.is_stock_item ? 1 : 0,
       is_fixed_asset: values.is_fixed_asset ? 1 : 0,
-      is_sales_item: values.is_sales_item ? 1 : 0,
-      is_purchase_item: values.is_purchase_item ? 1 : 0,
+      // 2Y-R3 — all items are always sellable + purchasable (guardrails removed)
+      is_sales_item: 1,
+      is_purchase_item: 1,
       has_batch_no: values.has_batch_no ? 1 : 0,
       has_serial_no: values.has_serial_no ? 1 : 0,
       disabled: values.disabled ? 1 : 0,
@@ -495,8 +488,6 @@ export default function EditItemPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <ConfigToggle control={control} name="is_stock_item" title="Maintain Stock" description="Track inventory levels" />
                     <ConfigToggle control={control} name="is_fixed_asset" title="Fixed Asset" description="Depreciate over time" />
-                    <ConfigToggle control={control} name="is_sales_item" title="Sellable" description="Available in Sales Orders" />
-                    <ConfigToggle control={control} name="is_purchase_item" title="Purchasable" description="Available in Purchase Orders" />
                     <ConfigToggle control={control} name="has_batch_no" title="Has Batch No" description="Track by batch" />
                     <ConfigToggle control={control} name="has_serial_no" title="Has Serial No" description="Track by serial" />
                     <ConfigToggle control={control} name="disabled" title="Disabled" description="Hide from transactions" />

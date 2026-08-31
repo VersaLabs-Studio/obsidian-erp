@@ -114,11 +114,14 @@ const navigation = [
         href: "/stock/material-request",
         icon: ShoppingCart,
       },
-      {
-        title: "Stock Entries",
-        href: "/stock/stock-entry",
-        icon: ArrowRightLeft,
-      },
+      // 2Y-R2 P5 — Stock Entry hidden from nav (valuation-only, no accounting UI).
+      // Direct URL still works for admin/audit. The WO cockpit creates SEs
+      // via the lifecycle hook, so operators never need to browse SEs manually.
+      // {
+      //   title: "Stock Entries",
+      //   href: "/stock/stock-entry",
+      //   icon: ArrowRightLeft,
+      // },
       { title: "Stock Balance", href: "/stock/stock-balance", icon: Scale },
       {
         title: "Stock Ledger",
@@ -152,15 +155,6 @@ const navigation = [
         title: "Purchase Orders",
         href: "/buying/purchase-order",
         icon: ClipboardList,
-      },
-      // 2R Part 8 — RFQ: the module is implemented (list/new/detail pages
-      // exist) but absent from the sidebar. Wire it in between PO and PR
-      // (the natural procure-to-pay order: request quotations → order →
-      // receive → invoice).
-      {
-        title: "Requests for Quotation",
-        href: "/buying/request-for-quotation",
-        icon: FileText,
       },
       // Procure-to-pay continues: receive goods, then bill them. Both
       // pages live in their owning modules (stock / accounting) but the
@@ -247,9 +241,14 @@ const navigation = [
   {
     title: "Reports",
     icon: BarChart3,
-    // 2N Part 3.2: Reports group is a sub-section of Accounting. We link
-    // each financial report directly rather than nesting a parent route.
+    // 2Y-R2 P7: Reports hub + flagship reports surfaced in nav.
     items: [
+      { title: "All Reports", href: "/reports", icon: BarChart3 },
+      { title: "Stock Balance", href: "/reports/stock-balance", icon: Scale },
+      { title: "Sales Performance", href: "/reports/sales-performance", icon: TrendingUp },
+      { title: "Procurement Spend", href: "/reports/procurement-spend", icon: ShoppingCart },
+      { title: "Manufacturing", href: "/reports/manufacturing-production", icon: Factory },
+      // Accounting reports (existing)
       { title: "Dashboard", href: "/accounting/reports", icon: BarChart3 },
       { title: "Sales", href: "/accounting/reports/sales", icon: TrendingUp },
       { title: "Receivables", href: "/accounting/reports/receivables", icon: Wallet },
@@ -282,7 +281,8 @@ const SECTION_ROLES: Record<string, string[]> = {
   Manufacturing: ["Manufacturing User", "Manufacturing Manager"],
   HR: ["HR User", "HR Manager"],
   Accounting: ["Accounts User", "Accounts Manager"],
-  Reports: ["Accounts User", "Accounts Manager"],
+  // 2Y-R2 P7 — Reports visible to all operational roles (not just accounting).
+  Reports: ["Accounts User", "Accounts Manager", "Stock User", "Stock Manager", "Sales User", "Sales Manager", "Manufacturing User", "Manufacturing Manager", "Purchase User", "Purchase Manager"],
 };
 
 const ALL_ACCESS_ROLES = ["System Manager", "Administrator"];

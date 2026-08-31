@@ -16,18 +16,21 @@ import {
   Edit3,
   Send,
   Ban,
+  Trash2,
   Loader2,
   Package,
   Truck,
 } from "lucide-react";
 
 import { PageHeader, LoadingState, ConfirmDialog } from "@/components/smart";
+import { FrappeSelect } from "@/components/smart/frappe-select";
 import { StatusBadge } from "@/components/smart/status-badge";
 import { InfoCard, DataPoint } from "@/components/ui/info-card";
 import { Button } from "@/components/ui/button";
 import { FlowRail } from "@/components/flows/FlowRail";
 import { isModuleBuilt } from "@/lib/flows/module-availability";
 import { PrintShare } from "@/components/ui/print-share";
+import { PrintMenu } from "@/components/print/PrintMenu";
 import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
 import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
@@ -57,12 +60,18 @@ export default function PurchaseInvoiceDetailPage() {
 
   const [confirmSubmit, setConfirmSubmit] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  // 4.1 A1 — one-click "Mark as Paid" (vendor bill → Payment Entry, Pay).
+  const [confirmPaid, setConfirmPaid] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [payMode, setPayMode] = useState("Cash");
+  const [paying, setPaying] = useState(false);
   const { resolution, showError, dismiss } = useGuidedError();
 
   const {
     data: invoice,
     isLoading,
     error,
+    refetch,
   } = useFrappeDoc<PurchaseInvoice>("Purchase Invoice", name);
 
   // -- Upstream resolution: Purchase Orders linked to this PI ----------------
@@ -115,6 +124,55 @@ export default function PurchaseInvoiceDetailPage() {
     );
   };
 
+  // 4.1 A1 — one-click pay: build+submit a Payment Entry (Pay) via ERPNext's
+  // get_payment_entry mapper. The PE wizard stays as the partial/bank path.
+  const handleMarkAsPaid = async () => {
+    setConfirmPaid(false);
+    setPaying(true);
+    try {
+      const res = await fetch("/api/accounting/payment/quick", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          invoice: name,
+          doctype: "Purchase Invoice",
+          mode_of_payment: payMode,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data?.success) {
+        toast.success(`Payment recorded (${payMode})`, {
+          description: data?.data?.name,
+        });
+        await refetch();
+      } else {
+        toast.error(data?.details || data?.error || "Payment failed");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Payment failed");
+    } finally {
+      setPaying(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setConfirmDelete(false);
+    try {
+      const res = await fetch(`/api/accounting/purchase-invoice/${encodeURIComponent(name)}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        toast.success("Purchase Invoice deleted");
+        router.push("/accounting/purchase-invoice");
+      } else {
+        const body = await res.json().catch(() => ({}));
+        showError(resolveFrappeError(body, { doctype: "Purchase Invoice" }));
+      }
+    } catch (err) {
+      showError(resolveFrappeError(err, { doctype: "Purchase Invoice" }));
+    }
+  };
+
   if (isLoading) return <LoadingState />;
   if (error || !invoice) {
     return (
@@ -140,13 +198,22 @@ export default function PurchaseInvoiceDetailPage() {
     isDraft && {
       label: "Submit Invoice",
       description: "Lock the invoice and post to ledger",
-      onClick: () => setConfirmSubmit(true),
+      onClick: handleSubmit,
       isPrimary: true,
       isLoading: updateMutation.isPending,
     },
     isUnpaid && {
-      label: "Create Payment Entry",
-      description: "Pay this vendor bill",
+      label: "Mark as Paid",
+      description: "Record full payment in one click (defaults to Cash)",
+      onClick: handleMarkAsPaid,
+      isPrimary: true,
+      isLoading: paying,
+      disabled: !isModuleBuilt("Payment Entry"),
+      disabledReason: "Payment Entry module not yet built",
+    },
+    isUnpaid && {
+      label: "Payment Entry (advanced)",
+      description: "Partial payment, a bank account, or a different mode",
       onClick: () =>
         router.push(
           `/accounting/payment-entry/new?invoice=${encodeURIComponent(name)}&party_type=Supplier&party=${encodeURIComponent(invoice.supplier ?? "")}&amount=${invoice.outstanding_amount ?? 0}&payment_type=Pay`,
@@ -175,7 +242,7 @@ export default function PurchaseInvoiceDetailPage() {
                 </Button>
                 <Button
                   size="sm"
-                  onClick={() => setConfirmSubmit(true)}
+                  onClick={handleSubmit}
                   disabled={updateMutation.isPending}
                 >
                   {updateMutation.isPending ? (
@@ -188,16 +255,27 @@ export default function PurchaseInvoiceDetailPage() {
               </>
             )}
             {isSubmitted && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-destructive hover:text-destructive"
-                onClick={() => setConfirmCancel(true)}
-              >
-                <Ban className="mr-1.5 h-4 w-4" /> Cancel
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => setConfirmCancel(true)}
+                >
+                  <Ban className="mr-1.5 h-4 w-4" /> Cancel
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => setConfirmDelete(true)}
+                >
+                  <Trash2 className="mr-1.5 h-4 w-4" /> Delete
+                </Button>
+              </>
             )}
-            <PrintShare doctype="Purchase Invoice" name={name} />
+            <PrintMenu doctype="Purchase Invoice" doc={invoice as unknown as Record<string, unknown>} />
+            <PrintShare doctype="Purchase Invoice" name={name} showPrint={false} />
           </div>
         }
       />
@@ -227,6 +305,11 @@ export default function PurchaseInvoiceDetailPage() {
               <DataPoint label="Company" value={invoice.company} />
               <DataPoint label="Currency" value={invoice.currency} />
               <DataPoint label="Bill No" value={invoice.bill_no || "—"} />
+              {/* 2Y-R2 P1 — FS No (pana_fs_number custom field) surfaced on detail. */}
+              <DataPoint
+                label="FS No"
+                value={(invoice as { pana_fs_number?: string }).pana_fs_number ?? "—"}
+              />
             </div>
             {isSubmitted && (
               <div className="mt-4 pt-4 border-t border-border/60">
@@ -341,6 +424,35 @@ export default function PurchaseInvoiceDetailPage() {
         confirmText="Cancel Invoice"
         variant="destructive"
         onConfirm={handleCancel}
+      />
+      <ConfirmDialog
+        open={confirmPaid}
+        onOpenChange={setConfirmPaid}
+        title="Mark this bill as paid?"
+        description={`Records a full payment of ${ETB.format(invoice.outstanding_amount ?? 0)} against ${name} and submits the Payment Entry.`}
+        confirmText="Record Payment"
+        loading={paying}
+        onConfirm={handleMarkAsPaid}
+      >
+        <div className="mt-2">
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+            Mode of Payment
+          </label>
+          <FrappeSelect
+            doctype="Mode of Payment"
+            value={payMode}
+            onChange={(val) => setPayMode(val || "Cash")}
+          />
+        </div>
+      </ConfirmDialog>
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="Delete this Purchase Invoice?"
+        description={`Are you sure you want to delete "${invoice.name}"? This action cannot be undone.`}
+        confirmText="Delete"
+        variant="destructive"
+        onConfirm={handleDelete}
       />
       <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
     </div>

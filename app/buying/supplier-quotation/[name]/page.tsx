@@ -27,6 +27,7 @@ import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMe
 import { useFlowChain } from "@/hooks/flows/use-flow-chain";
 import { useFrappeDoc, useFrappeUpdate } from "@/hooks/generic";
 import { PrintShare } from "@/components/ui/print-share";
+import { PrintMenu } from "@/components/print/PrintMenu";
 import type { SupplierQuotation } from "@/types/doctype-types";
 
 const ETB = new Intl.NumberFormat("en-ET", {
@@ -131,7 +132,8 @@ export default function SupplierQuotationDetailPage() {
         backHref="/buying/supplier-quotation"
         actions={
           <div className="flex items-center gap-2">
-            <PrintShare doctype="Supplier Quotation" name={name} />
+            <PrintMenu doctype="Supplier Quotation" doc={sq as unknown as Record<string, unknown>} />
+            <PrintShare doctype="Supplier Quotation" name={name} showPrint={false} />
             {isDraft && (
               <Button
                 size="sm"

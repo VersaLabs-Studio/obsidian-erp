@@ -6,9 +6,10 @@
 
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SkeletonDetail, SkeletonLine } from "@/components/ui/skeleton";
@@ -43,7 +44,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-import { useFrappeDoc, useFrappeList, useFrappeDelete } from "@/hooks/generic";
+import { useFrappeDoc, useFrappeList, useFrappeDelete, useFrappeCreate } from "@/hooks/generic";
 import {
   PageHeader,
   LoadingState,
@@ -125,20 +126,34 @@ function QuickAction({
   icon: Icon,
   label,
   href,
+  onClick,
   variant = "outline",
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
-  href: string;
+  href?: string;
+  onClick?: () => void;
   variant?: "default" | "outline" | "secondary";
 }) {
+  if (onClick) {
+    return (
+      <Button
+        variant={variant}
+        className="rounded-full gap-2 justify-start"
+        onClick={onClick}
+      >
+        <Icon className="h-4 w-4" />
+        {label}
+      </Button>
+    );
+  }
   return (
     <Button
       variant={variant}
       className="rounded-full gap-2 justify-start"
       asChild
     >
-      <Link href={href}>
+      <Link href={href!}>
         <Icon className="h-4 w-4" />
         {label}
       </Link>
@@ -187,6 +202,9 @@ export default function ItemMasterHub() {
   const params = useParams<{ name: string }>();
   const itemName = decodeURIComponent(params.name);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  // E1 — Adjust Stock inline dialog (replaces deep-link).
+  const [showAdjustDialog, setShowAdjustDialog] = useState(false);
+  const [adjustSubmitting, setAdjustSubmitting] = useState(false);
 
   // -- Data fetching --------------------------------------------------------
   const { data: item, isLoading, error } = useFrappeDoc<Item>("Item", itemName);
@@ -286,14 +304,52 @@ export default function ItemMasterHub() {
     return { onHand, projected, valuationValue, warehouses, lowStock };
   }, [bins]);
 
-  // 2N Part 1.0: deleteMutation moved UP — Rules-of-Hooks. Hooks must run
-  // unconditionally on every render, before any branch that can `return`.
-  // Previously the hook sat below the isLoading / error early returns, so
-  // the first render returned before calling it and the next render called
-  // it — React threw "change in the order of Hooks called by ItemMasterHub".
+  // 2N Part 1.0: deleteMutation moved UP — Rules-of-Hooks.
   const deleteMutation = useFrappeDelete("Item", {
     onSuccess: () => router.push("/stock/item"),
   });
+
+  // E1 — Inline adjust stock mutation (Rules-of-Hooks: before all returns).
+  const adjustMutation = useFrappeCreate(
+    "Stock Reconciliation",
+    { showToast: false },
+  );
+
+  // E1 — Adjust stock handler: builds a Stock Reconciliation + confirms directly.
+  const handleAdjustSubmit = async (data: {
+    reconciliationType: "Opening";
+    items: Array<{ item_code: string; qty: number }>;
+  }) => {
+    setAdjustSubmitting(true);
+    try {
+      const result = (await adjustMutation.mutateAsync({
+        doctype: "Stock Reconciliation",
+        name: null,
+        data: {
+          reconciliation_type: "Opening",
+          company: (item as Item & { company?: string }).company || "",
+          purpose: undefined, // not used for Opening type
+          items: [
+            {
+              item_code: itemName,
+              warehouse: (item as Item & { default_warehouse?: string }).default_warehouse ?? "",
+              qty: data.items[0]?.qty ?? 0,
+              rate: (item as Item & { valuation_rate?: number }).valuation_rate ?? 0,
+            },
+          ],
+        },
+      })) as { data?: { name?: string }; name?: string };
+      const createdName = result?.data?.name ?? result?.name;
+      toast.success("Stock adjusted", {
+        description: createdName ? `Reconciliation ${createdName} created.` : undefined,
+      });
+      setShowAdjustDialog(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Adjust failed");
+    } finally {
+      setAdjustSubmitting(false);
+    }
+  };
 
   // -- Loading / error states ----------------------------------------------
   if (isLoading) return <SkeletonDetail />;
@@ -377,11 +433,7 @@ export default function ItemMasterHub() {
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   className="rounded-xl"
-                  onClick={() =>
-                    router.push(
-                      `/stock/stock-reconciliation/new?item_code=${encodeURIComponent(itemName)}`,
-                    )
-                  }
+                  onClick={() => setShowAdjustDialog(true)}
                 >
                   <Boxes className="h-4 w-4 mr-2" /> Adjust Stock
                 </DropdownMenuItem>
@@ -525,7 +577,7 @@ export default function ItemMasterHub() {
                   <QuickAction
                     icon={Boxes}
                     label="Adjust Stock"
-                    href={`/stock/stock-reconciliation/new?item_code=${encodeURIComponent(itemName)}`}
+                    onClick={() => setShowAdjustDialog(true)}
                   />
                 </div>
               </InfoCard>
@@ -642,12 +694,8 @@ export default function ItemMasterHub() {
                 title="No stock recorded"
                 description="This item has no Bin entries yet. Adjust stock via Stock Reconciliation."
                 action={
-                  <Button asChild className="rounded-full">
-                    <Link
-                      href={`/stock/stock-reconciliation/new?item_code=${encodeURIComponent(itemName)}`}
-                    >
-                      <Plus className="h-4 w-4 mr-2" /> Adjust Stock
-                    </Link>
+                  <Button onClick={() => setShowAdjustDialog(true)} className="rounded-full">
+                    <Plus className="h-4 w-4 mr-2" /> Adjust Stock
                   </Button>
                 }
               />
@@ -901,6 +949,20 @@ export default function ItemMasterHub() {
           }
         }}
         loading={deleteMutation.isPending}
+      />
+
+      {/* E1 — Adjust Stock inline dialog */}
+      <ConfirmDialog
+        open={showAdjustDialog}
+        onOpenChange={setShowAdjustDialog}
+        title="Adjust Stock"
+        description={`Adjust the stock quantity for "${displayName}". This creates a Stock Reconciliation entry.`}
+        confirmText="Adjust"
+        loading={adjustSubmitting}
+        onConfirm={() => handleAdjustSubmit({
+          reconciliationType: "Opening",
+          items: [{ item_code: itemName, qty: 0 }],
+        })}
       />
     </div>
   );

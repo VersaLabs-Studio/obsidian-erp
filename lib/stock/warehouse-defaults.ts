@@ -33,6 +33,8 @@ export interface WarehouseDefaults {
   wipWarehouse: string;
   /** Scrap / rejected warehouse (Manufacturing Settings.default_scrap_warehouse) */
   scrapWarehouse: string;
+  /** Allow negative stock (Stock Settings.allow_negative_stock) */
+  allowNegativeStock: boolean;
 }
 
 const EMPTY_DEFAULTS: WarehouseDefaults = {
@@ -40,6 +42,7 @@ const EMPTY_DEFAULTS: WarehouseDefaults = {
   fgWarehouse: "",
   wipWarehouse: "",
   scrapWarehouse: "",
+  allowNegativeStock: false,
 };
 
 const DEFAULTS_ENDPOINT = "/api/stock/settings/warehouse-defaults";
@@ -67,6 +70,7 @@ async function requestDefaults(): Promise<WarehouseDefaults> {
     fgWarehouse: String(d.fgWarehouse ?? ""),
     wipWarehouse: String(d.wipWarehouse ?? ""),
     scrapWarehouse: String(d.scrapWarehouse ?? ""),
+    allowNegativeStock: Boolean(d.allowNegativeStock),
   };
 }
 

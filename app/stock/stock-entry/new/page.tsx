@@ -33,7 +33,7 @@ import {
 import { QuickAddField } from "@/components/quick-add/QuickAddField";
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
 import { FlowWizard } from "@/components/flows/FlowWizard";
-import { useFrappeCreate } from "@/hooks/generic";
+import { useFrappeCreate, useFrappeUpdate } from "@/hooks/generic";
 import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
 import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
 import { getActiveCompany } from "@/lib/settings/company";
@@ -221,21 +221,22 @@ export default function NewStockEntryPage() {
 
   // -- Persistence ------------------------------------------------------------
   const { resolution, showError, dismiss } = useGuidedError();
+  // v4.1 C1 — born-submitted: create as draft, then submit in the same
+  // action so a Stock Entry lands posted (mirrors the SO cockpit + WO
+  // create path). `showToast:false` on submit so we own the copy and can
+  // gracefully degrade to "created as a draft" if the submit half fails.
   const createMutation = useFrappeCreate<
     { data: { name: string } },
     Record<string, unknown>
   >("Stock Entry", {
-    successMessage: "Stock Entry created",
-    onSuccess: (res) => {
-      const name = res?.data?.name;
-      if (name) {
-        router.push(`/stock/stock-entry/${encodeURIComponent(name)}`);
-      }
-    },
+    showToast: false,
     onError: (err) => showError(resolveFrappeError(err, { doctype: "Stock Entry" })),
   });
+  const submitMutation = useFrappeUpdate<{ name: string }>("Stock Entry", {
+    showToast: false,
+  });
 
-  const handleSubmit = useCallback(() => {
+  const handleSubmit = useCallback(async () => {
     const values = getValues();
     const items = (values.items ?? []).filter(
       (it) => it.item_code && Number(it.qty) > 0,
@@ -245,7 +246,7 @@ export default function NewStockEntryPage() {
       setStep(1);
       return;
     }
-    createMutation.mutate({
+    const res = await createMutation.mutateAsync({
       ...values,
       company: getActiveCompany(),
       stock_entry_type: values.stock_entry_type || values.purpose,
@@ -257,7 +258,20 @@ export default function NewStockEntryPage() {
         t_warehouse: it.t_warehouse || values.to_warehouse || undefined,
       })),
     });
-  }, [createMutation, getValues]);
+    const seName = res?.data?.name;
+    if (!seName) return; // create failed — onError already surfaced the guide
+    try {
+      await submitMutation.mutateAsync({
+        name: seName,
+        data: { docstatus: 1 },
+      });
+      toast.success("Stock Entry created and submitted");
+    } catch {
+      // The doc exists as a draft; the operator can submit it from detail.
+      toast.warning("Stock Entry created as a draft — review and submit it.");
+    }
+    router.push(`/stock/stock-entry/${encodeURIComponent(seName)}`);
+  }, [createMutation, submitMutation, getValues, router]);
 
   return (
     <div className="space-y-6 pb-12">
@@ -273,14 +287,14 @@ export default function NewStockEntryPage() {
             steps={WIZARD_STEPS}
             formData={watchedAll as unknown as Record<string, unknown>}
             validationResults={validationResults}
-            isSubmitting={createMutation.isPending}
+            isSubmitting={createMutation.isPending || submitMutation.isPending}
             onFormDataChange={() => {}}
             onStepChange={setStep}
             onTriedNextChange={setTriedNextSteps}
             onSubmit={handleSubmit}
             onCancel={() => router.back()}
-            submitLabel="Create Stock Entry"
-            submittingLabel="Creating..."
+            submitLabel="Create & Submit"
+            submittingLabel="Submitting..."
             renderStep={(s) => {
               // ---- STEP 1 — Entry Type & Warehouses ----------------------
               if (s.id === "step1") {

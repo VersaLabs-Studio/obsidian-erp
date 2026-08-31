@@ -39,6 +39,7 @@ import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
 import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
 import { PrintShare } from "@/components/ui/print-share";
+import { PrintMenu } from "@/components/print/PrintMenu";
 import { useFlowChain } from "@/hooks/flows/use-flow-chain";
 import { useFrappeDoc, useFrappeUpdate, useFrappeDelete } from "@/hooks/generic";
 import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
@@ -188,7 +189,8 @@ export default function QuotationDetailPage() {
         backHref="/sales/quotation"
         actions={
           <div className="flex items-center gap-2">
-            <PrintShare doctype="Quotation" name={quote.name} />
+            <PrintMenu doctype="Quotation" doc={quote as unknown as Record<string, unknown>} />
+            <PrintShare doctype="Quotation" name={quote.name} showPrint={false} />
             {isDraft && (
               <>
                 <Button variant="outline" size="sm" asChild>

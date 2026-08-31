@@ -6,7 +6,7 @@
 // Real flow-chain resolution (no stub): upstream Quotation via prevdoc_docname,
 // downstream Work Orders via the sales_order header link. OKLCH tokens only.
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -16,6 +16,7 @@ import {
   Edit3,
   Send,
   Ban,
+  Trash2,
   Printer,
   Loader2,
   Package,
@@ -27,12 +28,17 @@ import {
   Play,
   Square,
   Cog,
+  Truck,
+  Receipt,
+  DollarSign,
+  Wallet,
 } from "lucide-react";
 
 import { PageHeader, LoadingState, ConfirmDialog } from "@/components/smart";
 import { StatusBadge } from "@/components/smart/status-badge";
 import { InfoCard, DataPoint } from "@/components/ui/info-card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { PrintShare } from "@/components/ui/print-share";
 import { PrintMenu } from "@/components/print/PrintMenu";
 import { FlowRail } from "@/components/flows/FlowRail";
@@ -46,11 +52,16 @@ import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
 import { useFlowChain } from "@/hooks/flows/use-flow-chain";
 import { getAutoFillMapping, applyAutoFill } from "@/lib/flows/flow-auto-fill";
 import { getActiveCompany } from "@/lib/settings/company";
-import { useFrappeDoc, useFrappeList, useFrappeUpdate, useFrappeCreate } from "@/hooks/generic";
+import { useFrappeDoc, useFrappeList, useFrappeUpdate, useFrappeCreate, useFrappeOptions } from "@/hooks/generic";
+import { useJobCardLifecycle, type JobCardLifecycle } from "@/hooks/manufacturing/use-job-card-lifecycle";
 import { FrappeSelect } from "@/components/smart/frappe-select";
-import type { SalesOrder } from "@/types/doctype-types";
-import { getDefaultFgWarehouse, fetchWarehouseDefaults } from "@/lib/stock/warehouse-defaults";
+import { CreateJobCardModal } from "@/components/manufacturing/CreateJobCardModal";
+import type { SalesOrder, JobCard, WorkOrder, DeliveryNote, SalesInvoice, PaymentEntry } from "@/types/doctype-types";
+import { getDefaultFgWarehouse, resolvePrefillWarehouses } from "@/lib/stock/warehouse-defaults";
 import { cn } from "@/lib/utils";
+// 2Y-R5 P7 — invalidate flow-resolve caches when JC/WO lifecycle changes
+// may advance the FlowRail.
+import { useQueryClient } from "@tanstack/react-query";
 
 // 2U §P0 — Manufacturing master-doc rows. A Sales Order acts as the cockpit
 // where the sales user creates Work Orders, submits them (which generates Job
@@ -63,27 +74,7 @@ interface LinkedWorkOrder {
   qty?: number;
   docstatus?: 0 | 1 | 2;
 }
-interface JobCardEmployeeRow {
-  employee?: string;
-  employee_name?: string;
-}
-interface JobCardTimeLog {
-  employee?: string;
-  from_time?: string;
-  to_time?: string;
-  completed_qty?: number;
-  time_in_mins?: number;
-}
-interface LinkedJobCard {
-  name: string;
-  status?: string;
-  operation?: string;
-  work_order?: string;
-  workstation?: string;
-  for_quantity?: number;
-  employee?: JobCardEmployeeRow[];
-  time_logs?: JobCardTimeLog[];
-}
+
 
 const ETB = new Intl.NumberFormat("en-ET", { style: "currency", currency: "ETB" });
 
@@ -105,8 +96,19 @@ export default function SalesOrderDetailPage() {
   const [confirmSubmit, setConfirmSubmit] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [confirmCreateWO, setConfirmCreateWO] = useState(false);
+  // 2Z D2 — one-click Deliver & Invoice (server-side DN→SI chain).
+  const [confirmFulfill, setConfirmFulfill] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [fsNumber, setFsNumber] = useState("");
+  const [fulfilling, setFulfilling] = useState(false);
   const [woToCreate, setWoToCreate] = useState<Array<{ item_code: string; item_name?: string; qty: number; warehouse?: string }>>([]);
+  // 2Y-R3 — create additional Job Cards (different operation/workstation)
+  // directly from the SO cockpit's Work Order card.
+  const [createJCFor, setCreateJCFor] = useState<string | null>(null);
   const { resolution, showError, dismiss } = useGuidedError();
+  // 2Y-R5 P7 — the cockpit invalidates flow-resolve caches when a JC/WO
+  // lifecycle change may advance the FlowRail stage.
+  const queryClient = useQueryClient();
 
   const { data: order, isLoading, error } = useFrappeDoc<SalesOrder>(
     "Sales Order",
@@ -132,15 +134,82 @@ export default function SalesOrderDetailPage() {
     () => (workOrders ?? []).map((w) => w.name),
     [workOrders],
   );
+  // 2Y-R3 — stabilise the query key so refetchJobCards() invalidates the
+  // SAME query instance that the component renders.  Without useMemo the
+  // options object is recreated every render, creating a new query key, so
+  // refetch() on the stale key never reaches the active query.
+  const jobCardListOptions = useMemo(
+    () => ({
+      filters: [["work_order", "in", linkedWONames.length ? linkedWONames : ["__none__"]] as [string, string, unknown]],
+      // 2Y-R2 P0 — parent columns ONLY. `employee`/`time_logs` are child
+      // tables; requesting them here 500s. Child data is read from the full
+      // doc via useFrappeDoc in JobCardCard.
+      fields: ["name", "status", "operation", "work_order", "workstation", "for_quantity"],
+      limit: 100,
+    }),
+    [linkedWONames],
+  );
   const { data: jobCards, refetch: refetchJobCards } =
-    useFrappeList<LinkedJobCard>(
+    useFrappeList<JobCard>(
       "Job Card",
-      {
-        filters: [["work_order", "in", linkedWONames.length ? linkedWONames : ["__none__"]]],
-        fields: ["name", "status", "operation", "work_order", "workstation", "for_quantity", "employee", "time_logs"],
-        limit: 100,
-      },
+      jobCardListOptions,
       { enabled: linkedWONames.length > 0 },
+    );
+
+  // -- Deliveries: linked Delivery Notes (DN Item.against_sales_order) -------
+  // v4.2 — the SO cockpit surfaces the created DN(s) so the sales user can
+  // one-click print the GATE PASS or CUSTOMER COPY right from the cockpit
+  // (after production is complete → Deliver & Invoice).
+  const { data: deliveryNotes, refetch: refetchDeliveryNotes } =
+    useFrappeList<DeliveryNote>(
+      "Delivery Note",
+      {
+        filters: [["Delivery Note Item", "against_sales_order", "=", name]],
+        fields: ["name", "status", "posting_date", "grand_total", "currency", "docstatus"],
+        orderBy: { field: "posting_date", order: "desc" },
+        limit: 20,
+      },
+      { enabled: !isLoading && !!order },
+    );
+
+  // -- Billing: linked Sales Invoices (SI Item.sales_order) ------------------
+  const { data: salesInvoices, refetch: refetchSalesInvoices } =
+    useFrappeList<SalesInvoice>(
+      "Sales Invoice",
+      {
+        filters: [["Sales Invoice Item", "sales_order", "=", name]],
+        // 2Z-R7b — docstatus is REQUIRED by the Mark-Paid gating
+        // (outstandingInvoices filter): without it every row read
+        // docstatus === undefined and the Payment button showed
+        // "Nothing to pay" even with unpaid invoices.
+        fields: ["name", "status", "docstatus", "posting_date", "due_date", "grand_total", "outstanding_amount", "currency"],
+        orderBy: { field: "posting_date", order: "desc" },
+        limit: 20,
+      },
+      { enabled: !isLoading && !!order },
+    );
+
+  // -- Payments: Payment Entries referencing THIS order's invoices -----------
+  // PE links to an SO only indirectly — via the Payment Entry Reference child
+  // table pointing at one of the linked Sales Invoices. So we resolve the
+  // invoice names first, then fetch the PEs that paid them.
+  const linkedSINames = useMemo(
+    () => (salesInvoices ?? []).map((s) => s.name),
+    [salesInvoices],
+  );
+  const { data: paymentEntries } =
+    useFrappeList<PaymentEntry>(
+      "Payment Entry",
+      {
+        filters: [
+          ["Payment Entry Reference", "reference_doctype", "=", "Sales Invoice"],
+          ["Payment Entry Reference", "reference_name", "in", linkedSINames.length ? linkedSINames : ["__none__"]],
+        ],
+        fields: ["name", "status", "posting_date", "payment_type", "mode_of_payment", "paid_amount"],
+        orderBy: { field: "posting_date", order: "desc" },
+        limit: 20,
+      },
+      { enabled: linkedSINames.length > 0 },
     );
 
   // Submit a draft Work Order (docstatus 0 → 1). On submit ERPNext generates
@@ -155,10 +224,39 @@ export default function SalesOrderDetailPage() {
         { name: woName, data: { docstatus: 1 } },
         {
           onSuccess: async () => {
+            // 2Y-R6 — AUTO-START: submitting a WO generates its Job Cards, so
+            // the operator's next manual step was always "Start Production"
+            // (Material Transfer SE). Chain it immediately. Best-effort: if
+            // auto-start fails (e.g. insufficient stock), the WO stays
+            // submitted and Start remains available manually.
+            let startNote = "Job Cards are generated for each routed operation.";
+            try {
+              const res = await fetch(
+                `/api/manufacturing/work-order/${encodeURIComponent(woName)}/start`,
+                { method: "POST" },
+              );
+              const d = await res.json().catch(() => ({}));
+              if (!res.ok || !d?.success) {
+                throw new Error(
+                  d?.details || d?.error || "Auto-start failed",
+                );
+              }
+              startNote =
+                d?.message ||
+                "Started automatically — materials transferred to WIP.";
+            } catch (e) {
+              toast.warning(`Work Order ${woName} submitted — auto-start failed`, {
+                description: `${
+                  e instanceof Error ? e.message : "Unknown error"
+                } — use Start Production when ready.`,
+              });
+            }
             toast.success(`Work Order ${woName} submitted`, {
-              description: "Job Cards are generated for each routed operation.",
+              description: startNote,
             });
             await Promise.all([refetchWO(), refetchJobCards()]);
+            queryClient.invalidateQueries({ queryKey: ["Work Order"], refetchType: "all" });
+            queryClient.invalidateQueries({ queryKey: ["flows", "resolve"] });
             setSubmittingWO(null);
           },
           onError: (err) => {
@@ -168,173 +266,111 @@ export default function SalesOrderDetailPage() {
         },
       );
     },
-    [submitWOMutation, refetchWO, refetchJobCards, showError],
+    [submitWOMutation, refetchWO, refetchJobCards, queryClient, showError],
   );
 
   // Assign an employee to a Job Card. Job Card's `employee` is a Table
   // MultiSelect child table — each row carries one `employee` link. We union
   // the selected employee with any already assigned and write the rows back.
-  const assignJCMutation = useFrappeUpdate<LinkedJobCard>("Job Card", { showToast: false });
-  const [assigningJC, setAssigningJC] = useState<string | null>(null);
+  // 2Y-R2 P0/P3 — shared lifecycle hook. Reads child data (employee/time_logs)
+  // from the FULL doc, never from the get_list row above (child fields 500).
+  // On any JC change we refetch both the JC list and the WO list (so the
+  // "Complete Work Order" affordance updates when all JCs are done).
+  const onJcChanged = useCallback(() => {
+    refetchJobCards();
+    refetchWO();
+    // 2Y-R5 P7 — once a JC completes, the FlowRail stage statuses (e.g. the
+    // manufacturing stage) can advance too; drop the resolve cache so the
+    // rail refetches alongside the lists above. (Job Card / Work Order
+    // doctype-prefix invalidation lives in useJobCardLifecycle itself.)
+    queryClient.invalidateQueries({ queryKey: ["flows", "resolve"] });
+  }, [refetchJobCards, refetchWO, queryClient]);
+  const jcLifecycle = useJobCardLifecycle(onJcChanged, showError);
 
-  const handleAssignEmployee = useCallback(
-    (jc: LinkedJobCard, employeeId: string, employeeName?: string) => {
-      if (!employeeId) return;
-      const existing = (jc.employee ?? []).map((r) => r.employee).filter(Boolean) as string[];
-      if (existing.includes(employeeId)) {
-        toast.info(`${employeeName || employeeId} is already assigned to ${jc.name}.`);
-        return;
-      }
-      // 2X P0-D — include employee_name so the chip shows name, not ID.
-      const rows = [...existing, employeeId].map((id) => ({
-        employee: id,
-        employee_name: id === employeeId && employeeName ? employeeName : undefined,
-      }));
-      setAssigningJC(jc.name);
-      assignJCMutation.mutate(
-        { name: jc.name, data: { employee: rows } },
-        {
-          onSuccess: async () => {
-            toast.success(`Assigned ${employeeName || employeeId} to ${jc.name}`);
-            await refetchJobCards();
-            setAssigningJC(null);
-          },
-          onError: (err) => {
-            setAssigningJC(null);
-            showError(resolveFrappeError(err, { doctype: "Job Card" }));
-          },
-        },
-      );
-    },
-    [assignJCMutation, refetchJobCards, showError],
-  );
+  // 2Y-R3 — Employee name lookup so the cockpit shows names, not IDs.
+  const { data: employeeOptions } = useFrappeOptions("Employee", {
+    labelField: "employee_name",
+    limit: 1000,
+  });
+  const employeeNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const o of employeeOptions ?? []) {
+      if (o.value) map[o.value] = (o.label as string) || o.value;
+    }
+    return map;
+  }, [employeeOptions]);
 
-  // 2Y Part 3 — JC lifecycle mutations (Start / Complete) inline in SO cockpit.
-  // Uses useFrappeUpdate with correct time_logs data so Frappe's controller
-  // validates the status transition. Same pattern as WO/JC detail pages (2X P0-B).
-  const lifecycleJCMutation = useFrappeUpdate<LinkedJobCard>("Job Card", { showToast: false });
-  const [lifecycleJC, setLifecycleJC] = useState<string | null>(null);
 
-  /** Start a Job Card: append a new time_log entry with from_time. */
-  const handleStartJC = useCallback(
-    (jc: LinkedJobCard) => {
-      const assignedEmps = (jc.employee ?? []).filter((r) => r.employee);
-      if (assignedEmps.length === 0) {
-        toast.error("Assign an employee before starting this Job Card.");
-        return;
-      }
-      const emp = assignedEmps[0].employee!;
-      const existingLogs = jc.time_logs ?? [];
-      const newLog: JobCardTimeLog = {
-        employee: emp,
-        from_time: new Date().toISOString(),
-        completed_qty: 0,
-      };
-      setLifecycleJC(jc.name);
-      lifecycleJCMutation.mutate(
-        { name: jc.name, data: { time_logs: [...existingLogs, newLog] } },
-        {
-          onSuccess: async () => {
-            toast.success(`Job Card ${jc.name} started`, {
-              description: `${emp} is now clocked in.`,
-            });
-            await refetchJobCards();
-            setLifecycleJC(null);
-          },
-          onError: (err) => {
-            setLifecycleJC(null);
-            showError(resolveFrappeError(err, { doctype: "Job Card" }));
-          },
-        },
-      );
-    },
-    [lifecycleJCMutation, refetchJobCards, showError],
-  );
 
-  /** Complete a Job Card: update the last open time_log with to_time + completed_qty. */
-  const handleCompleteJC = useCallback(
-    (jc: LinkedJobCard) => {
-      const logs = [...(jc.time_logs ?? [])];
-      // Find the last open log (no to_time)
-      const openIdx = logs.findLastIndex((l) => l.from_time && !l.to_time);
-      if (openIdx === -1) {
-        toast.error("No open time log to complete.");
-        return;
-      }
-      logs[openIdx] = {
-        ...logs[openIdx],
-        to_time: new Date().toISOString(),
-        completed_qty: jc.for_quantity ?? 0,
-      };
-      setLifecycleJC(jc.name);
-      lifecycleJCMutation.mutate(
-        { name: jc.name, data: { time_logs: logs } },
-        {
-          onSuccess: async () => {
-            toast.success(`Job Card ${jc.name} completed`);
-            await Promise.all([refetchJobCards(), refetchWO()]);
-            setLifecycleJC(null);
-          },
-          onError: (err) => {
-            setLifecycleJC(null);
-            showError(resolveFrappeError(err, { doctype: "Job Card" }));
-          },
-        },
-      );
-    },
-    [lifecycleJCMutation, refetchJobCards, refetchWO, showError],
-  );
-
-  /** Assign a workstation to a Job Card. */
-  const wsJCMutation = useFrappeUpdate<LinkedJobCard>("Job Card", { showToast: false });
-  const [assigningWS, setAssigningWS] = useState<string | null>(null);
-
-  const handleAssignWorkstation = useCallback(
-    (jc: LinkedJobCard, workstation: string) => {
-      if (!workstation) return;
-      setAssigningWS(jc.name);
-      wsJCMutation.mutate(
-        { name: jc.name, data: { workstation } },
-        {
-          onSuccess: async () => {
-            toast.success(`Workstation ${workstation} assigned to ${jc.name}`);
-            await refetchJobCards();
-            setAssigningWS(null);
-          },
-          onError: (err) => {
-            setAssigningWS(null);
-            showError(resolveFrappeError(err, { doctype: "Job Card" }));
-          },
-        },
-      );
-    },
-    [wsJCMutation, refetchJobCards, showError],
-  );
-
-  // 2Y Part 3 — Complete WO inline: when all JCs for a WO are completed,
-  // the operator can mark the WO as Completed (sets status via useFrappeUpdate).
-  const completeWOMutation = useFrappeUpdate<LinkedWorkOrder>("Work Order", { showToast: false });
+  // 2Y-R5 — Complete WO inline: when all JCs for a WO are completed, the
+  // operator can finish the WO from the cockpit. This now POSTs the dedicated
+  // /complete lifecycle route, which builds + submits ERPNext's own
+  // "Manufacture" Stock Entry (the desk "Finish" button's exact path). The
+  // previous generic PUT { status: "Completed" } was rejected by ERPNext with
+  // UpdateAfterSubmitError — direct status writes are blocked post-submit.
   const [completingWO, setCompletingWO] = useState<string | null>(null);
 
   const handleCompleteWO = useCallback(
-    (woName: string) => {
+    async (woName: string) => {
       setCompletingWO(woName);
-      completeWOMutation.mutate(
-        { name: woName, data: { status: "Completed" } },
-        {
-          onSuccess: async () => {
-            toast.success(`Work Order ${woName} completed`);
-            await refetchWO();
-            setCompletingWO(null);
-          },
-          onError: (err) => {
-            setCompletingWO(null);
-            showError(resolveFrappeError(err, { doctype: "Work Order" }));
-          },
-        },
-      );
+      try {
+        const res = await fetch(
+          `/api/manufacturing/work-order/${encodeURIComponent(woName)}/complete`,
+          { method: "POST" },
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.success) {
+          throw new Error(
+            data?.details || data?.error || "Failed to complete Work Order",
+          );
+        }
+        toast.success(`Work Order ${woName} completed`, {
+          description:
+            data?.message || "Finished goods have been declared via Stock Entry.",
+        });
+        await refetchWO();
+        queryClient.invalidateQueries({ queryKey: ["Work Order"], refetchType: "all" });
+        queryClient.invalidateQueries({ queryKey: ["flows", "resolve"] });
+      } catch (err) {
+        showError(resolveFrappeError(err, { doctype: "Work Order" }));
+      } finally {
+        setCompletingWO(null);
+      }
     },
-    [completeWOMutation, refetchWO, showError],
+    [refetchWO, queryClient, showError],
+  );
+
+  // 2Y-R3 — Start WO: call ERPNext's start_work method (direct PATCH on
+  // status is rejected by ERPNext's validation).
+  const [startingWO, setStartingWO] = useState<string | null>(null);
+
+  const handleStartWO = useCallback(
+    async (woName: string) => {
+      setStartingWO(woName);
+      try {
+        const res = await fetch(
+          `/api/manufacturing/work-order/${encodeURIComponent(woName)}/start`,
+          { method: "POST" },
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.success) {
+          throw new Error(
+            data?.details || data?.error || "Failed to start Work Order",
+          );
+        }
+        toast.success(`Work Order ${woName} started`, {
+          description: data?.message || "Production is now in progress.",
+        });
+        await refetchWO();
+        queryClient.invalidateQueries({ queryKey: ["Work Order"], refetchType: "all" });
+        queryClient.invalidateQueries({ queryKey: ["flows", "resolve"] });
+      } catch (err) {
+        showError(resolveFrappeError(err, { doctype: "Work Order" }));
+      } finally {
+        setStartingWO(null);
+      }
+    },
+    [refetchWO, showError],
   );
 
   // -- BOM lookup for WO creation (default BOM per production item) ----------
@@ -401,6 +437,25 @@ export default function SalesOrderDetailPage() {
     );
   };
 
+  // F1 — Destructive actions: Delete requires confirmation.
+  const handleDelete = async () => {
+    setConfirmDelete(false);
+    try {
+      const res = await fetch(`/api/sales/sales-order/${encodeURIComponent(name)}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        toast.success("Sales Order deleted");
+        router.push("/sales/sales-order");
+      } else {
+        const body = await res.json().catch(() => ({}));
+        showError(resolveFrappeError(body, { doctype: "Sales Order" }));
+      }
+    } catch (err) {
+      showError(resolveFrappeError(err, { doctype: "Sales Order" }));
+    }
+  };
+
   // -- Work Order multi-create (B3 idempotency) --------------------------------
   // 2U §2 — Sequential Work Order multi-create. onSuccess/onError are now
   // handled inside executeCreateWorkOrders (mutateAsync + await per item).
@@ -435,40 +490,33 @@ export default function SalesOrderDetailPage() {
     setConfirmCreateWO(true);
   }, [order, workOrders]);
 
-  // 2V P0-6 — Quick BOM fallback: create a minimal single-level BOM via
-  // Frappe API when no default BOM exists for a production item.
-  const quickBomId = useRef(0);
+  // 2V P0-6 / 2Y-R3 — Quick BOM fallback: when no default BOM exists for a
+  // production item, ask the server to build + SUBMIT a real one (default
+  // recipe from the configurator option-sets, placeholder RM otherwise).
+  // The old client-side `POST /api/resource/BOM` 404'd (Next namespace) and
+  // produced an item-less draft ERPNext could never use.
   const ensureBomNo = useCallback(async (itemCode: string): Promise<string | null> => {
     // Check if a default BOM already exists
     const existingBom = (defaultBOMs ?? []).find((b) => b.item === itemCode);
     if (existingBom) return existingBom.name;
 
-    // Create a minimal Quick BOM
-    const id = (quickBomId.current++).toString();
-    const bomName = `QBOM-${itemCode}-${id}`;
     try {
-      const res = await fetch("/api/resource/BOM", {
+      const res = await fetch("/api/manufacturing/bom/quick", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          item: itemCode,
-          name: bomName,
-          is_default: 1,
-          quantity: 1,
-          company: getActiveCompany(),
-          items: [], // no raw materials — minimal BOM
-          operations: [],
-        }),
+        body: JSON.stringify({ item_code: itemCode, company: getActiveCompany() }),
       });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body?.message || "Failed to create Quick BOM");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.details || data?.error || "Failed to create Quick BOM");
       }
-      const data = await res.json();
-      const createdName = data?.data?.name ?? data?.name ?? bomName;
-      toast.success(`Quick BOM created for ${itemCode}`, {
-        description: `A minimal BOM (${createdName}) was auto-created.`,
-      });
+      const createdName: string | null = data?.data?.name ?? null;
+      if (!createdName) throw new Error("Quick BOM returned no name");
+      if (data?.data?.created) {
+        toast.success(`Quick BOM created for ${itemCode}`, {
+          description: data?.message ?? `BOM ${createdName} was auto-created and submitted.`,
+        });
+      }
       return createdName;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -477,14 +525,137 @@ export default function SalesOrderDetailPage() {
     }
   }, [defaultBOMs]);
 
+  // 2Z D2 — Deliver & Invoice: ONE server call chains ERPNext's own SO→DN
+  // and DN→SI mappers and submits both docs. The optional FS No stamps the
+  // client-mandated fiscal serial (pana_fs_number) on the invoice before it
+  // is submitted. The wizard path ("Delivery Note (advanced)") remains for
+  // partial deliveries and manual review.
+  const handleFulfill = useCallback(async () => {
+    setFulfilling(true);
+    try {
+      const res = await fetch(
+        `/api/sales/sales-order/${encodeURIComponent(name)}/fulfill`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fs_number: fsNumber.trim() || undefined }),
+        },
+      );
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.success) {
+        const si = data?.data?.sales_invoice as string | null;
+        toast.success("Order delivered and invoiced", {
+          description: `Delivery Note ${data?.data?.delivery_note}${si ? ` · Sales Invoice ${si}` : ""}`,
+          action: si
+            ? {
+                label: "View Invoice",
+                onClick: () =>
+                  router.push(`/accounting/sales-invoice/${encodeURIComponent(si)}`),
+              }
+            : undefined,
+        });
+        setConfirmFulfill(false);
+        setFsNumber("");
+        // v4.2 — refresh the Deliveries + Billing panels so the created DN
+        // (with its gate-pass print) and the invoice appear immediately.
+        await Promise.all([refetchDeliveryNotes(), refetchSalesInvoices()]);
+        // 2Z-R7 — repaint everything downstream of fulfilment: the FlowRail
+        // (its resolve cache is 5-min stale by design), the SO header status /
+        // billing %, and any mounted full-doc queries for DNs/SIs. Without
+        // this the rail kept its pre-fulfilment stage statuses until a manual
+        // refresh.
+        queryClient.invalidateQueries({ queryKey: ["flows", "resolve"] });
+        queryClient.invalidateQueries({ queryKey: ["Sales Order"], refetchType: "all" });
+        queryClient.invalidateQueries({ queryKey: ["Delivery Note"], refetchType: "all" });
+        queryClient.invalidateQueries({ queryKey: ["Sales Invoice"], refetchType: "all" });
+      } else if (data?.data?.delivery_note) {
+        // Partial: the DN submitted but invoicing failed — never lose the DN.
+        toast.warning(`Delivered as ${data.data.delivery_note}, but invoicing failed`, {
+          description:
+            data?.details || data?.error || "Create the invoice from the Delivery Note.",
+        });
+        setConfirmFulfill(false);
+        await refetchDeliveryNotes();
+      } else {
+        toast.error("Deliver & Invoice failed", {
+          description: data?.details || data?.error || "Unknown error",
+        });
+      }
+    } catch (err) {
+      toast.error("Deliver & Invoice failed", {
+        description: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setFulfilling(false);
+    }
+  }, [name, fsNumber, router, refetchDeliveryNotes, refetchSalesInvoices, queryClient]);
+
+  // 2Z-R7 — Inline "Mark Paid": create + submit a Payment Entry against an
+  // outstanding invoice WITHOUT leaving the cockpit. Uses the existing
+  // /api/accounting/payment/quick route (ERPNext's own get_payment_entry
+  // mapper). The previous Payment button was a redirect to the PE wizard.
+  const [payingInvoice, setPayingInvoice] = useState<string | null>(null);
+
+  // Outstanding invoices drive the inline Mark-Paid / Payment action. Kept
+  // ABOVE the early returns — hooks must not sit behind conditional returns.
+  const outstandingInvoices = useMemo(
+    () =>
+      (salesInvoices ?? []).filter(
+        (si) => si.docstatus === 1 && Number(si.outstanding_amount ?? 0) > 0.005,
+      ),
+    [salesInvoices],
+  );
+
+  const handleQuickPayment = useCallback(
+    async (invoiceName?: string) => {
+      const target = invoiceName ?? outstandingInvoices[0]?.name;
+      if (!target) {
+        toast.info("No outstanding invoices to pay for this order.");
+        return;
+      }
+      setPayingInvoice(target);
+      try {
+        const res = await fetch("/api/accounting/payment/quick", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ invoice: target }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.success) {
+          throw new Error(
+            data?.details || data?.error || "Failed to record payment",
+          );
+        }
+        toast.success(`Payment recorded against ${target}`, {
+          description: data?.message,
+        });
+        await refetchSalesInvoices();
+        queryClient.invalidateQueries({ queryKey: ["Payment Entry"], refetchType: "all" });
+        queryClient.invalidateQueries({ queryKey: ["Sales Invoice"], refetchType: "all" });
+        queryClient.invalidateQueries({ queryKey: ["Sales Order"], refetchType: "all" });
+        queryClient.invalidateQueries({ queryKey: ["flows", "resolve"] });
+      } catch (err) {
+        showError(resolveFrappeError(err, { doctype: "Payment Entry" }));
+      } finally {
+        setPayingInvoice(null);
+      }
+    },
+    [outstandingInvoices, refetchSalesInvoices, queryClient, showError],
+  );
+
   const executeCreateWorkOrders = useCallback(async () => {
     const mapping = getAutoFillMapping("Sales Order", "Work Order");
     if (!mapping) return;
 
-    // 2T §2 T1 — Fetch warehouse defaults so the FG warehouse is always
-    // available. This unblocks SO→WO creation without requiring the user
-    // to manually set warehouses on every SO line item.
-    const whDefaults = await fetchWarehouseDefaults();
+    // 2T §2 T1 / 2Y-R2 P5 — Warehouses are fully implicit in the SO cockpit.
+    // Use the canonical-fallback resolver (saved settings → computed company
+    // warehouses) rather than the saved-only reader: when a tenant never saved
+    // a warehouse-defaults record, the saved-only path returns blanks and
+    // ERPNext rejects the Work Order with "Target Warehouse is mandatory".
+    // `resolvePrefillWarehouses` always yields real, live warehouse names
+    // ("Finished Goods - PAN", "Work In Progress - PAN", …), keeping warehouse
+    // selection automated and invisible to the user.
+    const wh = await resolvePrefillWarehouses();
 
     const soData = order as unknown as Record<string, unknown>;
     const errors: string[] = [];
@@ -504,17 +675,20 @@ export default function SalesOrderDetailPage() {
 
       const header = applyAutoFill(soData, mapping);
 
-      // 2T §2 T2 — Resolve fg_warehouse: prefer item warehouse, then SO-level
-      // set_warehouse, then the system-wide default from T1 settings.
+      // 2T §2 T2 / 2Y-R2 P5 — Implicit warehouse resolution. Prefer an explicit
+      // line/SO warehouse when one exists, else fall back to the resolved
+      // company defaults. wip and source each fall back to fg so NONE of the
+      // three can ever be empty — the Work Order is always submittable without
+      // the user ever touching a warehouse field.
       const fgWarehouse =
-        item.warehouse ||
-        (soData.set_warehouse as string) ||
-        whDefaults.fgWarehouse ||
-        "";
-      const wipWarehouse = whDefaults.wipWarehouse || "";
+        item.warehouse || (soData.set_warehouse as string) || wh.fg || "";
+      const wipWarehouse = wh.wip || fgWarehouse;
+      const sourceWarehouse = wh.source || wh.stores || fgWarehouse;
 
       if (!fgWarehouse) {
-        errors.push(`${item.item_code}: No finished-goods warehouse set`);
+        // Canonical resolution failed entirely — a tenant-provisioning gap,
+        // not a per-item omission. Surface it once with the real cause.
+        errors.push(`${item.item_code}: warehouses not provisioned for this company`);
         continue;
       }
 
@@ -525,6 +699,7 @@ export default function SalesOrderDetailPage() {
         qty: item.qty,
         fg_warehouse: fgWarehouse,
         wip_warehouse: wipWarehouse,
+        source_warehouse: sourceWarehouse,
         sales_order: name,
         bom_no: bomNo,
         company: getActiveCompany(),
@@ -534,8 +709,29 @@ export default function SalesOrderDetailPage() {
       };
 
       try {
-        await createWOMutation.mutateAsync(woPayload);
+        const result = (await createWOMutation.mutateAsync(woPayload)) as {
+          data?: { name?: string };
+          name?: string;
+        } | null;
         created++;
+        // 2Z D1 — Work Orders are born SUBMITTED. The draft state + per-WO
+        // Submit click was pure ceremony for the SME happy path: the payload
+        // is already complete (BOM, warehouses, qty all auto-resolved). If
+        // the submit fails the WO stays draft and the existing per-WO Submit
+        // affordance in the Manufacturing card still covers it.
+        const createdName = result?.data?.name ?? result?.name;
+        if (createdName) {
+          try {
+            await submitWOMutation.mutateAsync({
+              name: createdName,
+              data: { docstatus: 1 },
+            });
+          } catch (submitErr) {
+            const msg =
+              submitErr instanceof Error ? submitErr.message : String(submitErr);
+            errors.push(`${item.item_code}: created as draft (submit failed: ${msg})`);
+          }
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         errors.push(`${item.item_code}: ${msg}`);
@@ -543,8 +739,10 @@ export default function SalesOrderDetailPage() {
     }
 
     // Show summary — all good, partial, or all failed
-    if (created === woToCreate.length) {
-      toast.success(`${created} Work Order(s) created successfully`);
+    if (created === woToCreate.length && errors.length === 0) {
+      toast.success(`${created} Work Order(s) created and submitted`, {
+        description: "Ready to start production.",
+      });
     } else if (created > 0) {
       toast.warning(`Created ${created} of ${woToCreate.length} Work Order(s)`, {
         description: errors.join(" · "),
@@ -572,7 +770,7 @@ export default function SalesOrderDetailPage() {
     if (created > 0) await refetchWO();
 
     setConfirmCreateWO(false);
-  }, [order, name, woToCreate, defaultBOMs, createWOMutation, showError, router, refetchWO, ensureBomNo]);
+  }, [order, name, woToCreate, defaultBOMs, createWOMutation, submitWOMutation, showError, router, refetchWO, ensureBomNo]);
 
   if (isLoading) return <LoadingState />;
   if (error || !order) {
@@ -591,12 +789,27 @@ export default function SalesOrderDetailPage() {
   const items = (order.items ?? []) as unknown as SOItem[];
   const grandTotal = order.grand_total ?? order.total ?? 0;
 
+  // v4.2 — production-readiness hint for the Deliveries panel: manufacturing
+  // must finish before the goods are in stock to deliver. Non-blocking — the
+  // Deliver & Invoice action stays available for partial/early fulfilment.
+  const productionPending =
+    (workOrders ?? []).length > 0 &&
+    workOrders!.some((wo) => wo.status !== "Completed");
+
+  // 2Z-R7 — fulfilment state: when a submitted DN AND a submitted SI both
+  // exist, the one-click Deliver & Invoice action is marked as done (relabelled
+  // "…more") so the operator can see at a glance the order has been fulfilled,
+  // while the action stays available for additional/partial deliveries.
+  const hasSubmittedDN = (deliveryNotes ?? []).some((d) => d.docstatus === 1);
+  const hasSubmittedSI = (salesInvoices ?? []).some((s) => s.docstatus === 1);
+  const deliveredAndInvoiced = hasSubmittedDN && hasSubmittedSI;
+
   // What's-Next actions — real where wired, disabled (with reason) otherwise.
   const whatsNext = [
     isDraft && {
       label: "Submit Order",
       description: "Lock the order and enable fulfillment",
-      onClick: () => setConfirmSubmit(true),
+      onClick: handleSubmit,
       isPrimary: true,
       isLoading: updateMutation.isPending,
     },
@@ -613,8 +826,22 @@ export default function SalesOrderDetailPage() {
       disabledReason: "Work Order module not yet available",
     },
     isSubmitted && {
-      label: "Create Delivery Note",
-      description: "Create fulfillment from this order",
+      label: deliveredAndInvoiced
+        ? "Deliver & Invoice more"
+        : "Deliver & Invoice",
+      description: deliveredAndInvoiced
+        ? "✓ Already delivered & invoiced — use for an additional delivery"
+        : "One click: deliver the goods and raise the invoice",
+      onClick: handleFulfill,
+      disabled: !isModuleBuilt("Delivery Note"),
+      disabledReason: "Delivery Note module not available",
+      // 2Z-R7 — visible loading feed while the server builds + submits the
+      // DN→SI chain (previously silent until completion).
+      isLoading: fulfilling,
+    },
+    isSubmitted && {
+      label: "Delivery Note (advanced)",
+      description: "Partial delivery or manual review via the wizard",
       onClick: () => router.push(`/stock/delivery-note/new?sales_order=${encodeURIComponent(name)}`),
       disabled: !isModuleBuilt("Delivery Note"),
       disabledReason: "Delivery Note module not available",
@@ -643,7 +870,7 @@ export default function SalesOrderDetailPage() {
                 </Button>
                 <Button
                   size="sm"
-                  onClick={() => setConfirmSubmit(true)}
+                  onClick={handleSubmit}
                   disabled={updateMutation.isPending}
                 >
                   {updateMutation.isPending ? (
@@ -656,14 +883,26 @@ export default function SalesOrderDetailPage() {
               </>
             )}
             {isSubmitted && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-destructive hover:text-destructive"
-                onClick={() => setConfirmCancel(true)}
-              >
-                <Ban className="mr-1.5 h-4 w-4" /> Cancel
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => setConfirmCancel(true)}
+                >
+                  <Ban className="mr-1.5 h-4 w-4" /> Cancel
+                </Button>
+                {isDraft && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => setConfirmDelete(true)}
+                  >
+                    <Trash2 className="mr-1.5 h-4 w-4" /> Delete
+                  </Button>
+                )}
+              </>
             )}
           </div>
         }
@@ -791,69 +1030,20 @@ export default function SalesOrderDetailPage() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {workOrders.map((wo) => {
-                    const isWoDraft = wo.docstatus === 0;
-                    const isWoCompleted = wo.status === "Completed";
-                    const woJCs = (jobCards ?? []).filter((jc) => jc.work_order === wo.name);
-                    const allJCsCompleted = woJCs.length > 0 && woJCs.every((jc) => jc.status === "Completed");
-                    return (
-                      <div
-                        key={wo.name}
-                        className="rounded-xl border border-border/60 bg-card px-3 py-2.5"
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="min-w-0">
-                            <Link
-                              href={`/manufacturing/work-order/${encodeURIComponent(wo.name)}`}
-                              className="flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
-                            >
-                              {wo.name}
-                              <ExternalLink className="h-3 w-3 shrink-0" />
-                            </Link>
-                            <p className="truncate text-xs text-muted-foreground">
-                              {wo.production_item}
-                              {wo.qty ? ` · ${wo.qty} unit(s)` : ""}
-                            </p>
-                          </div>
-                          <div className="flex shrink-0 items-center gap-2">
-                            <StatusBadge status={wo.status} />
-                            {isWoDraft && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleSubmitWorkOrder(wo.name)}
-                                disabled={submittingWO === wo.name}
-                              >
-                                {submittingWO === wo.name ? (
-                                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                                ) : (
-                                  <Send className="mr-1.5 h-4 w-4" />
-                                )}
-                                Submit
-                              </Button>
-                            )}
-                            {/* 2Y Part 3 — Complete WO inline when all JCs are done */}
-                            {!isWoDraft && !isWoCompleted && allJCsCompleted && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="border-emerald-500/50 text-emerald-600 hover:bg-emerald-500/10 dark:text-emerald-400"
-                                onClick={() => handleCompleteWO(wo.name)}
-                                disabled={completingWO === wo.name}
-                              >
-                                {completingWO === wo.name ? (
-                                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                                ) : (
-                                  <CheckCircle2 className="mr-1.5 h-4 w-4" />
-                                )}
-                                Complete
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                  {workOrders.map((wo) => (
+                    <LinkedWOCard
+                      key={wo.name}
+                      wo={wo}
+                      jobCards={jobCards ?? []}
+                      submittingWO={submittingWO}
+                      completingWO={completingWO}
+                      startingWO={startingWO}
+                      onSubmitWorkOrder={handleSubmitWorkOrder}
+                      onStartWorkOrder={handleStartWO}
+                      onCompleteWorkOrder={handleCompleteWO}
+                      onJobCardCreated={refetchJobCards}
+                    />
+                  ))}
                 </div>
               )}
 
@@ -869,135 +1059,9 @@ export default function SalesOrderDetailPage() {
                     </span>
                   </div>
                   <div className="space-y-2">
-                    {jobCards.map((jc) => {
-                      const assigned = (jc.employee ?? [])
-                        .map((r) => r.employee_name || r.employee)
-                        .filter(Boolean) as string[];
-                      const jcStatus = jc.status ?? "Open";
-                      const isOpen = jcStatus === "Open";
-                      const isInProgress = jcStatus === "In Process" || jcStatus === "Work In Progress";
-                      const isCompleted = jcStatus === "Completed";
-                      return (
-                        <div
-                          key={jc.name}
-                          className={cn(
-                            "rounded-xl border bg-card px-3 py-2.5",
-                            isCompleted ? "border-emerald-500/30 bg-emerald-500/5" : "border-border/60",
-                          )}
-                        >
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="min-w-0">
-                              <Link
-                                href={`/manufacturing/job-card/${encodeURIComponent(jc.name)}`}
-                                className="flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
-                              >
-                                {jc.operation || jc.name}
-                                <ExternalLink className="h-3 w-3 shrink-0" />
-                              </Link>
-                              <p className="truncate text-xs text-muted-foreground">
-                                {jc.work_order}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <StatusBadge status={jcStatus} />
-                              {/* 2Y Part 3 — Start/Complete JC inline */}
-                              {isOpen && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="border-amber-500/50 text-amber-600 hover:bg-amber-500/10 dark:text-amber-400"
-                                  onClick={() => handleStartJC(jc)}
-                                  disabled={lifecycleJC === jc.name}
-                                >
-                                  {lifecycleJC === jc.name ? (
-                                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                                  ) : (
-                                    <Play className="mr-1.5 h-3.5 w-3.5" />
-                                  )}
-                                  Start
-                                </Button>
-                              )}
-                              {isInProgress && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="border-emerald-500/50 text-emerald-600 hover:bg-emerald-500/10 dark:text-emerald-400"
-                                  onClick={() => handleCompleteJC(jc)}
-                                  disabled={lifecycleJC === jc.name}
-                                >
-                                  {lifecycleJC === jc.name ? (
-                                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                                  ) : (
-                                    <Square className="mr-1.5 h-3.5 w-3.5" />
-                                  )}
-                                  Complete
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                          <div className="mt-2.5 flex flex-col gap-2 sm:flex-row sm:items-center">
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              {assigned.length > 0 ? (
-                                assigned.map((emp) => (
-                                  <span
-                                    key={emp}
-                                    className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400"
-                                  >
-                                    <CheckCircle2 className="h-3 w-3" /> {emp}
-                                  </span>
-                                ))
-                              ) : (
-                                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                                  <UserPlus className="h-3 w-3" /> Unassigned
-                                </span>
-                              )}
-                              {/* 2Y Part 3 — Workstation badge */}
-                              {jc.workstation ? (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-600 dark:text-blue-400">
-                                  <Cog className="h-3 w-3" /> {jc.workstation}
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                                  <Cog className="h-3 w-3" /> No workstation
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex gap-2 sm:ml-auto sm:w-auto">
-                              {/* 2Y Part 3 — Workstation assignment */}
-                              {!isCompleted && (
-                                <div className="w-48">
-                                  <FrappeSelect
-                                    doctype="Workstation"
-                                    placeholder={assigningWS === jc.name ? "Assigning…" : "Workstation…"}
-                                    disabled={assigningWS === jc.name || isCompleted}
-                                    value={jc.workstation ?? ""}
-                                    onChange={(val) => handleAssignWorkstation(jc, val)}
-                                  />
-                                </div>
-                              )}
-                              {/* Employee assignment */}
-                              {!isCompleted && (
-                                <div className="w-48">
-                                  <FrappeSelect
-                                    doctype="Employee"
-                                    labelField="employee_name"
-                                    placeholder={assigningJC === jc.name ? "Assigning…" : "Employee…"}
-                                    disabled={assigningJC === jc.name || isCompleted}
-                                    onChange={(val, doc) =>
-                                      handleAssignEmployee(
-                                        jc,
-                                        val,
-                                        (doc as { label?: string })?.label,
-                                      )
-                                    }
-                                  />
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
+                    {jobCards.map((jc) => (
+                      <JobCardCard key={jc.name} jc={jc} lifecycle={jcLifecycle} employeeNameMap={employeeNameMap} />
+                    ))}
                   </div>
                 </div>
               )}
@@ -1006,6 +1070,68 @@ export default function SalesOrderDetailPage() {
                 <p className="mt-4 text-xs text-muted-foreground">
                   Job Cards appear here once a Work Order with a routed BOM is submitted.
                 </p>
+              )}
+            </InfoCard>
+          )}
+
+          {/* v4.2 — Deliveries: one-click DN after production completes, with
+              GATE PASS / CUSTOMER COPY printing right from the cockpit. */}
+          {isSubmitted && (
+            <InfoCard
+              title="Deliveries"
+              icon={<Truck className="h-5 w-5 text-blue-500" />}
+            >
+              {productionPending && (
+                <div className="mb-3 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+                  <Wrench className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    Production is still in progress. Deliver once the Work
+                    Orders are Completed so the finished goods are in stock.
+                  </span>
+                </div>
+              )}
+              {!deliveryNotes || deliveryNotes.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-border/60 bg-secondary/10 p-6 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    No deliveries yet. One click creates and submits a Delivery
+                    Note (and optionally the invoice) for all line items.
+                  </p>
+                  <div className="mt-4 flex justify-center gap-2">
+                    <Button
+                      size="sm"
+                      onClick={handleFulfill}
+                      disabled={fulfilling}
+                    >
+                      {fulfilling ? (
+                        <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Package className="mr-1.5 h-4 w-4" />
+                      )}
+                      Deliver & Invoice
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        router.push(
+                          `/stock/delivery-note/new?sales_order=${encodeURIComponent(name)}`,
+                        )
+                      }
+                    >
+                      Delivery Note (advanced)
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {deliveryNotes.map((dn) => (
+                    <LinkedDNRow
+                      key={dn.name}
+                      dn={dn}
+                      href={`/stock/delivery-note/${encodeURIComponent(dn.name)}`}
+                    />
+                  ))}
+                </div>
               )}
             </InfoCard>
           )}
@@ -1038,6 +1164,145 @@ export default function SalesOrderDetailPage() {
                     <StatusBadge status={wo.status} />
                   </div>
                 ))}
+              </div>
+            </InfoCard>
+          )}
+
+          {/* v4.2 — Billing & Payments: create invoices / payment entries and
+              check their status right from the SO cockpit. */}
+          {isSubmitted && (
+            <InfoCard
+              title="Billing & Payments"
+              icon={<DollarSign className="h-4 w-4" />}
+            >
+              <div className="mb-4 flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="flex-1"
+                  asChild
+                >
+                  <Link
+                    href={`/accounting/sales-invoice/new?sales_order=${encodeURIComponent(name)}`}
+                  >
+                    <Receipt className="mr-1.5 h-4 w-4" /> Invoice
+                  </Link>
+                </Button>
+                {/* 2Z-R7 — Payment now settles the oldest outstanding invoice
+                    INLINE (quick PE route) instead of redirecting to the PE
+                    wizard. Disabled with a hint when nothing is outstanding. */}
+                <Button
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => handleQuickPayment()}
+                  disabled={outstandingInvoices.length === 0 || payingInvoice !== null}
+                >
+                  {payingInvoice ? (
+                    <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Wallet className="mr-1.5 h-4 w-4" />
+                  )}
+                  {outstandingInvoices.length === 0 ? "Nothing to pay" : "Mark Paid"}
+                </Button>
+              </div>
+
+              {/* Linked Sales Invoices */}
+              <div className="mb-4">
+                <p className="mb-2 px-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Invoices
+                </p>
+                {salesInvoices && salesInvoices.length > 0 ? (
+                  <div className="space-y-1.5">
+                    {salesInvoices.map((si) => {
+                      const siOutstanding = Number(si.outstanding_amount ?? 0);
+                      const canPay = si.docstatus === 1 && siOutstanding > 0.005;
+                      return (
+                        <div
+                          key={si.name}
+                          className="flex items-center justify-between gap-2 rounded-xl border border-border/50 bg-secondary/10 px-3 py-2"
+                        >
+                          <div className="min-w-0">
+                            <Link
+                              href={`/accounting/sales-invoice/${encodeURIComponent(si.name)}`}
+                              className="block truncate text-sm font-medium text-primary hover:underline"
+                            >
+                              {si.name}
+                            </Link>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {ETB.format(si.grand_total ?? 0)}
+                              {siOutstanding ? (
+                                <span className="ml-1 text-amber-600 dark:text-amber-400">
+                                  · {ETB.format(siOutstanding)} outstanding
+                                </span>
+                              ) : null}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            {/* 2Z-R7 — one-click settle per invoice. */}
+                            {canPay && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2 text-xs"
+                                onClick={() => handleQuickPayment(si.name)}
+                                disabled={payingInvoice !== null}
+                              >
+                                {payingInvoice === si.name ? (
+                                  <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                                ) : (
+                                  <Wallet className="mr-1 h-3 w-3" />
+                                )}
+                                Mark Paid
+                              </Button>
+                            )}
+                            <StatusBadge status={si.status ?? ""} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="rounded-xl border border-dashed border-border/50 px-3 py-3 text-center text-xs text-muted-foreground">
+                    No invoices yet — create one above or use Deliver &amp; Invoice.
+                  </p>
+                )}
+              </div>
+
+              {/* Linked Payment Entries */}
+              <div>
+                <p className="mb-2 px-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Payments
+                </p>
+                {paymentEntries && paymentEntries.length > 0 ? (
+                  <div className="space-y-1.5">
+                    {paymentEntries.map((pe) => (
+                      <div
+                        key={pe.name}
+                        className="flex items-center justify-between gap-2 rounded-xl border border-border/50 bg-secondary/10 px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <Link
+                            href={`/accounting/payment-entry/${encodeURIComponent(pe.name)}`}
+                            className="block truncate text-sm font-medium text-primary hover:underline"
+                          >
+                            {pe.name}
+                          </Link>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {ETB.format(pe.paid_amount ?? 0)}
+                            {pe.mode_of_payment
+                              ? ` · ${pe.mode_of_payment}`
+                              : ""}
+                          </p>
+                        </div>
+                        <StatusBadge status={pe.status ?? ""} />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="rounded-xl border border-dashed border-border/50 px-3 py-3 text-center text-xs text-muted-foreground">
+                    No payments recorded against this order&apos;s invoices yet.
+                  </p>
+                )}
               </div>
             </InfoCard>
           )}
@@ -1087,12 +1352,392 @@ export default function SalesOrderDetailPage() {
         open={confirmCreateWO}
         onOpenChange={setConfirmCreateWO}
         title="Create Work Orders"
-        description={`${woToCreate.length} Work Order(s) will be created for Sales Order ${name}. Each line item becomes a separate Work Order.`}
+        description={`${woToCreate.length} Work Order(s) will be created and submitted for Sales Order ${name} — ready to start production. Each line item becomes a separate Work Order.`}
         confirmText="Create Work Orders"
         onConfirm={executeCreateWorkOrders}
-        loading={createWOMutation.isPending}
+        loading={createWOMutation.isPending || submitWOMutation.isPending}
+      />
+      <ConfirmDialog
+        open={confirmFulfill}
+        onOpenChange={(open) => {
+          setConfirmFulfill(open);
+          if (!open) setFsNumber("");
+        }}
+        title="Deliver & Invoice this order?"
+        description={`Creates and submits a Delivery Note and a Sales Invoice for ${items.length} item(s) — total ${ETB.format(grandTotal)}. Finished goods must be in stock (finish production first).`}
+        confirmText="Deliver & Invoice"
+        onConfirm={handleFulfill}
+        loading={fulfilling}
+      >
+        <div className="space-y-1.5 pt-1">
+          <label htmlFor="fulfill-fs-number" className="text-sm font-medium">
+            FS No{" "}
+            <span className="font-normal text-muted-foreground">
+              (fiscal serial — optional, editable later)
+            </span>
+          </label>
+          <Input
+            id="fulfill-fs-number"
+            value={fsNumber}
+            onChange={(e) => setFsNumber(e.target.value)}
+            placeholder="e.g. FS-0001234"
+          />
+        </div>
+      </ConfirmDialog>
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="Delete this Sales Order?"
+        description={`Are you sure you want to delete "${order.name}"? This action cannot be undone.`}
+        confirmText="Delete"
+        variant="destructive"
+        onConfirm={handleDelete}
       />
       <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// JobCardCard — one Job Card card in the SO cockpit "Manufacturing" panel.
+// 2Y-R2 P0/P3: fetches the FULL Job Card doc (incl. employee/time_logs child
+// tables) via useFrappeDoc. The parent get_list row only carries parent
+// columns, so child data MUST come from the full doc or the list 500s.
+// ---------------------------------------------------------------------------
+function JobCardCard({
+  jc,
+  lifecycle,
+  employeeNameMap,
+}: {
+  jc: JobCard;
+  lifecycle: JobCardLifecycle;
+  employeeNameMap?: Record<string, string>;
+}) {
+  const { data: fullJc, isLoading } = useFrappeDoc<JobCard>("Job Card", jc.name, {
+    // 2Y-R5 P7 — operational card: status/buttons/complete-all derive from
+    // live state, so never serve a stale cached full doc (a JC completed on
+    // another screen would paint "Work In Progress" for up to 60s).
+    staleTime: 0,
+  });
+  // Fall back to the parent-row shape while the full doc loads.
+  const doc = fullJc ?? jc;
+
+  const assignedRows = (Array.isArray(doc.employee) ? doc.employee : []) as Array<{
+    employee?: string;
+    employee_name?: string;
+  }>;
+  // Chip labels: prefer the stored employee_name, then the cockpit-wide
+  // lookup map, then the raw ID.
+  const assigned = assignedRows
+    .map((r) => {
+      const id = r.employee;
+      return r.employee_name || (id && employeeNameMap?.[id]) || id || null;
+    })
+    .filter(Boolean) as string[];
+  // 2Y-R5 P9 — Raw link IDs for the selector's controlled value. FrappeSelect
+  // matches `value` against option VALUES (raw Employee IDs); binding the
+  // display NAME here never matched, so the select showed its "Employee…"
+  // placeholder even when someone was assigned (chip said otherwise).
+  const assignedIds = assignedRows
+    .map((r) => r.employee)
+    .filter(Boolean) as string[];
+
+  // 2Y-R5 P7 — Prefer the LIVE full-doc status once loaded; the parent list
+  // row (jc.status) can be stale (1-min staleTime cache), so a JC that was
+  // completed on another screen would still paint "Work In Progress" here
+  // until the list refetch landed. Falling back to jc.status while loading.
+  const jcStatus = (fullJc?.status ?? jc.status) ?? "Open";
+  const isOpen = jcStatus === "Open";
+  const isInProgress = jcStatus === "Work In Progress";
+  const isCompleted = jcStatus === "Completed";
+  const busy = lifecycle.activeJc === jc.name;
+
+  return (
+    <div
+      className={cn(
+        "rounded-xl border bg-card px-3 py-2.5",
+        isCompleted ? "border-emerald-500/30 bg-emerald-500/5" : "border-border/60",
+      )}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <Link
+            href={`/manufacturing/job-card/${encodeURIComponent(jc.name)}`}
+            className="flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+          >
+            {jc.operation || jc.name}
+            <ExternalLink className="h-3 w-3 shrink-0" />
+          </Link>
+          <p className="truncate text-xs text-muted-foreground">{jc.work_order}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <PrintMenu
+            doctype="Job Card"
+            doc={doc as unknown as Record<string, unknown>}
+          />
+          <StatusBadge status={jcStatus} />
+          {isOpen && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-amber-500/50 text-amber-600 hover:bg-amber-500/10 dark:text-amber-400"
+              onClick={() => lifecycle.handleStartJob(doc)}
+              disabled={busy || isLoading}
+            >
+              {busy ? (
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Play className="mr-1.5 h-3.5 w-3.5" />
+              )}
+              Start
+            </Button>
+          )}
+          {isInProgress && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-emerald-500/50 text-emerald-600 hover:bg-emerald-500/10 dark:text-emerald-400"
+              onClick={() => lifecycle.handleCompleteJob(doc)}
+              disabled={busy || isLoading}
+            >
+              {busy ? (
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Square className="mr-1.5 h-3.5 w-3.5" />
+              )}
+              Complete
+            </Button>
+          )}
+        </div>
+      </div>
+      <div className="mt-2.5 flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {assigned.length > 0 ? (
+            assigned.map((emp) => (
+              <span
+                key={emp}
+                className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400"
+              >
+                <CheckCircle2 className="h-3 w-3" /> {emp}
+              </span>
+            ))
+          ) : (
+            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+              <UserPlus className="h-3 w-3" /> Unassigned
+            </span>
+          )}
+          {jc.workstation ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-600 dark:text-blue-400">
+              <Cog className="h-3 w-3" /> {jc.workstation}
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+              <Cog className="h-3 w-3" /> No workstation
+            </span>
+          )}
+        </div>
+        <div className="flex gap-2 sm:ml-auto sm:w-auto">
+          {!isCompleted && (
+            <div className="w-48">
+              <FrappeSelect
+                doctype="Workstation"
+                placeholder={busy ? "Assigning…" : "Workstation…"}
+                disabled={busy || isLoading}
+                value={jc.workstation ?? ""}
+                onChange={(val) => lifecycle.handleAssignWorkstation(doc, val)}
+              />
+            </div>
+          )}
+          {!isCompleted && (
+            <div className="w-48">
+              <FrappeSelect
+                doctype="Employee"
+                labelField="employee_name"
+                placeholder={busy ? "Assigning…" : "Employee…"}
+                disabled={busy || isLoading}
+                value={assignedIds[0] ?? ""}
+                onChange={(val, sel) =>
+                  lifecycle.handleAssignEmployee(doc, val, (sel as { label?: string })?.label)
+                }
+              />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// LinkedWOCard — a Work Order card inside the SO cockpit. Fetches the FULL
+// Work Order doc so the PrintMenu can render a complete print (the linked
+// list row only carries summary columns). 2Y-R3.
+// ---------------------------------------------------------------------------
+function LinkedWOCard({
+  wo,
+  jobCards,
+  submittingWO,
+  completingWO,
+  startingWO,
+  onSubmitWorkOrder,
+  onStartWorkOrder,
+  onCompleteWorkOrder,
+  onJobCardCreated,
+}: {
+  wo: LinkedWorkOrder;
+  jobCards: JobCard[];
+  submittingWO: string | null;
+  completingWO: string | null;
+  startingWO: string | null;
+  onSubmitWorkOrder: (name: string) => void;
+  onStartWorkOrder: (name: string) => void;
+  onCompleteWorkOrder: (name: string) => void;
+  onJobCardCreated?: () => void;
+}) {
+  const { data: fullWo } = useFrappeDoc<WorkOrder>("Work Order", wo.name, {
+    enabled: !!wo.name,
+  });
+  const [createJCOpen, setCreateJCOpen] = useState(false);
+  const isWoDraft = wo.docstatus === 0;
+  const isWoCompleted = wo.status === "Completed";
+  const isWoNotStarted = !isWoDraft && !isWoCompleted && wo.status === "Not Started";
+  const woJCs = jobCards.filter((jc) => jc.work_order === wo.name);
+  const allJCsCompleted = woJCs.length > 0 && woJCs.every((jc) => jc.status === "Completed");
+  // 2Y-R3 — a Job Card can be created once the WO is submitted (not a draft).
+  const canCreateJC = !isWoDraft && !isWoCompleted && !!fullWo;
+
+  return (
+    <div className="rounded-xl border border-border/60 bg-card px-3 py-2.5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <Link
+            href={`/manufacturing/work-order/${encodeURIComponent(wo.name)}`}
+            className="flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+          >
+            {wo.name}
+            <ExternalLink className="h-3 w-3 shrink-0" />
+          </Link>
+          <p className="truncate text-xs text-muted-foreground">
+            {wo.production_item}
+            {wo.qty ? ` · ${wo.qty} unit(s)` : ""}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <StatusBadge status={wo.status} />
+          <PrintMenu
+            doctype="Work Order"
+            doc={(fullWo ?? wo) as unknown as Record<string, unknown>}
+          />
+          {canCreateJC && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-amber-500/50 text-amber-600 hover:bg-amber-500/10 dark:text-amber-400"
+              onClick={() => setCreateJCOpen(true)}
+            >
+              <Wrench className="mr-1.5 h-4 w-4" />
+              Job Card
+            </Button>
+          )}
+          {isWoDraft && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onSubmitWorkOrder(wo.name)}
+              disabled={submittingWO === wo.name}
+            >
+              {submittingWO === wo.name ? (
+                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="mr-1.5 h-4 w-4" />
+              )}
+              Submit
+            </Button>
+          )}
+          {isWoNotStarted && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-amber-500/50 text-amber-600 hover:bg-amber-500/10 dark:text-amber-400"
+              onClick={() => onStartWorkOrder(wo.name)}
+              disabled={startingWO === wo.name}
+            >
+              {startingWO === wo.name ? (
+                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+              ) : (
+                <Play className="mr-1.5 h-4 w-4" />
+              )}
+              Start
+            </Button>
+          )}
+          {!isWoDraft && !isWoCompleted && allJCsCompleted && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-emerald-500/50 text-emerald-600 hover:bg-emerald-500/10 dark:text-emerald-400"
+              onClick={() => onCompleteWorkOrder(wo.name)}
+              disabled={completingWO === wo.name}
+            >
+              {completingWO === wo.name ? (
+                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="mr-1.5 h-4 w-4" />
+              )}
+              Complete
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {canCreateJC && (
+        <CreateJobCardModal
+          open={createJCOpen}
+          onOpenChange={setCreateJCOpen}
+          workOrder={fullWo as WorkOrder}
+          onCreated={() => {
+            setCreateJCOpen(false);
+            onJobCardCreated?.();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// LinkedDNRow — a Delivery Note row inside the SO cockpit "Deliveries" panel.
+// v4.2 — fetches the FULL Delivery Note doc (the list row has no `items`
+// child table) so the PrintMenu can render a complete CUSTOMER COPY or GATE
+// PASS print right from the cockpit, per the SME requirement.
+// ---------------------------------------------------------------------------
+function LinkedDNRow({ dn, href }: { dn: DeliveryNote; href: string }) {
+  const { data: fullDn } = useFrappeDoc<DeliveryNote>("Delivery Note", dn.name, {
+    enabled: !!dn.name,
+  });
+  const doc = (fullDn ?? dn) as unknown as Record<string, unknown>;
+
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-xl border border-border/50 bg-secondary/10 px-3 py-2">
+      <div className="min-w-0">
+        <Link
+          href={href}
+          className="flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+        >
+          {dn.name}
+          <ExternalLink className="h-3 w-3 shrink-0" />
+        </Link>
+        <p className="truncate text-xs text-muted-foreground">
+          {dn.posting_date ?? "—"} · {ETB.format(dn.grand_total ?? 0)}
+        </p>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <StatusBadge status={dn.status ?? ""} />
+        <PrintMenu
+          doctype="Delivery Note"
+          doc={doc}
+          variants={["standard", "gate-pass"]}
+        />
+      </div>
     </div>
   );
 }
