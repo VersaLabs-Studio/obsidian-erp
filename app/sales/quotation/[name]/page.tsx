@@ -38,8 +38,10 @@ import { isModuleBuilt } from "@/lib/flows/module-availability";
 import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
 import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
+import { PrintShare } from "@/components/ui/print-share";
+import { PrintMenu } from "@/components/print/PrintMenu";
 import { useFlowChain } from "@/hooks/flows/use-flow-chain";
-import { useFrappeDoc, useFrappeList, useFrappeUpdate, useFrappeDelete } from "@/hooks/generic";
+import { useFrappeDoc, useFrappeUpdate, useFrappeDelete } from "@/hooks/generic";
 import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
 import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
 import type { Quotation } from "@/types/doctype-types";
@@ -71,30 +73,17 @@ export default function QuotationDetailPage() {
     name
   );
 
-  // Downstream Sales Orders via Sales Order Item child table link
-  const { data: linkedSalesOrderItems, isLoading: loadingSO } = useFrappeList<{ parent: string }>(
-    "Sales Order Item",
-    {
-      filters: [["Sales Order Item", "prevdoc_docname", "=", name]],
-      fields: ["parent"],
-      limit: 5,
-    },
-    { enabled: !isLoading && !!quote }
-  );
-
-  // Extract downstream Sales Order name
-  const soName = useMemo(() => {
-    return linkedSalesOrderItems?.[0]?.parent;
-  }, [linkedSalesOrderItems]);
-
   // 2N Part 1.1: unified flow resolution.
-  // NOTE: the link map does not define a Quotation→Lead/Customer backward
-  // edge, so the upstream party (Lead/Customer) is no longer auto-resolved
-  // here. The downstream Sales Order is resolved by the hook. To restore
-  // the upstream party resolution, add a Quotation→{Lead,Customer} link to
-  // `flow-link-map.ts` or thread an `extraResolutions` arg in (see PE page
-  // for the pattern).
+  // 2U §5b — The server resolver is the single source of truth for downstream
+  // documents. We derive the linked Sales Order name from the flow chain
+  // result instead of querying the child table directly (which 404s).
   const { result: chain, isLoading: chainLoading } = useFlowChain("Quotation", name);
+
+  // Derive downstream SO name from the flow chain (stage with doctype === "Sales Order")
+  const soName = useMemo(() => {
+    const soStage = chain?.stages?.find((s) => s.doctype === "Sales Order");
+    return soStage?.documentName;
+  }, [chain?.stages]);
 
   const updateMutation = useFrappeUpdate<Quotation>("Quotation", {
     showToast: false,
@@ -200,6 +189,8 @@ export default function QuotationDetailPage() {
         backHref="/sales/quotation"
         actions={
           <div className="flex items-center gap-2">
+            <PrintMenu doctype="Quotation" doc={quote as unknown as Record<string, unknown>} />
+            <PrintShare doctype="Quotation" name={quote.name} showPrint={false} />
             {isDraft && (
               <>
                 <Button variant="outline" size="sm" asChild>
@@ -240,9 +231,6 @@ export default function QuotationDetailPage() {
                 <Ban className="mr-1.5 h-4 w-4" /> Cancel
               </Button>
             )}
-            <Button variant="ghost" size="icon" disabled title="Print (Phase 2)">
-              <Printer className="h-4 w-4" />
-            </Button>
           </div>
         }
       />

@@ -41,6 +41,7 @@ import { KPICard } from "@/components/dashboard/KPICard";
 import { CommandPalette } from "@/components/command/CommandPalette";
 import type { Quotation } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
+import { ListErrorState } from "@/components/ui/list-error-state";
 
 function getDisplayStatus(quotation: Quotation): string {
   if (quotation.docstatus === 2) return "Cancelled";
@@ -295,9 +296,10 @@ export default function QuotationsListPage() {
   if (isLoading) return <LoadingState type="cards" count={6} />;
   if (error)
     return (
-      <div className="p-8 text-center text-destructive bg-destructive/5 rounded-xl border border-destructive/20">
-        Failed to load quotations
-      </div>
+      <ListErrorState
+        error={error}
+        label="quotations"
+      />
     );
 
   return (

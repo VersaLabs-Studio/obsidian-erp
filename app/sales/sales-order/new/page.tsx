@@ -37,7 +37,8 @@ import { ItemRateAutoFill } from "@/lib/flows/item-price-lookup";
 import { useItemPriceRate } from "@/lib/flows/item-price-lookup";
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
 import { FlowWizard } from "@/components/flows/FlowWizard";
-import { useFrappeCreate, useFrappeDoc } from "@/hooks/generic";
+import { useFrappeCreate, useFrappeDoc, useFormPersistence } from "@/hooks/generic";
+import { useMakeFrom } from "@/hooks/flows/use-make-from";
 import {
   getAutoFillMapping,
   applyAutoFill,
@@ -48,7 +49,6 @@ import type { StepValidationResult } from "@/lib/flows/flow-validation";
 import type { WizardStep } from "@/types/flow-types";
 import type { Quotation } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
-import { FieldWrap } from "@/components/form/field-wrap";
 
 // ---------------------------------------------------------------------------
 // Form model — concrete item shape so the field array is fully typed
@@ -86,6 +86,7 @@ interface SOForm {
   terms?: string;
   po_no?: string;
   po_date?: string;
+  payment_terms_template?: string;
   status: string;
   items: SOItem[];
 }
@@ -145,7 +146,6 @@ export default function NewSalesOrderPage() {
     new Set(),
   );
   const [triedNextSteps, setTriedNextSteps] = useState<Set<number>>(new Set());
-
   const form = useForm<SOForm>({
     defaultValues: {
       naming_series: "SAL-ORD-.YYYY.-",
@@ -158,6 +158,7 @@ export default function NewSalesOrderPage() {
       price_list_currency: "ETB",
       conversion_rate: 1,
       plc_conversion_rate: 1,
+      payment_terms_template: "",
       status: "Draft",
       items: [{ ...EMPTY_ITEM }],
     },
@@ -187,7 +188,44 @@ export default function NewSalesOrderPage() {
       enabled: !!quotationId,
     });
 
+  // 2R Part 2 — canonical make-from (Quotation → Sales Order). Takes
+  // priority over the hand-mapping registry below; the registry remains
+  // as a silent fallback for the route-error case.
+  const { draft: soDraft } = useMakeFrom({
+    sourceDoctype: "Quotation",
+    sourceName: quotationId,
+    targetDoctype: "Sales Order",
+    enabled: !!quotationId,
+  });
+
+  // 2R Part 2 — hydrate from the canonical draft. The mapped doc carries
+  // the customer, all item lines with `prevdoc_docname`/`prevdoc_doctype`
+  // back-links, and any pricing-rule applied amounts ERPNext's mapper
+  // computed (those links are what light up the SO→Quotation rail stage
+  // on the new SO's detail page).
   useEffect(() => {
+    if (!soDraft) return;
+    const d = soDraft.doc as Partial<SOForm> & { items?: SOItem[] };
+    reset({
+      ...getValues(),
+      ...d,
+      items: Array.isArray(d.items) && d.items.length > 0 ? d.items : [{ ...EMPTY_ITEM }],
+      delivery_date: "",
+    });
+    const filled = new Set<string>(
+      Object.keys(d).filter((k) => k !== "items" && k !== "delivery_date"),
+    );
+    filled.add("items");
+    setAutoFilledFields(filled);
+    toast.success(`Loaded from Quotation ${quotationId}`, {
+      description: "Set the delivery date to continue.",
+    });
+  }, [soDraft, quotationId, reset, getValues]);
+
+  useEffect(() => {
+    // 2R Part 2 — skip the hand-mapping fallback when the canonical
+    // draft already hydrated the form.
+    if (soDraft) return;
     if (!quotation) return;
     const mapping = getAutoFillMapping("Quotation", "Sales Order");
     if (!mapping) return;
@@ -220,7 +258,7 @@ export default function NewSalesOrderPage() {
     toast.success(`Loaded from Quotation ${quotationId}`, {
       description: "Set the delivery date to continue.",
     });
-  }, [quotation, quotationId, reset, getValues]);
+  }, [soDraft, quotation, quotationId, reset, getValues]);
 
   const isAuto = useCallback(
     (field: string) => autoFilledFields.has(field),
@@ -282,6 +320,11 @@ export default function NewSalesOrderPage() {
     createMutation.mutate({
       ...values,
       company: getActiveCompany(),
+      // 2T §1A.3 — Send the user-selected payment_terms_template to ERPNext.
+      // ERPNext's set_payment_schedule() rebuilds fresh dates from the template
+      // against the SO's transaction_date during validate. We NEVER POST a stale
+      // payment_schedule — just the template reference.
+      payment_terms_template: values.payment_terms_template || "",
       items: items.map((it) => ({
         ...it,
         amount: (Number(it.qty) || 0) * (Number(it.rate) || 0),
@@ -294,6 +337,10 @@ export default function NewSalesOrderPage() {
   }, [createMutation, getValues]);
 
   return (
+    // 2R Part 9 — RequirePermission wrapper removed. The cosmetic gate
+    // is fully advisory/inert for v4; the server enforces. (A
+    // permission rejection on submit now renders the calm PERMISSION
+    // guided message via resolveFrappeError → GuidedErrorDialog.)
     <div className="space-y-6 pb-12">
       <PageHeader
         title="New Sales Order"
@@ -332,11 +379,7 @@ export default function NewSalesOrderPage() {
                       description="Confirm who this order is for and when it's due."
                     />
                     <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                      <FieldWrap
-                        auto={isAuto("customer")}
-                        loading={loadingQuotation}
-                        error={triedNextSteps.has(step) ? validationResults?.step1?.errors?.customer : undefined}
-                      >
+                      <div>
                         {/* 2L 1A: Quick-Add enabled master field — Customer */}
                         <QuickAddField
                           control={control}
@@ -348,7 +391,7 @@ export default function NewSalesOrderPage() {
                           placeholder="Search customer..."
                           disabled={isAuto("customer")}
                         />
-                      </FieldWrap>
+                      </div>
                       <FormDatePicker
                         control={control}
                         name="transaction_date"
@@ -389,6 +432,17 @@ export default function NewSalesOrderPage() {
                         name="po_no"
                         label="Customer PO No"
                         placeholder="Optional reference"
+                      />
+                      {/* 2T §1A.3 — Payment Terms Template selector.
+                          Lets the user set installment-based payment schedules.
+                          ERPNext applies the template's payment_schedule entries
+                          to auto-populate due dates and amounts against the doc date. */}
+                      <FormFrappeSelect
+                        control={control}
+                        name="payment_terms_template"
+                        label="Payment Terms"
+                        doctype="Payment Terms Template"
+                        placeholder="Select payment terms..."
                       />
                     </div>
                   </div>
@@ -510,15 +564,17 @@ export default function NewSalesOrderPage() {
                         </tbody>
                       </table>
                       <div className="flex items-center justify-between border-t border-border/60 bg-secondary/10 px-3 py-3">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="rounded-full border-dashed"
-                          onClick={() => append({ ...EMPTY_ITEM })}
-                        >
-                          <Plus className="mr-1.5 h-4 w-4" /> Add Item
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="rounded-full border-dashed"
+                            onClick={() => append({ ...EMPTY_ITEM })}
+                          >
+                            <Plus className="mr-1.5 h-4 w-4" /> Add Item
+                          </Button>
+                        </div>
                         <div className="text-right">
                           <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                             Subtotal

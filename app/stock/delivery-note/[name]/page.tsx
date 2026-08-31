@@ -31,6 +31,8 @@ import { isModuleBuilt } from "@/lib/flows/module-availability";
 import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
 import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
+import { PrintShare } from "@/components/ui/print-share";
+import { PrintMenu } from "@/components/print/PrintMenu";
 import { useFlowChain } from "@/hooks/flows/use-flow-chain";
 import { useFrappeDoc, useFrappeList, useFrappeUpdate, useFrappeDelete } from "@/hooks/generic";
 import type { DeliveryNote } from "@/types/doctype-types";
@@ -89,7 +91,7 @@ export default function DeliveryNoteDetailPage() {
   const isSubmitted = dn?.docstatus === 1;
 
   const handleSubmit = () => {
-    setConfirmSubmit(false);
+    
     updateMutation.mutate(
       { name, data: { docstatus: 1 } },
       {
@@ -127,7 +129,7 @@ export default function DeliveryNoteDetailPage() {
     isDraft && {
       label: "Submit Delivery Note",
       description: "Confirm delivery and deduct stock",
-      onClick: () => setConfirmSubmit(true),
+      onClick: handleSubmit,
       isPrimary: true,
       isLoading: updateMutation.isPending,
     },
@@ -148,6 +150,15 @@ export default function DeliveryNoteDetailPage() {
         backHref="/stock/delivery-note"
         actions={
           <div className="flex items-center gap-2">
+            {/* 2Y-R2 Part 6 — DN dual-format print (customer copy + gate pass)
+                via the real print-document subsystem. PrintShare is Share-only
+                here so there aren't two Print buttons. */}
+            <PrintMenu
+              doctype="Delivery Note"
+              doc={dn as unknown as Record<string, unknown>}
+              variants={["standard", "gate-pass"]}
+            />
+            <PrintShare doctype="Delivery Note" name={dn.name} showPrint={false} />
             {isDraft && (
               <>
                 <Button variant="outline" size="sm" asChild>
@@ -157,7 +168,7 @@ export default function DeliveryNoteDetailPage() {
                 </Button>
                 <Button
                   size="sm"
-                  onClick={() => setConfirmSubmit(true)}
+                  onClick={handleSubmit}
                   disabled={updateMutation.isPending}
                 >
                   {updateMutation.isPending ? (
@@ -199,6 +210,11 @@ export default function DeliveryNoteDetailPage() {
           </div>
         }
       />
+
+      {/* 9R.7 — FlowRail below header (golden placement, matches SO/PO/PI/MR) */}
+      <InfoCard title="Delivery Flow" className="overflow-hidden">
+        <FlowRail result={chain} currentDocName={name} sourceDoctype="Delivery Note" isLoading={chainLoading} />
+      </InfoCard>
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
         {/* Center column */}
@@ -256,7 +272,7 @@ export default function DeliveryNoteDetailPage() {
             </div>
           </InfoCard>
 
-          <InfoCard title="Logistics" icon={<Truck className="h-5 w-5 text-primary" />}>
+          <InfoCard title="Logistics" icon={<Truck className="h-5 w-5 text-primary" />} data-logistics>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <DataPoint label="Driver" value={dn.driver_name || dn.driver || "—"} />
               <DataPoint label="Vehicle" value={dn.vehicle_no || "—"} />
@@ -275,10 +291,6 @@ export default function DeliveryNoteDetailPage() {
                 <DataPoint label="% Billed" value={`${dn.per_billed}%`} />
               )}
             </div>
-          </InfoCard>
-
-          <InfoCard title="Flow Tracker">
-            <FlowRail result={chain} currentDocName={name} sourceDoctype="Delivery Note" isLoading={chainLoading} />
           </InfoCard>
 
           <InfoCard title="What's Next">

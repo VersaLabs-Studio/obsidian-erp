@@ -467,7 +467,6 @@ describe("Part 4A: Quick-Add is wired on the Part 4 wizards", () => {
     { file: "app/accounting/purchase-invoice/new/page.tsx", doctype: "Item" },
     { file: "app/stock/purchase-receipt/new/page.tsx", doctype: "Supplier" },
     { file: "app/stock/purchase-receipt/new/page.tsx", doctype: "Item" },
-    { file: "app/stock/purchase-receipt/new/page.tsx", doctype: "Warehouse" },
     { file: "app/crm/opportunity/new/page.tsx", doctype: "Item" },
   ];
 

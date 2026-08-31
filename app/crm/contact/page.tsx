@@ -34,6 +34,7 @@ import {
   ConfirmDialog,
 } from "@/components/smart";
 import type { Contact } from "@/types/doctype-types";
+import { ListErrorState } from "@/components/ui/list-error-state";
 
 // Contact Row Component
 function ContactRow({
@@ -212,7 +213,7 @@ export default function ContactsListPage() {
   if (error) {
     return (
       <div className="flex items-center justify-center h-64">
-        <p className="text-destructive">Failed to load contacts</p>
+        <ListErrorState error={error} label="contacts" />
       </div>
     );
   }

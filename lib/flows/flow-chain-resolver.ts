@@ -25,9 +25,17 @@ export { getFlowForDocType, getFlowDefinition };
 export function resolveFlowChain(
   doctype: string,
   name: string,
-  stageStatuses?: Record<string, { status: FlowStageStatus; documentName?: string; documentUrl?: string }>
+  stageStatuses?: Record<string, { status: FlowStageStatus; documentName?: string; documentUrl?: string }>,
+  /**
+   * 2U §3 FIX — explicit flow override. A doctype in multiple flows
+   * (Payment Entry → sales + purchase) otherwise renders the FIRST match
+   * (sales) regardless of the resolved data. When the caller knows the
+   * flow (Pay-type PE → "purchase") it passes `flowId` and we render that
+   * flow's stage list, which the server projected the resolved map onto.
+   */
+  flowId?: string
 ): FlowChainResult {
-  const flow = getFlowForDocType(doctype);
+  const flow = flowId ? getFlowDefinition(flowId) : getFlowForDocType(doctype);
 
   if (!flow) {
     return {
@@ -140,6 +148,7 @@ export function getDocTypeRoute(doctype: string): string {
     "Supplier Quotation": "buying/supplier-quotation",
     "Stock Entry": "stock/stock-entry",
     BOM: "manufacturing/bom",
+    "Job Card": "manufacturing/job-card",
     "Stock Reconciliation": "stock/stock-reconciliation",
     "Stock Ledger Entry": "stock/stock-ledger",
   };

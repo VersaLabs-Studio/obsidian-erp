@@ -72,7 +72,7 @@ export function useFrappeList<T>(
       }
 
       const url = `/api/${apiPath}${params.toString() ? `?${params}` : ""}`;
-      const response = await fetch(url);
+      const response = await fetch(url, { cache: "no-store" });
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));

@@ -6,8 +6,8 @@
 // Reactive validation gate: useWatch({ control }) → [watchedAll].
 // OKLCH semantic tokens only. No @ts-nocheck, no any.
 
-import { useMemo, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm, useFieldArray, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import {
@@ -30,7 +30,13 @@ import {
 import { QuickAddField } from "@/components/quick-add/QuickAddField";
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
 import { FlowWizard } from "@/components/flows/FlowWizard";
-import { useFrappeCreate } from "@/hooks/generic";
+import { useFrappeCreate, useFrappeDoc, useFormPersistence } from "@/hooks/generic";
+import { useMakeFrom } from "@/hooks/flows/use-make-from";
+import {
+  getAutoFillMapping,
+  applyAutoFill,
+  applyItemAutoFill,
+} from "@/lib/flows/flow-auto-fill";
 import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
 import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
 import { getActiveCompany } from "@/lib/settings/company";
@@ -38,6 +44,7 @@ import { validateWizardStep } from "@/lib/flows/flow-validation";
 import type { StepValidationResult } from "@/lib/flows/flow-validation";
 import type { WizardStep } from "@/types/flow-types";
 import type { PurchaseInvoice } from "@/types/doctype-types";
+import type { PurchaseOrder, PurchaseReceipt } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
 
 interface PIItem {
@@ -66,6 +73,7 @@ interface PIForm {
   taxes_and_charges: string;
   payment_terms_template: string;
   status: string;
+  pana_fs_number?: string; // 2Y Part 1 — Fiscal serial number (Ethiopia e-invoicing)
   items: PIItem[];
 }
 
@@ -82,7 +90,7 @@ const WIZARD_STEPS: WizardStep[] = [
     label: "Supplier & Source",
     description: "Set the supplier and billing details",
     schema: null,
-    fields: ["supplier", "posting_date", "bill_no", "bill_date"],
+    fields: ["supplier", "posting_date", "bill_no", "bill_date", "credit_to", "payment_terms_template"],
     icon: "Truck",
   },
   {
@@ -110,8 +118,24 @@ const ETB = new Intl.NumberFormat("en-ET", {
 
 export default function NewPurchaseInvoicePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const purchaseOrderId = searchParams.get("purchase_order");
+  const purchaseReceiptId = searchParams.get("purchase_receipt");
+
   const [step, setStep] = useState(0);
   const [triedNextSteps, setTriedNextSteps] = useState<Set<number>>(new Set());
+
+  // 2R Part 3 — default credit_to from the active company's
+  // default_payable_account so the common path is zero-click. We still
+  // render the field as an editable Payable-Account select (scoped to the
+  // active company) — operator can override before submit.
+  const activeCompany = getActiveCompany();
+  const { data: companyDoc } = useFrappeDoc<{ default_payable_account?: string }>(
+    "Company",
+    activeCompany,
+    { enabled: !!activeCompany },
+  );
+  const defaultPayableAccount = companyDoc?.default_payable_account ?? "";
 
   const form = useForm<PIForm>({
     defaultValues: {
@@ -130,12 +154,135 @@ export default function NewPurchaseInvoicePage() {
       taxes_and_charges: "",
       payment_terms_template: "",
       status: "Draft",
+      pana_fs_number: "",
       items: [{ ...EMPTY_ITEM }],
     },
   });
 
+  // Once the company doc resolves, hydrate credit_to with the default if
+  // the operator hasn't touched it. We only set on first resolution so a
+  // manual override is never overwritten.
+  useEffect(() => {
+    if (!defaultPayableAccount) return;
+    const current = form.getValues("credit_to");
+    if (!current) {
+      form.setValue("credit_to", defaultPayableAccount, { shouldDirty: false });
+    }
+  }, [defaultPayableAccount, form]);
+
+  // 2R Part 2 — canonical make-from for PO→PI and PR→PI. The server
+  // mapper returns a fully-mapped draft (supplier, items with
+  // purchase_order/purchase_receipt back-links, taxes, etc.); we
+  // hydrate the form from it. PO takes priority over PR (a PR-sourced
+  // bill is rare; if both are set, PO wins).
+  const { draft: piDraftPO } = useMakeFrom({
+    sourceDoctype: "Purchase Order",
+    sourceName: purchaseOrderId,
+    targetDoctype: "Purchase Invoice",
+    enabled: !!purchaseOrderId,
+  });
+  const { draft: piDraftPR } = useMakeFrom({
+    sourceDoctype: "Purchase Receipt",
+    sourceName: purchaseReceiptId,
+    targetDoctype: "Purchase Invoice",
+    enabled: !!purchaseReceiptId,
+  });
+  const canonicalPiDraft = piDraftPO ?? piDraftPR;
+  const canonicalPiSource = purchaseOrderId
+    ? `Purchase Order ${purchaseOrderId}`
+    : purchaseReceiptId
+      ? `Purchase Receipt ${purchaseReceiptId}`
+      : null;
+
+  // 2U §6 — Fallback: fetch source docs for hand-mapping when the server
+  // mapper returns an empty draft or errors. Matches the SI create page
+  // pattern (useFrappeDoc + getAutoFillMapping / applyAutoFill).
+  const { data: sourcePO } = useFrappeDoc<PurchaseOrder>(
+    "Purchase Order",
+    purchaseOrderId ?? "",
+    { enabled: !!purchaseOrderId && !piDraftPO },
+  );
+  const { data: sourcePR } = useFrappeDoc<PurchaseReceipt>(
+    "Purchase Receipt",
+    purchaseReceiptId ?? "",
+    { enabled: !!purchaseReceiptId && !piDraftPR },
+  );
+  const sourceDoc = sourcePO ?? sourcePR;
+  const sourceDoctype = purchaseOrderId ? "Purchase Order" : purchaseReceiptId ? "Purchase Receipt" : null;
+
+  // 2R Part 2 — hydrate from the canonical draft. The mapped doc carries
+  // the supplier, all item lines with `purchase_order` /
+  // `purchase_order_item` / `purchase_receipt` / `pr_detail` back-links
+  // that ERPNext's mapper computes (those links are what propagate the
+  // status to the upstream PO/PR on submit).
+  useEffect(() => {
+    if (!canonicalPiDraft || !canonicalPiSource) return;
+    const d = canonicalPiDraft.doc as Partial<PIForm> & { items?: PIItem[] };
+    // 2T §1A.4 FIX — Coalesce null/undefined → "" for ALL string fields.
+    // ERPNext's mapper returns null for unset fields; React's controlled
+    // inputs reject null values ("A component is changing a controlled
+    // input to be uncontrolled"). This kills the console errors on every
+    // make-from redirect.
+    const safeD: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(d)) {
+      safeD[k] = v === null || v === undefined ? "" : v;
+    }
+    // Also null-safe the items array
+    const safeItems = Array.isArray(d.items)
+      ? d.items.map((it) => ({
+          ...it,
+          item_code: it.item_code ?? "",
+          item_name: it.item_name ?? "",
+          description: it.description ?? "",
+          uom: it.uom ?? "",
+        }))
+      : [{ ...EMPTY_ITEM }];
+    form.reset({
+      ...form.getValues(),
+      ...safeD,
+      items: safeItems.length > 0 ? safeItems : [{ ...EMPTY_ITEM }],
+    } as PIForm);
+    toast.success(`Loaded from ${canonicalPiSource}`, {
+      description: "Review items and the credit_to default to continue.",
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canonicalPiDraft, canonicalPiSource]);
+
+  // 2U §6 — Fallback: if the server mapper returned empty or errored,
+  // hand-map from the source doc (PO or PR) using the auto-fill registry.
+  // This mirrors the SI create page pattern (delivery_note / sales_order
+  // auto-fill fallback at lines 199-227 in the SI new page).
+  useEffect(() => {
+    if (!sourceDoc || !sourceDoctype || canonicalPiDraft) return;
+    const mapping = getAutoFillMapping(sourceDoctype, "Purchase Invoice");
+    if (!mapping) return;
+
+    const header = applyAutoFill(
+      sourceDoc as unknown as Record<string, unknown>,
+      mapping,
+    );
+    const items = applyItemAutoFill(
+      (sourceDoc as { items?: Record<string, unknown>[] }).items ?? [],
+      mapping,
+    ) as unknown as PIItem[];
+
+    form.reset({
+      ...form.getValues(),
+      ...(header as Partial<PIForm>),
+      items: items.length ? items : [{ ...EMPTY_ITEM }],
+    });
+    toast.success("Loaded source document", {
+      description: "Fields filled from auto-fill mapping. Review before creating.",
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceDoc, sourceDoctype, canonicalPiDraft]);
+
   const { control, getValues, setValue } = form;
   const { fields, append, remove } = useFieldArray({ control, name: "items" });
+
+  // 2Y Part 2 — Draft autosave: persists form state to localStorage,
+  // restores on reload, clears on successful submit.
+  useFormPersistence(form, "Purchase Invoice", "new");
 
   const watchedAll = useWatch({ control });
   const watchedItems = watchedAll?.items ?? [];
@@ -172,6 +319,7 @@ export default function NewPurchaseInvoicePage() {
     { data: { name: string } },
     Record<string, unknown>
   >("Purchase Invoice", {
+    showToast: false,
     successMessage: "Purchase Invoice created",
     onSuccess: (res) => {
       const name = res?.data?.name;
@@ -269,6 +417,44 @@ export default function NewPurchaseInvoicePage() {
                         control={control}
                         name="bill_date"
                         label="Supplier Bill Date"
+                      />
+                      {/* 2R Part 3 — credit_to was declared in the form model but never
+                          rendered (step1.fields omitted it), so submit raised
+                          "credit_to — Credit To (Payable Account) is required" with
+                          no UI to set it. Now it is a Payable-Account select
+                          scoped to the active company, defaulted from
+                          Company.default_payable_account. */}
+                      <FormFrappeSelect
+                        control={control}
+                        name="credit_to"
+                        label="Credit To (Payable Account)"
+                        required
+                        doctype="Account"
+                        labelField="account_name"
+                        placeholder="Select payable account..."
+                        filters={[
+                          ["account_type", "=", "Payable"],
+                          ["company", "=", getActiveCompany()],
+                          ["is_group", "=", 0],
+                        ]}
+                      />
+                      {/* 2S Part 4 — Payment Terms Template. Allows setting
+                          installment-based payment schedules on the invoice.
+                          ERPNext applies the template's payment_schedule entries
+                          to auto-populate due dates and amounts. */}
+                      <FormFrappeSelect
+                        control={control}
+                        name="payment_terms_template"
+                        label="Payment Terms"
+                        doctype="Payment Terms Template"
+                        placeholder="Select payment terms..."
+                      />
+                      {/* 2Y Part 1 — Fiscal serial number for Ethiopia e-invoicing */}
+                      <FormInput
+                        control={control}
+                        name="pana_fs_number"
+                        label="Fiscal Serial No"
+                        placeholder="Government fiscal serial number"
                       />
                     </div>
                   </div>
@@ -417,6 +603,8 @@ export default function NewPurchaseInvoicePage() {
                       <Summary label="Posting Date" value={v.posting_date} />
                       <Summary label="Due Date" value={v.due_date} />
                       <Summary label="Bill No" value={v.bill_no} />
+                      <Summary label="Credit To" value={v.credit_to} />
+                      <Summary label="Fiscal Serial No" value={v.pana_fs_number} />
                     </div>
                     <div className="mt-4 border-t border-border/60 pt-4">
                       <div className="flex items-center justify-between">

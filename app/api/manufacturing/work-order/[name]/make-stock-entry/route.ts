@@ -33,9 +33,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { frappeClient } from "@/lib/frappe-client";
 import { getRequestClient } from "@/lib/auth/resolve-user";
-
-const MAKE_STOCK_ENTRY =
-  "erpnext.manufacturing.doctype.work_order.work_order.make_stock_entry";
+// 2Y-R5 — doc building (ERPNext's own make_stock_entry + implicit warehouse
+// backfill) now lives in the shared builder so the START/STOP lifecycle route
+// reuses the exact same logic. Semantics unchanged from this route's 2P
+// live-fix version; only the submission flow ("insert+submit in one shot")
+// stays route-local here.
+import {
+  buildAndSubmitStockEntry,
+  extractRawMessage,
+} from "@/lib/manufacturing/stock-entry-builder";
 
 const ALLOWED_PURPOSES = new Set([
   "Material Transfer for Manufacture",
@@ -92,57 +98,63 @@ export async function POST(
       );
     }
 
-    // 1) Ask ERPNext to BUILD the Stock Entry — the same call the desk
-    //    Start/Finish buttons make. `qty` is the fg_completed_qty (the qty to
-    //    transfer/manufacture); when omitted ERPNext defaults to the WO's
-    //    remaining qty. The returned dict is unsaved and fully linked.
-    const args: Record<string, unknown> = {
-      work_order_id: workOrderId,
-      purpose,
-    };
-    if (typeof body.qty === "number" && body.qty > 0) {
-      args.qty = body.qty;
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const built: any = await (client.call as any).get(MAKE_STOCK_ENTRY, args);
-    const seDoc = built?.message ?? built;
-    if (!seDoc || typeof seDoc !== "object") {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Empty draft from ERPNext",
-          details: `make_stock_entry returned no document for '${workOrderId}'.`,
-          statusCode: 502,
-        },
-        { status: 502 },
-      );
-    }
-
-    // 2) Insert + submit the fully-formed doc in one server call. ERPNext's
-    //    `frappe.client.submit` parses the doc, `get_doc()`s it, and submits —
-    //    inserting first because it's new. on_submit then runs
-    //    `update_work_order_qty()` with the proper linkage, so the WO flips to
-    //    "In Process" (transfer) / "Completed" (manufacture).
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const submitted: any = await (client.call as any).post("frappe.client.submit", {
-      doc: JSON.stringify(seDoc),
-    });
-    const result = submitted?.message ?? submitted;
-    const seName: string | undefined = result?.name;
+    // 1+2) Build + submit via the shared builder. 2Y-R6 — UOM fraction blocks
+    //    are resolved IMPLICITLY (flag flip + retry) instead of erroring.
+    //    on_submit then runs `update_work_order_qty()` with the proper
+    //    linkage, so the WO flips to "In Process" (transfer) / "Completed"
+    //    (manufacture).
+    const { name: seName, fixedUoms } = await buildAndSubmitStockEntry(
+      client,
+      workOrderId,
+      purpose as "Material Transfer for Manufacture" | "Manufacture",
+      typeof body.qty === "number" && body.qty > 0 ? body.qty : undefined,
+    );
 
     return NextResponse.json(
       {
         success: true,
         data: { name: seName ?? null, purpose },
         message:
-          purpose === "Manufacture"
+          (purpose === "Manufacture"
             ? "Production finished — finished goods declared."
-            : "Production started — materials transferred to WIP.",
+            : "Production started — materials transferred to WIP.") +
+          (fixedUoms.length > 0
+            ? ` (Auto-enabled fractional quantities for UOM: ${fixedUoms.join(", ")})`
+            : ""),
       },
       { status: 201 },
     );
   } catch (error) {
+    // 2S Part 1 — graceful error for UOM fraction constraint. ERPNext raises
+    // "Quantity (0.6) cannot be a fraction. To allow this, disable 'Must be
+    // Whole Number' in UOM." when a BOM raw material has a fractional qty but
+    // its UOM has must_be_whole_number = 1. 2Y-R6 — this is now only the
+    // FALLBACK: buildAndSubmitStockEntry resolves it implicitly first; we get
+    // here when the UOM couldn't be unlocked (e.g. permissions). Surface a
+    // guided error with a deep link to Stock → Settings → UOM.
+    const errMessage = extractRawMessage(error);
+    if (
+      errMessage.includes("cannot be a fraction") ||
+      errMessage.includes("Must be Whole Number")
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "UOMMustBeIntegerError",
+          details:
+            "A raw material's quantity is fractional but its UOM requires whole numbers. " +
+            "Open Stock → Settings → UOM and untick 'Whole Number' for the affected UOM.",
+          actions: [
+            {
+              label: "Open UOM Settings",
+              href: "/stock/settings/uom",
+            },
+          ],
+          statusCode: 422,
+        },
+        { status: 422 },
+      );
+    }
     const err = frappeClient.handleError(error);
     return NextResponse.json(err, { status: err.statusCode ?? 500 });
   }

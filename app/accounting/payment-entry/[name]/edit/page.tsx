@@ -45,6 +45,7 @@ import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErr
 import { getActiveCompany } from "@/lib/settings/company";
 import { validateWizardStep } from "@/lib/flows/flow-validation";
 import type { StepValidationResult } from "@/lib/flows/flow-validation";
+import { distributeAllocations } from "@/lib/accounting/payment-allocation";
 import type { WizardStep } from "@/types/flow-types";
 import type { PaymentEntry } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
@@ -177,6 +178,25 @@ function EditPaymentEntryForm() {
     setValue("received_amount", watchedPaidAmount);
   }, [watchedPaidAmount, setValue]);
 
+  // 2U §A3 — distribute the Paid Amount across allocations (capped at each
+  // invoice outstanding) so the saved draft stays balanced and submit can't
+  // fail with "Difference Amount must be zero". See lib/accounting/
+  // payment-allocation.ts. Converges via the equality guard.
+  useEffect(() => {
+    const refs = watchedReferences ?? [];
+    if (refs.length === 0) return;
+    let remaining = Number(watchedPaidAmount) || 0;
+    refs.forEach((r, i) => {
+      const outstanding = Number(r?.outstanding_amount) || 0;
+      const cap = outstanding > 0 ? outstanding : remaining;
+      const alloc = Math.max(0, Math.min(remaining, cap));
+      remaining -= alloc;
+      if (Number(r?.allocated_amount) !== alloc) {
+        setValue(`references.${i}.allocated_amount`, alloc);
+      }
+    });
+  }, [watchedPaidAmount, watchedReferences, setValue]);
+
   // Fetch outstanding invoices for the selected party
   const invoiceDoctype = watchedPartyType === "Supplier" ? "Purchase Invoice" : "Sales Invoice";
   const partyField = watchedPartyType === "Supplier" ? "supplier" : "customer";
@@ -226,15 +246,18 @@ function EditPaymentEntryForm() {
 
   const handleSave = useCallback(() => {
     const values = getValues();
+    // 2U §A3 — reconcile paid_amount with Σ allocated so the draft stays
+    // submittable (ERPNext requires difference_amount == 0).
+    const { references: distributedRefs, paidAmount: effectivePaid } =
+      distributeAllocations(Number(values.paid_amount) || 0, values.references ?? []);
     updateMutation.mutate(
       {
         name,
         data: {
           ...values,
-          received_amount: values.paid_amount,
-          references: (values.references ?? []).filter(
-            (ref) => ref.reference_name && ref.allocated_amount > 0,
-          ),
+          paid_amount: effectivePaid,
+          received_amount: effectivePaid,
+          references: distributedRefs,
         },
       },
       {

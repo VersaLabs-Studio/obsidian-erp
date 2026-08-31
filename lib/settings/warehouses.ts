@@ -24,6 +24,7 @@ let _resolutionCache: {
   stores: string;
   wip: string;
   fg: string;
+  rawMaterials?: string;
   loadedAt: number;
 } | null = null;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes — warehouses rarely change
@@ -33,6 +34,13 @@ export interface CompanyWarehouses {
   stores: string;
   wip: string;
   fg: string;
+  /**
+   * 2R Part 4 — optional Raw Materials warehouse. Present when the
+   * tenant provisioned one (Pana does: "Raw Materials - PAN"). The
+   * Receive Materials modal surfaces it as a secondary option in the
+   * warehouse selector; absent → only Stores is offered.
+   */
+  rawMaterials?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -49,6 +57,14 @@ export function defaultWipWarehouse(abbr: string): string {
 /** Default Finished Goods warehouse name for the active company. */
 export function defaultFgWarehouse(abbr: string): string {
   return `Finished Goods - ${abbr}`;
+}
+/**
+ * 2R Part 4 — best-effort computed name for the Raw Materials warehouse.
+ * Returns `undefined` if the tenant hasn't provisioned one; the API
+ * route returns the real name when online.
+ */
+export function defaultRawMaterialsWarehouse(abbr: string): string {
+  return `Raw Materials - ${abbr}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -77,6 +93,7 @@ export async function resolveCompanyWarehouses(): Promise<CompanyWarehouses> {
       stores: _resolutionCache.stores,
       wip: _resolutionCache.wip,
       fg: _resolutionCache.fg,
+      rawMaterials: _resolutionCache.rawMaterials,
     };
   }
   // Best-effort fetch — on failure, fall back to computed defaults so
@@ -99,6 +116,7 @@ export async function resolveCompanyWarehouses(): Promise<CompanyWarehouses> {
           stores: json.data.stores,
           wip: json.data.wip,
           fg: json.data.fg,
+          rawMaterials: json.data.rawMaterials,
           loadedAt: now,
         };
         return json.data;
@@ -115,6 +133,7 @@ export async function resolveCompanyWarehouses(): Promise<CompanyWarehouses> {
     stores: defaultStoresWarehouse(abbr),
     wip: defaultWipWarehouse(abbr),
     fg: defaultFgWarehouse(abbr),
+    rawMaterials: defaultRawMaterialsWarehouse(abbr),
   };
 }
 
@@ -137,6 +156,16 @@ export function fallbackFgWarehouse(): string {
   const company = getActiveCompany();
   if (_resolutionCache?.company === company) return _resolutionCache.fg;
   return defaultFgWarehouse(company.slice(0, 3).toUpperCase());
+}
+/** 2R Part 4 — Raw Materials fallback (always returns the computed name
+ *  even when the cache is empty; the modal decides whether to surface
+ *  it based on the cached resolution). */
+export function fallbackRawMaterialsWarehouse(): string {
+  const company = getActiveCompany();
+  if (_resolutionCache?.company === company && _resolutionCache.rawMaterials) {
+    return _resolutionCache.rawMaterials;
+  }
+  return defaultRawMaterialsWarehouse(company.slice(0, 3).toUpperCase());
 }
 
 /** Invalidate the cache (used after auto-provision). */

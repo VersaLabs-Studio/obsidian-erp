@@ -31,12 +31,22 @@ export function InfoCard({
   variant = "default",
   gradientFrom = "from-primary/5",
   gradientTo = "to-primary/10",
+  ...restProps
 }: InfoCardProps) {
   const variantClasses = {
     default: "bg-card shadow-sm",
-    gradient: `bg-gradient-to-br from-primary/5 to-primary/10`,
+    gradient: `bg-gradient-to-br ${gradientFrom} ${gradientTo}`,
     transparent: "bg-transparent shadow-none p-0",
   };
+
+  // Extract data-* attributes from props to spread onto the DOM element
+  // (2Y Part 6 — e.g. data-logistics for gate-pass print format).
+  const dataAttrs: Record<string, string> = {};
+  for (const [k, v] of Object.entries(restProps)) {
+    if (k.startsWith("data-") && typeof v === "string") {
+      dataAttrs[k] = v;
+    }
+  }
 
   // Helper to render icon
   const renderIcon = () => {
@@ -52,6 +62,7 @@ export function InfoCard({
 
   return (
     <div
+      {...dataAttrs}
       className={cn(
         "rounded-2xl p-6 transition-all duration-500 animate-slide-up",
         variantClasses[variant],
@@ -87,7 +98,8 @@ export function DataPoint({
   className,
 }: DataPointProps) {
   return (
-    <div className={cn("flex flex-col gap-1.5", className)}>
+        <div
+      className={cn("flex flex-col gap-1.5", className)}>
       <span className="text-xs font-semibold text-muted-foreground">
         {label}
       </span>

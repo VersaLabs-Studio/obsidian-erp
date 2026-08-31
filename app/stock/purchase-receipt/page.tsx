@@ -43,6 +43,7 @@ import { KPICard } from "@/components/dashboard/KPICard";
 import { CommandPalette } from "@/components/command/CommandPalette";
 import type { PurchaseReceipt } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
+import { ListErrorState } from "@/components/ui/list-error-state";
 
 function getDisplayStatus(pr: PurchaseReceipt): string {
   if (pr.docstatus === 2) return "Cancelled";
@@ -305,9 +306,10 @@ export default function PurchaseReceiptListPage() {
   if (isLoading) return <LoadingState type="cards" count={6} />;
   if (error)
     return (
-      <div className="p-8 text-center text-destructive">
-        Failed to load purchase receipts
-      </div>
+      <ListErrorState
+        error={error}
+        label="purchase receipts"
+      />
     );
 
   return (

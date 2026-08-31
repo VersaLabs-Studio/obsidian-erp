@@ -1,6 +1,11 @@
 "use client";
 
+// app/hr/employee/[name]/edit/page.tsx
+// Edit Employee — Form with react-hook-form + Zod. OKLCH semantic tokens only.
+
+import { useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { motion } from "framer-motion";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -16,10 +21,26 @@ import {
 } from "@/components/form";
 import { useFrappeDoc, useFrappeUpdate } from "@/hooks/generic";
 import { EmployeeUpdateSchema } from "@/lib/schemas/doctype-schemas";
-import type { Employee, EmployeeUpdateRequest } from "@/types/doctype-types";
-import { useEffect } from "react";
+import type { Employee } from "@/types/doctype-types";
 
 type FormData = z.infer<typeof EmployeeUpdateSchema>;
+
+const fadeIn = {
+  hidden: { opacity: 0, y: 20 },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.4, ease: [0.25, 0.1, 0.25, 1] as const },
+  },
+};
+
+const staggerContainer = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: { staggerChildren: 0.1 },
+  },
+};
 
 export default function EditEmployeePage() {
   const params = useParams();
@@ -32,12 +53,12 @@ export default function EditEmployeePage() {
     error,
   } = useFrappeDoc<Employee>("Employee", name);
 
-  const updateMutation = useFrappeUpdate<Employee, any>("Employee", {
+  const updateMutation = useFrappeUpdate<Employee, { name: string; data: FormData }>("Employee", {
     onSuccess: () => router.push(`/hr/employee/${encodeURIComponent(name)}`),
   });
 
   const form = useForm<FormData>({
-    resolver: zodResolver(EmployeeUpdateSchema) as any,
+    resolver: zodResolver(EmployeeUpdateSchema),
     defaultValues: {
       first_name: "",
       last_name: "",
@@ -48,10 +69,14 @@ export default function EditEmployeePage() {
       department: "",
       designation: "",
       status: "Active",
-    } as any,
+      cell_number: "",
+      personal_email: "",
+      company_email: "",
+      branch: "",
+      reports_to: "",
+    },
   });
 
-  // Sync form with fetched data
   useEffect(() => {
     if (emp) {
       form.reset({
@@ -64,9 +89,18 @@ export default function EditEmployeePage() {
         department: emp.department,
         designation: emp.designation,
         status: emp.status,
-      } as any);
+        cell_number: emp.cell_number,
+        personal_email: emp.personal_email,
+        company_email: emp.company_email,
+        branch: emp.branch,
+        reports_to: emp.reports_to,
+      });
     }
   }, [emp, form]);
+
+  const handleSubmit = form.handleSubmit((data) => {
+    updateMutation.mutate({ name, data: data as FormData });
+  });
 
   if (isLoading) return <LoadingState type="detail" />;
   if (error || !emp)
@@ -80,18 +114,16 @@ export default function EditEmployeePage() {
         title={`Edit: ${emp.employee_name || emp.name}`}
         backHref={`/hr/employee/${encodeURIComponent(name)}`}
       />
+
       <Form {...form}>
-        <form
-          onSubmit={form.handleSubmit((d) =>
-            updateMutation.mutate({
-              name,
-              data: d as unknown as EmployeeUpdateRequest,
-            }),
-          )}
-          className="space-y-6"
-        >
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <motion.div
+            className="grid grid-cols-1 lg:grid-cols-3 gap-6"
+            variants={staggerContainer}
+            initial="hidden"
+            animate="show"
+          >
+            <motion.div className="lg:col-span-2 space-y-6" variants={fadeIn}>
               <InfoCard title="Personal Details" icon="user">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormInput
@@ -121,6 +153,12 @@ export default function EditEmployeePage() {
                     name="date_of_birth"
                     label="Date of Birth"
                     required
+                  />
+                  <FormInput
+                    control={form.control}
+                    name="blood_group"
+                    label="Blood Group"
+                    placeholder="e.g. A+, B+, O+"
                   />
                 </div>
               </InfoCard>
@@ -155,11 +193,57 @@ export default function EditEmployeePage() {
                     doctype="Designation"
                     labelField="designation_name"
                   />
+                  <FormFrappeSelect
+                    control={form.control}
+                    name="reports_to"
+                    label="Reports To"
+                    doctype="Employee"
+                    labelField="employee_name"
+                  />
+                  <FormInput
+                    control={form.control}
+                    name="branch"
+                    label="Branch"
+                    placeholder="Enter branch"
+                  />
                 </div>
               </InfoCard>
-            </div>
 
-            <div className="space-y-6">
+              <InfoCard title="Contact Information" icon="phone">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormInput
+                    control={form.control}
+                    name="cell_number"
+                    label="Mobile Number"
+                    placeholder="Enter mobile number"
+                  />
+                  <FormInput
+                    control={form.control}
+                    name="personal_email"
+                    label="Personal Email"
+                    placeholder="Enter personal email"
+                  />
+                  <FormInput
+                    control={form.control}
+                    name="company_email"
+                    label="Company Email"
+                    placeholder="Enter company email"
+                  />
+                  <FormSelect
+                    control={form.control}
+                    name="prefered_contact_email"
+                    label="Preferred Contact Email"
+                    options={[
+                      { label: "Company Email", value: "Company Email" },
+                      { label: "Personal Email", value: "Personal Email" },
+                      { label: "User ID", value: "User ID" },
+                    ]}
+                  />
+                </div>
+              </InfoCard>
+            </motion.div>
+
+            <motion.div className="space-y-6" variants={fadeIn}>
               <InfoCard title="Update Status" variant="gradient">
                 <div className="space-y-4">
                   <FormSelect
@@ -193,8 +277,8 @@ export default function EditEmployeePage() {
                   </Button>
                 </div>
               </InfoCard>
-            </div>
-          </div>
+            </motion.div>
+          </motion.div>
         </form>
       </Form>
     </div>

@@ -17,6 +17,7 @@ import {
 
 // v3.0 Imports
 import { useFrappeList, useFrappeDelete } from "@/hooks/generic";
+import { ListErrorState } from "@/components/ui/list-error-state";
 import {
   PageHeader,
   EmptyState,
@@ -54,11 +55,10 @@ export default function CurrenciesPage() {
 
   if (error)
     return (
-      <div className="flex items-center justify-center p-20 bg-destructive/5 rounded-2xl border border-destructive/10">
-        <p className="text-destructive font-bold text-lg">
-          Failed to load currencies
-        </p>
-      </div>
+      <ListErrorState
+        error={error}
+        label="currencies"
+      />
     );
 
   const filtered = currencies?.filter(

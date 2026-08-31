@@ -10,13 +10,14 @@ import {
   Edit3,
   Send,
   Ban,
-  Printer,
+  Trash2,
   Loader2,
   Package,
 } from "lucide-react";
 
 import { PageHeader, LoadingState, ConfirmDialog } from "@/components/smart";
 import { StatusBadge } from "@/components/smart/status-badge";
+import { FrappeSelect } from "@/components/smart/frappe-select";
 import { InfoCard, DataPoint } from "@/components/ui/info-card";
 import { Button } from "@/components/ui/button";
 import { FlowRail } from "@/components/flows/FlowRail";
@@ -24,6 +25,8 @@ import { isModuleBuilt } from "@/lib/flows/module-availability";
 import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
 import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
+import { PrintShare } from "@/components/ui/print-share";
+import { PrintMenu } from "@/components/print/PrintMenu";
 import { useFlowChain } from "@/hooks/flows/use-flow-chain";
 import { useFrappeDoc, useFrappeUpdate } from "@/hooks/generic";
 import type { SalesInvoice } from "@/types/doctype-types";
@@ -51,9 +54,14 @@ export default function SalesInvoiceDetailPage() {
 
   const [confirmSubmit, setConfirmSubmit] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  // 2Z D3 — one-click "Mark as Paid" (server-side get_payment_entry + submit).
+  const [confirmPaid, setConfirmPaid] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [payMode, setPayMode] = useState("Cash");
+  const [paying, setPaying] = useState(false);
   const { resolution, showError, dismiss } = useGuidedError();
 
-  const { data: invoice, isLoading, error } = useFrappeDoc<SalesInvoice>(
+  const { data: invoice, isLoading, error, refetch } = useFrappeDoc<SalesInvoice>(
     "Sales Invoice",
     name,
   );
@@ -96,6 +104,57 @@ export default function SalesInvoiceDetailPage() {
     );
   };
 
+  // 2Z D3 — Mark as Paid: ERPNext's own get_payment_entry mapper builds a
+  // fully-correct Payment Entry (references, outstanding amount, accounts)
+  // server-side; the route sets the mode and submits in one call. The PE
+  // wizard ("Create Payment Entry") remains for partial/bank cases.
+  const handleMarkAsPaid = async () => {
+    setPaying(true);
+    try {
+      const res = await fetch("/api/accounting/payment/quick", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invoice: name, mode_of_payment: payMode }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.success) {
+        toast.success(`Invoice paid — Payment Entry ${data?.data?.name ?? ""}`, {
+          description: data?.message ?? `Recorded via ${payMode}.`,
+        });
+        setConfirmPaid(false);
+        refetch();
+      } else {
+        toast.error("Mark as Paid failed", {
+          description: data?.details || data?.error || "Unknown error",
+        });
+      }
+    } catch (err) {
+      toast.error("Mark as Paid failed", {
+        description: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setPaying(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setConfirmDelete(false);
+    try {
+      const res = await fetch(`/api/accounting/sales-invoice/${encodeURIComponent(name)}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        toast.success("Sales Invoice deleted");
+        router.push("/accounting/sales-invoice");
+      } else {
+        const body = await res.json().catch(() => ({}));
+        showError(resolveFrappeError(body, { doctype: "Sales Invoice" }));
+      }
+    } catch (err) {
+      showError(resolveFrappeError(err, { doctype: "Sales Invoice" }));
+    }
+  };
+
   if (isLoading) return <LoadingState />;
   if (error || !invoice) {
     return (
@@ -121,13 +180,21 @@ export default function SalesInvoiceDetailPage() {
     isDraft && {
       label: "Submit Invoice",
       description: "Lock the invoice and post accounting entries",
-      onClick: () => setConfirmSubmit(true),
+      onClick: handleSubmit,
       isPrimary: true,
       isLoading: updateMutation.isPending,
     },
     isUnpaid && {
+      label: "Mark as Paid",
+      description: `Record full payment of ${ETB.format(invoice.outstanding_amount ?? 0)} in one click`,
+      onClick: handleMarkAsPaid,
+      isPrimary: true,
+      disabled: !isModuleBuilt("Payment Entry"),
+      disabledReason: "Payment Entry module not yet available",
+    },
+    isUnpaid && {
       label: "Create Payment Entry",
-      description: "Record a payment against this invoice",
+      description: "Partial payment or a different account (wizard)",
       onClick: () =>
         router.push(
           `/accounting/payment-entry/new?invoice=${encodeURIComponent(name)}&party_type=Customer&party=${encodeURIComponent(invoice.customer ?? "")}&amount=${invoice.outstanding_amount ?? 0}`,
@@ -145,6 +212,11 @@ export default function SalesInvoiceDetailPage() {
         title={invoice.name}
         actions={
           <div className="flex items-center gap-2">
+            <PrintMenu
+              doctype="Sales Invoice"
+              doc={invoice as unknown as Record<string, unknown>}
+            />
+            <PrintShare doctype="Sales Invoice" name={invoice.name} showPrint={false} />
             {isDraft && (
               <>
                 <Button variant="outline" size="sm" asChild>
@@ -156,7 +228,7 @@ export default function SalesInvoiceDetailPage() {
                 </Button>
                 <Button
                   size="sm"
-                  onClick={() => setConfirmSubmit(true)}
+                  onClick={handleSubmit}
                   disabled={updateMutation.isPending}
                 >
                   {updateMutation.isPending ? (
@@ -169,21 +241,33 @@ export default function SalesInvoiceDetailPage() {
               </>
             )}
             {isSubmitted && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-destructive hover:text-destructive"
-                onClick={() => setConfirmCancel(true)}
-              >
-                <Ban className="mr-1.5 h-4 w-4" /> Cancel
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => setConfirmCancel(true)}
+                >
+                  <Ban className="mr-1.5 h-4 w-4" /> Cancel
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => setConfirmDelete(true)}
+                >
+                  <Trash2 className="mr-1.5 h-4 w-4" /> Delete
+                </Button>
+              </>
             )}
-            <Button variant="ghost" size="icon" disabled title="Print (coming soon)">
-              <Printer className="h-4 w-4" />
-            </Button>
           </div>
         }
       />
+
+      {/* 9R.7 — FlowRail below header (golden placement, matches SO/PO/PI/MR) */}
+      <InfoCard title="Sales Flow" className="overflow-hidden">
+        <FlowRail result={chain} currentDocName={name} sourceDoctype="Sales Invoice" isLoading={chainLoading} />
+      </InfoCard>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         <div className="space-y-6 lg:col-span-8">
@@ -201,6 +285,13 @@ export default function SalesInvoiceDetailPage() {
               />
               <DataPoint label="Posting Date" value={invoice.posting_date} />
               <DataPoint label="Due Date" value={invoice.due_date ?? "\u2014"} />
+              {(invoice as { po_no?: string }).po_no && (
+                <DataPoint label="Customer PO" value={(invoice as { po_no?: string }).po_no} />
+              )}
+              {/* 2Y-R2 P1 — FS No (pana_fs_number custom field) surfaced on detail. */}
+              {(invoice as { pana_fs_number?: string }).pana_fs_number && (
+                <DataPoint label="FS No" value={(invoice as { pana_fs_number?: string }).pana_fs_number} />
+              )}
               <DataPoint label="Company" value={invoice.company} />
               <DataPoint label="Currency" value={invoice.currency} />
               <DataPoint label="Debit To" value={invoice.debit_to ?? "\u2014"} />
@@ -299,10 +390,6 @@ export default function SalesInvoiceDetailPage() {
             </div>
           </InfoCard>
 
-          <InfoCard title="Flow Rail">
-            <FlowRail result={chain} currentDocName={name} sourceDoctype="Sales Invoice" isLoading={chainLoading} />
-          </InfoCard>
-
           {/* 2L 1B: Universal cross-flow actions menu */}
           <CrossFlowActionsMenu doctype="Sales Invoice" name={name} />
 
@@ -349,6 +436,36 @@ export default function SalesInvoiceDetailPage() {
         confirmText="Cancel Invoice"
         variant="destructive"
         onConfirm={handleCancel}
+      />
+      <ConfirmDialog
+        open={confirmPaid}
+        onOpenChange={setConfirmPaid}
+        title="Mark this invoice as paid?"
+        description={`Records and submits a Payment Entry for the full outstanding amount — ${ETB.format(invoice.outstanding_amount ?? 0)}. For partial payments use the Payment Entry wizard instead.`}
+        confirmText="Mark as Paid"
+        onConfirm={handleMarkAsPaid}
+        loading={paying}
+      >
+        <div className="space-y-1.5 pt-1">
+          <label htmlFor="quick-pay-mode" className="text-sm font-medium">
+            Mode of Payment
+          </label>
+          <FrappeSelect
+            doctype="Mode of Payment"
+            value={payMode}
+            onChange={(val) => setPayMode(val || "Cash")}
+            placeholder="Cash"
+          />
+        </div>
+      </ConfirmDialog>
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="Delete this Sales Invoice?"
+        description={`Are you sure you want to delete "${invoice.name}"? This action cannot be undone.`}
+        confirmText="Delete"
+        variant="destructive"
+        onConfirm={handleDelete}
       />
       <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
     </div>

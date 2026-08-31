@@ -25,7 +25,7 @@ export const salesOrderStepSchemas = {
   step1: z.object({
     customer: z.string().min(1, "Customer is required"),
     transaction_date: z.string().min(1, "Transaction date is required"),
-    delivery_date: z.string().min(1, "Delivery date is required"),
+    delivery_date: z.string().optional(),
     currency: z.string().optional(),
     selling_price_list: z.string().optional(),
     order_type: z.string().optional(),
@@ -42,7 +42,7 @@ export const salesOrderStepSchemas = {
         z.object({
           item_code: z.string().min(1, "Item code is required"),
           qty: z.number().min(0.01, "Quantity must be greater than 0"),
-          rate: z.number().min(0, "Rate must be non-negative"),
+          rate: z.number().optional(),
           amount: z.number().optional(),
           uom: z.string().optional(),
           warehouse: z.string().optional(),
@@ -66,7 +66,7 @@ export const quotationStepSchemas = {
   step1: z.object({
     party_name: z.string().min(1, "Customer/Lead is required"),
     transaction_date: z.string().min(1, "Transaction date is required"),
-    valid_till: z.string().min(1, "Valid till date is required"),
+    valid_till: z.string().optional(),
     quotation_to: z.string().optional(),
     order_type: z.string().optional(),
   }),
@@ -76,7 +76,7 @@ export const quotationStepSchemas = {
         z.object({
           item_code: z.string().min(1, "Item code is required"),
           qty: z.number().min(0.01, "Quantity must be greater than 0"),
-          rate: z.number().min(0, "Rate must be non-negative"),
+          rate: z.number().optional(),
         })
       )
       .min(1, "At least one item is required"),
@@ -90,22 +90,25 @@ export const quotationStepSchemas = {
  * Delivery Note step schemas
  */
 export const deliveryNoteStepSchemas = {
-  step1: z.object({
+  // These keys are deliberately named to avoid reserved-step naming.
+  items: z
+    .array(
+      z.object({
+        item_code: z.string().min(1, "Item code is required"),
+        qty: z.number().min(0.01, "Quantity must be greater than 0"),
+        // Per-item warehouse is OPTIONAL — header set_warehouse is
+        // propagated to each row on submit, so the wizard gate
+        // advances with only the header set.
+        warehouse: z.string().optional(),
+        rate: z.number().min(0).optional(),
+      })
+    )
+    .min(1, "At least one item is required"),
+  header: z.object({
     customer: z.string().min(1, "Customer is required"),
     posting_date: z.string().min(1, "Posting date is required"),
   }),
-  step2: z.object({
-    items: z
-      .array(
-        z.object({
-          item_code: z.string().min(1, "Item code is required"),
-          qty: z.number().min(0.01, "Quantity must be greater than 0"),
-          warehouse: z.string().min(1, "Warehouse is required"),
-        })
-      )
-      .min(1, "At least one item is required"),
-  }),
-  step3: z.object({
+  review: z.object({
     confirmed: z.boolean().optional(),
   }),
 };
@@ -117,7 +120,7 @@ export const salesInvoiceStepSchemas = {
   step1: z.object({
     customer: z.string().min(1, "Customer is required"),
     posting_date: z.string().min(1, "Posting date is required"),
-    due_date: z.string().min(1, "Due date is required"),
+    due_date: z.string().optional(),
   }),
   step2: z.object({
     items: z
@@ -125,7 +128,7 @@ export const salesInvoiceStepSchemas = {
         z.object({
           item_code: z.string().min(1, "Item code is required"),
           qty: z.number().min(0.01, "Quantity must be greater than 0"),
-          rate: z.number().min(0, "Rate must be non-negative"),
+          rate: z.number().optional(),
         })
       )
       .min(1, "At least one item is required"),
@@ -200,6 +203,11 @@ export const purchaseInvoiceStepSchemas = {
   step1: z.object({
     supplier: z.string().min(1, "Supplier is required"),
     posting_date: z.string().min(1, "Posting date is required"),
+    // 2R Part 3 — credit_to defaults from Company.default_payable_account.
+    // Relaxed to optional at the wizard gate — ERPNext fills the payable
+    // account server-side when omitted, so the wizard should not block on
+    // a missing value.
+    credit_to: z.string().optional(),
   }),
   step2: z.object({
     items: z
@@ -444,17 +452,42 @@ export const purchaseReceiptStepSchemas = {
     supplier: z.string().min(1, "Supplier is required"),
     posting_date: z.string().min(1, "Posting date is required"),
   }),
+  // 2R Part 5 — step2 requires warehouse per item. ERPNext's Purchase
+  // Receipt Item table requires `warehouse` server-side; the wizard now
+  // enforces it client-side too so submit doesn't fail late.
   step2: z.object({
     items: z
       .array(
         z.object({
           item_code: z.string().min(1, "Item code is required"),
           qty: z.number().min(0.01, "Quantity must be greater than 0"),
-          rate: z.number().min(0, "Rate must be non-negative").optional(),
+          rate: z.number().min(0, "Rate must be non-negative"),
           warehouse: z.string().min(1, "Warehouse is required"),
         })
       )
       .min(1, "At least one item is required"),
+  }),
+  step3: z.object({
+    confirmed: z.boolean().optional(),
+  }),
+};
+
+// 2R Part 6 — Item step schemas (V4 golden wizard). Items are master
+// docs; step1 requires the canonical identifier, step2 covers stock
+// defaults, step3 is configuration (no validation — toggles are
+// optional). Submitted payload still carries the full field set; this
+// gate is just the wizard's Next-button + Submit-button lock.
+export const itemStepSchemas = {
+  step1: z.object({
+    item_code: z.string().min(1, "Item code is required"),
+    item_name: z.string().min(1, "Item name is required"),
+    item_group: z.string().min(1, "Item group is required"),
+    stock_uom: z.string().min(1, "Stock UOM is required"),
+  }),
+  step2: z.object({
+    // Optional fields — valuation defaults to 0 via the form; we only
+    // require that the field exists, not that it is non-empty.
+    valuation_method: z.string().optional(),
   }),
   step3: z.object({
     confirmed: z.boolean().optional(),
@@ -523,6 +556,7 @@ export const WIZARD_STEP_SCHEMAS: Record<string, Record<string, z.ZodType>> = {
   "Opportunity": opportunityStepSchemas,
   "Purchase Receipt": purchaseReceiptStepSchemas,
   "Stock Reconciliation": stockReconciliationStepSchemas,
+  "Item": itemStepSchemas,
 };
 
 /**

@@ -22,17 +22,27 @@ import path from "node:path";
 // Part 1 — Flow resolution + SO/SI per-item link + make-from mapper
 // =============================================================================
 describe("Part 1: flow resolution (query storm + SO/SI per-item link)", () => {
-  it("use-flow-chain declares stable EMPTY_OPTIONS + DISABLED singletons (the 2P query-storm fix)", async () => {
+  it("use-flow-chain hits the server-side resolver (the 2R rewrite)", async () => {
     const src = await fs.readFile(
       "hooks/flows/use-flow-chain.ts",
       "utf-8",
     );
-    expect(src).toMatch(/Object\.freeze\(\{\s*filters:\s*\[\]/);
-    expect(src).toMatch(/Object\.freeze\(\{\s*enabled:\s*false/);
+    // 2R Part 1 — the 16-slot query storm is GONE. The hook is now a
+    // single `useQuery` against `/api/flows/resolve`, with a 5-minute
+    // staleTime (the rail is a back-link cache, not a live query).
+    expect(src).toMatch(/\/api\/flows\/resolve/);
+    expect(src).toMatch(/useQuery/);
     expect(src).toMatch(/staleTime:\s*FLOW_STALE_MS/);
-    // 8 primary + 8 secondary useFrappeList calls (Rules of Hooks).
+    // The OLD EMPTY_OPTIONS / DISABLED singletons are gone — no
+    // per-stage disabled slots to freeze when the whole engine
+    // collapsed to one server call.
+    expect(src).not.toMatch(/Object\.freeze\(\{\s*filters:\s*\[\]/);
+    expect(src).not.toMatch(/Object\.freeze\(\{\s*enabled:\s*false/);
+    // And: no 16 useFrappeList calls. The hook should have zero or
+    // one (it uses `useFrappeDoc` for the anchor; the rail itself
+    // comes from the server resolver).
     const primaryMatches = src.match(/useFrappeList<\s*\{/g) ?? [];
-    expect(primaryMatches.length).toBeGreaterThanOrEqual(16);
+    expect(primaryMatches.length).toBeLessThan(2);
   });
 
   it("SO→SI registry mapping now carries sales_order + so_detail on items", async () => {

@@ -35,6 +35,7 @@ import {
   ConfirmDialog,
 } from "@/components/smart";
 import type { TermsandConditions } from "@/types/doctype-types";
+import { ListErrorState } from "@/components/ui/list-error-state";
 
 // Terms Row Component
 function TermsRow({
@@ -161,11 +162,10 @@ export default function TermsAndConditionsPage() {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-destructive font-bold text-lg">
-          Failed to load terms and conditions
-        </p>
-      </div>
+      <ListErrorState
+        error={error}
+        label="terms and conditions"
+      />
     );
   }
 

@@ -47,6 +47,8 @@ import {
   Cog,
   BookOpen,
   Tag,
+  FolderTree,
+  Ruler,
 } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
 import { useNotifications } from "@/lib/stores/use-notifications";
@@ -112,11 +114,14 @@ const navigation = [
         href: "/stock/material-request",
         icon: ShoppingCart,
       },
-      {
-        title: "Stock Entries",
-        href: "/stock/stock-entry",
-        icon: ArrowRightLeft,
-      },
+      // 2Y-R2 P5 — Stock Entry hidden from nav (valuation-only, no accounting UI).
+      // Direct URL still works for admin/audit. The WO cockpit creates SEs
+      // via the lifecycle hook, so operators never need to browse SEs manually.
+      // {
+      //   title: "Stock Entries",
+      //   href: "/stock/stock-entry",
+      //   icon: ArrowRightLeft,
+      // },
       { title: "Stock Balance", href: "/stock/stock-balance", icon: Scale },
       {
         title: "Stock Ledger",
@@ -129,6 +134,10 @@ const navigation = [
         icon: ClipboardList,
       },
       { title: "Item Price", href: "/stock/settings/item-price", icon: Tag },
+      // 2R Part 7 — Item Group + UOM settings pages (their API routes
+      // already existed; the UI is now built).
+      { title: "Item Groups", href: "/stock/settings/item-group", icon: FolderTree },
+      { title: "Units of Measure", href: "/stock/settings/uom", icon: Ruler },
       { title: "Settings", href: "/stock/settings", icon: Settings },
     ],
   },
@@ -177,7 +186,15 @@ const navigation = [
         href: "/manufacturing/work-order",
         icon: ClipboardList,
       },
-      { title: "Bill of Materials", href: "/manufacturing/bom", icon: Layers },
+      {
+        title: "Job Cards",
+        href: "/manufacturing/job-card",
+        icon: ClipboardList,
+      },
+      // 2Y Part 5 — BOM hidden from nav (valuation-only, no accounting UI).
+      // Direct URL still works for admin/audit. The SO cockpit creates WOs
+      // with BOM lookup, so operators never need to browse BOMs manually.
+      // { title: "Bill of Materials", href: "/manufacturing/bom", icon: Layers },
       { title: "Workstations", href: "/manufacturing/workstation", icon: Cpu },
       { title: "Operations", href: "/manufacturing/operation", icon: Cog },
       { title: "Settings", href: "/manufacturing/settings", icon: Settings },
@@ -224,9 +241,18 @@ const navigation = [
   {
     title: "Reports",
     icon: BarChart3,
-    // 2N Part 3.2: Reports group is a sub-section of Accounting. We link
-    // each financial report directly rather than nesting a parent route.
+    // 2Y-R2 P7: Reports hub + flagship reports surfaced in nav.
     items: [
+      { title: "All Reports", href: "/reports", icon: BarChart3 },
+      { title: "Stock Balance", href: "/reports/stock-balance", icon: Scale },
+      { title: "Sales Performance", href: "/reports/sales-performance", icon: TrendingUp },
+      { title: "Procurement Spend", href: "/reports/procurement-spend", icon: ShoppingCart },
+      { title: "Manufacturing", href: "/reports/manufacturing-production", icon: Factory },
+      // Accounting reports (existing)
+      { title: "Dashboard", href: "/accounting/reports", icon: BarChart3 },
+      { title: "Sales", href: "/accounting/reports/sales", icon: TrendingUp },
+      { title: "Receivables", href: "/accounting/reports/receivables", icon: Wallet },
+      { title: "Payables", href: "/accounting/reports/payables", icon: Wallet },
       { title: "Profit & Loss", href: "/accounting/reports/profit-and-loss", icon: TrendingUp },
       { title: "Balance Sheet", href: "/accounting/reports/balance-sheet", icon: BarChart3 },
       { title: "Accounts Receivable", href: "/accounting/reports/accounts-receivable", icon: Wallet },
@@ -255,7 +281,8 @@ const SECTION_ROLES: Record<string, string[]> = {
   Manufacturing: ["Manufacturing User", "Manufacturing Manager"],
   HR: ["HR User", "HR Manager"],
   Accounting: ["Accounts User", "Accounts Manager"],
-  Reports: ["Accounts User", "Accounts Manager"],
+  // 2Y-R2 P7 — Reports visible to all operational roles (not just accounting).
+  Reports: ["Accounts User", "Accounts Manager", "Stock User", "Stock Manager", "Sales User", "Sales Manager", "Manufacturing User", "Manufacturing Manager", "Purchase User", "Purchase Manager"],
 };
 
 const ALL_ACCESS_ROLES = ["System Manager", "Administrator"];
@@ -274,12 +301,16 @@ function NavSection({
   onToggle,
   pathname,
   isSidebarCollapsed,
+  pinnedHrefs,
+  onTogglePin,
 }: {
   section: (typeof navigation)[0];
   isOpen: boolean;
   onToggle: () => void;
   pathname: string;
   isSidebarCollapsed: boolean;
+  pinnedHrefs: string[];
+  onTogglePin: (href: string) => void;
 }) {
   const hasSubItems = section.items && section.items.length > 0;
   const isActive = section.href
@@ -367,6 +398,7 @@ function NavSection({
                         pathname.startsWith(sibling.href) &&
                         sibling.href.length > item.href.length,
                     ));
+                const isPinned = pinnedHrefs.includes(item.href);
                 return (
                   <Link
                     key={item.href}
@@ -388,7 +420,31 @@ function NavSection({
                           isItemActive ? "scale-110" : "group-hover:scale-110",
                         )}
                       />
-                      <span>{item.title}</span>
+                      <span className="flex-1 truncate">{item.title}</span>
+                      {/* Pin / unpin star (2Q Part 5 Section 3) — purely
+                          cosmetic, persisted per user. */}
+                      <button
+                        type="button"
+                        aria-label={
+                          isPinned
+                            ? `Unpin ${item.title}`
+                            : `Pin ${item.title}`
+                        }
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          onTogglePin(item.href);
+                        }}
+                        className={cn(
+                          "shrink-0 text-base leading-none transition-opacity",
+                          isPinned
+                            ? "text-amber-500 opacity-100"
+                            : "text-muted-foreground/40 opacity-0 group-hover:opacity-100",
+                        )}
+                        title={isPinned ? "Unpin" : "Pin to sidebar"}
+                      >
+                        {isPinned ? "★" : "☆"}
+                      </button>
                     </div>
                   </Link>
                 );
@@ -404,12 +460,84 @@ function NavSection({
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  // 2Q Part 5 (F-B4) — persist expanded/collapsed sections per user.
+  // We key the localStorage entry by userId so two users on the same
+  // machine don't trample each other. The `auto-expand the current
+  // route` behavior is preserved (and now also persists across reloads).
+  const { user, isLoading: userLoading } = useCurrentUser();
+  const storageKey = user?.userId
+    ? `obsidian-erp-sidebar-sections:${user.userId}`
+    : "obsidian-erp-sidebar-sections:anon";
+  const pinnedKey = user?.userId
+    ? `obsidian-erp-sidebar-pinned:${user.userId}`
+    : "obsidian-erp-sidebar-pinned:anon";
   const [openSections, setOpenSections] = useState<string[]>(["Inventory"]); // Default open
+  const [pinned, setPinned] = useState<string[]>([]);
+  // 2Q Part 5 — type-to-filter (Section 1: filter input). Pure local
+  // state; no command-palette or fuzzy-search library — just substring
+  // match on title. The handoff said "reuse useCommandPalette" but the
+  // existing one is a modal launcher, not a per-section filter; for the
+  // sidebar a 1-line input is the right ergonomics.
+  const [filter, setFilter] = useState("");
   const [notifOpen, setNotifOpen] = useState(false);
   const { unreadCount } = useNotifications();
-  const { user, isLoading: userLoading } = useCurrentUser();
   const pathname = usePathname();
   const router = useRouter();
+
+  // Rehydrate persisted sections + pins on mount / user change.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw) as unknown;
+        if (
+          Array.isArray(parsed) &&
+          parsed.every((s) => typeof s === "string")
+        ) {
+          setOpenSections(parsed);
+        }
+      }
+      const rawPinned = window.localStorage.getItem(pinnedKey);
+      if (rawPinned) {
+        const parsedPinned = JSON.parse(rawPinned) as unknown;
+        if (
+          Array.isArray(parsedPinned) &&
+          parsedPinned.every((s) => typeof s === "string")
+        ) {
+          setPinned(parsedPinned);
+        }
+      }
+    } catch {
+      // ignore corrupt localStorage
+    }
+  }, [storageKey, pinnedKey]);
+
+  // Persist sections on change.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(storageKey, JSON.stringify(openSections));
+    } catch {
+      // quota / disabled — best effort
+    }
+  }, [openSections, storageKey]);
+
+  // Persist pins on change.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(pinnedKey, JSON.stringify(pinned));
+    } catch {
+      // best effort
+    }
+  }, [pinned, pinnedKey]);
+
+  const togglePin = (href: string) => {
+    setPinned((prev) =>
+      prev.includes(href) ? prev.filter((h) => h !== href) : [...prev, href],
+    );
+  };
 
   // Real signed-in identity (replaces the old hardcoded profile). Also
   // makes the §A RBAC test legible — you can see which user you are.
@@ -447,20 +575,53 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     return navigation.filter((s) => canSeeSection(s.title, user.roles ?? []));
   }, [user, userLoading]);
 
+  // 2Q Part 5 — apply the type-to-filter. Sections with no sub-items
+  // (Overview) are always shown. For sections with sub-items, we filter
+  // items by the query (case-insensitive substring). If the query is
+  // empty, everything is shown.
+  const query = filter.trim().toLowerCase();
+  const filteredNavigation = useMemo(() => {
+    if (!query) return visibleNavigation;
+    return visibleNavigation
+      .map((s) => {
+        if (!s.items?.length) return s;
+        const matches = s.items.filter(
+          (it) =>
+            it.title.toLowerCase().includes(query) ||
+            it.href.toLowerCase().includes(query),
+        );
+        if (matches.length === 0) return null;
+        return { ...s, items: matches };
+      })
+      .filter((s): s is (typeof visibleNavigation)[number] => s !== null);
+  }, [visibleNavigation, query]);
+
+  // Pinned items surface as a "Pinned" group at the top. Only items
+  // that exist in the visible navigation are kept.
+  const pinnedItems = useMemo(() => {
+    const all = visibleNavigation.flatMap((s) => s.items ?? []);
+    return pinned
+      .map((href) => all.find((it) => it.href === href))
+      .filter((it): it is NonNullable<typeof it> => Boolean(it));
+  }, [pinned, visibleNavigation]);
+
   // Close mobile menu on route change
   useEffect(() => {
     setIsMobileMenuOpen(false);
   }, [pathname]);
 
-  // Auto-expand section based on current path
+  // Auto-expand section based on current path. Also auto-expands the
+  // section that matches the current route even if it's filtered out
+  // (so a user can navigate to a section via deep link and have it
+  // expanded).
   useEffect(() => {
-    const activeSection = navigation.find((section) =>
+    const activeSection = visibleNavigation.find((section) =>
       section.items?.some((item) => pathname.startsWith(item.href)),
     );
     if (activeSection && !openSections.includes(activeSection.title)) {
       setOpenSections((prev) => [...prev, activeSection.title]);
     }
-  }, [pathname]);
+  }, [pathname, visibleNavigation, openSections]);
 
   const toggleSection = (title: string) => {
     setOpenSections((prev) =>
@@ -507,14 +668,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         )}
       </div>
 
-      {/* Search */}
+      {/* Search / type-to-filter (2Q Part 5) */}
       {(!isSidebarCollapsed || isMobile) && (
-        <div className="mb-6 animate-in fade-in slide-in-from-top-2 duration-300 delay-100">
-          <div className="flex items-center bg-secondary/50 hover:bg-secondary rounded-xl px-3 py-2.5 transition-all duration-300 cursor-pointer group border border-transparent hover:border-border/50">
-            <Search className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+        <div className="mb-3 animate-in fade-in slide-in-from-top-2 duration-300 delay-100">
+          <div className="flex items-center bg-secondary/50 hover:bg-secondary rounded-xl px-3 py-2.5 transition-all duration-300 border border-transparent hover:border-border/50 focus-within:border-primary/40 focus-within:bg-secondary">
+            <Search className="h-4 w-4 text-muted-foreground transition-colors" />
             <input
               type="text"
               placeholder="Search or ask AI..."
+              aria-label="Filter navigation"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
               className="bg-transparent border-none outline-none text-sm ml-2.5 w-full placeholder:text-muted-foreground/60"
             />
             <kbd className="hidden sm:inline-flex h-5 items-center gap-1 rounded border border-border/50 bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
@@ -526,7 +690,56 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Navigation */}
       <div className="flex-1 overflow-y-auto space-y-1.5 scrollbar-hide">
-        {visibleNavigation.map((section, idx) => (
+        {/* Pinned group (2Q Part 5 Section 3) — only when there are pins
+            and no active filter (filter owns the viewport when typing). */}
+        {!query && pinnedItems.length > 0 && (!isSidebarCollapsed || isMobile) && (
+          <div className="mb-2 animate-in fade-in slide-in-from-top-2 duration-300">
+            <p className="px-3 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+              Pinned
+            </p>
+            <div className="space-y-0.5">
+              {pinnedItems.map((it) => {
+                const ItemIcon = it.icon;
+                const isItemActive = pathname === it.href;
+                return (
+                  <Link key={it.href} href={it.href} className="block">
+                    <div
+                      className={cn(
+                        "group flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] transition-all duration-200",
+                        isItemActive
+                          ? "bg-primary text-primary-foreground font-medium shadow-md shadow-primary/10"
+                          : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground hover:translate-x-1",
+                      )}
+                    >
+                      <ItemIcon
+                        className={cn(
+                          "h-4 w-4",
+                          isItemActive ? "scale-110" : "group-hover:scale-110",
+                        )}
+                      />
+                      <span className="flex-1 truncate">{it.title}</span>
+                      <button
+                        type="button"
+                        aria-label={`Unpin ${it.title}`}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          togglePin(it.href);
+                        }}
+                        className="text-amber-500/80 hover:text-amber-500"
+                        title="Unpin"
+                      >
+                        ★
+                      </button>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {filteredNavigation.map((section, idx) => (
           <div
             key={section.title}
             className="animate-in fade-in slide-in-from-left-3"
@@ -538,9 +751,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               onToggle={() => toggleSection(section.title)}
               pathname={pathname}
               isSidebarCollapsed={isSidebarCollapsed && !isMobile}
+              pinnedHrefs={pinned}
+              onTogglePin={togglePin}
             />
           </div>
         ))}
+
+        {/* Empty filter state */}
+        {query && filteredNavigation.length === 0 && (!isSidebarCollapsed || isMobile) && (
+          <div className="px-3 py-6 text-center text-xs text-muted-foreground/80">
+            No navigation matches &ldquo;{filter}&rdquo;.
+          </div>
+        )}
       </div>
 
       {/* User Profile */}

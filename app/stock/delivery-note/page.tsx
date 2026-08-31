@@ -44,6 +44,7 @@ import { KPICard } from "@/components/dashboard/KPICard";
 import { CommandPalette } from "@/components/command/CommandPalette";
 import type { DeliveryNote } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
+import { ListErrorState } from "@/components/ui/list-error-state";
 
 function getDisplayStatus(dn: DeliveryNote): string {
   if (dn.docstatus === 2) return "Cancelled";
@@ -331,9 +332,10 @@ export default function DeliveryNoteListPage() {
   if (isLoading) return <LoadingState type="cards" count={6} />;
   if (error)
     return (
-      <div className="p-8 text-center text-destructive">
-        Failed to load delivery notes
-      </div>
+      <ListErrorState
+        error={error}
+        label="delivery notes"
+      />
     );
 
   return (

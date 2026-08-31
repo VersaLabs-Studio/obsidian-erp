@@ -4,6 +4,10 @@ import type { Metadata } from "next";
 import { Manrope } from "next/font/google";
 import LayoutClient from "./LayoutClient";
 import "./globals.css";
+// 2Q Part 8: print stylesheet. Imported globally; rules only apply
+// inside `@media print` AND when the body has `is-printing` (set by
+// the PrintShare component just before window.print()).
+import "./print.css";
 
 // Premium font loading with next/font (optimized, no layout shift)
 // Manrope - Modern, Clean, Premium feel

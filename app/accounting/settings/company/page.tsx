@@ -32,6 +32,7 @@ import {
   ConfirmDialog,
 } from "@/components/smart";
 import type { Company } from "@/types/doctype-types";
+import { ListErrorState } from "@/components/ui/list-error-state";
 
 function CompanyRow({
   company,
@@ -130,11 +131,10 @@ export default function CompaniesPage() {
 
   if (error)
     return (
-      <div className="flex items-center justify-center p-20 bg-destructive/5 rounded-2xl border border-destructive/10">
-        <p className="text-destructive font-bold text-lg">
-          Failed to load companies
-        </p>
-      </div>
+      <ListErrorState
+        error={error}
+        label="companies"
+      />
     );
 
   const filtered = companies?.filter(

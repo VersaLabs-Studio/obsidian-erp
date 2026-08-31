@@ -136,6 +136,13 @@ export default function StockSettingsPage() {
               icon={Tag}
               color="bg-violet-500 shadow-violet-500/20"
             />
+            <SetupLink
+              title="Default Warehouses"
+              description="Set system-wide default warehouses for all docs"
+              href="/stock/settings/warehouse-defaults"
+              icon={Warehouse}
+              color="bg-rose-500 shadow-rose-500/20"
+            />
           </div>
         </div>
       </div>

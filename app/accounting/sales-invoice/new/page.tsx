@@ -26,7 +26,7 @@ import { QuickAddField } from "@/components/quick-add/QuickAddField";
 import { ItemRateAutoFill } from "@/lib/flows/item-price-lookup";
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
 import { FlowWizard } from "@/components/flows/FlowWizard";
-import { useFrappeCreate, useFrappeDoc } from "@/hooks/generic";
+import { useFrappeCreate, useFrappeDoc, useFormPersistence } from "@/hooks/generic";
 import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
 import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
 import { getActiveCompany } from "@/lib/settings/company";
@@ -80,6 +80,8 @@ interface SIForm {
   posting_date: string;
   due_date: string;
   delivery_note?: string;
+  po_no?: string; // 2S Part 5 — Customer's PO / reference number
+  pana_fs_number?: string; // 2Y Part 1 — Fiscal serial number (Ethiopia e-invoicing)
   currency: string;
   conversion_rate: number;
   selling_price_list?: string;
@@ -104,7 +106,7 @@ const WIZARD_STEPS: WizardStep[] = [
     label: "Customer & Source",
     description: "Confirm the customer and invoice dates",
     schema: null,
-    fields: ["customer", "posting_date", "due_date", "delivery_note"],
+    fields: ["customer", "posting_date", "due_date", "po_no", "delivery_note"],
     icon: "UserRound",
   },
   {
@@ -169,12 +171,17 @@ export default function NewSalesInvoicePage() {
       conversion_rate: 1,
       selling_price_list: "Standard Selling",
       debit_to: "",
+      pana_fs_number: "",
       items: [{ ...EMPTY_ITEM }],
     },
   });
 
   const { control, getValues, reset, setValue } = form;
   const { fields, append, remove } = useFieldArray({ control, name: "items" });
+
+  // 2Y Part 2 — Draft autosave: persists form state to localStorage,
+  // restores on reload, clears on successful submit.
+  useFormPersistence(form, "Sales Invoice", "new");
 
   const watchedAll = useWatch({ control });
   const watchedItems = watchedAll?.items ?? [];
@@ -378,6 +385,7 @@ export default function NewSalesInvoicePage() {
           ["selling_price_list", "selling_price_list"],
           ["debit_to", "debit_to"],
           ["cost_center", "cost_center"],
+          ["pana_fs_number", "pana_fs_number"],
         ];
         for (const [formKey, draftKey] of fieldMap) {
           const v = draft[draftKey];
@@ -559,6 +567,19 @@ export default function NewSalesInvoicePage() {
                         label="Due Date"
                         required
                       />
+                      <FormInput
+                        control={control}
+                        name="po_no"
+                        label="Customer PO No"
+                        placeholder="Customer's purchase order number"
+                      />
+                      {/* 2Y Part 1 — Fiscal serial number for Ethiopia e-invoicing */}
+                      <FormInput
+                        control={control}
+                        name="pana_fs_number"
+                        label="Fiscal Serial No"
+                        placeholder="Government fiscal serial number"
+                      />
                       <FormFrappeSelect
                         control={control}
                         name="debit_to"
@@ -733,6 +754,7 @@ export default function NewSalesInvoicePage() {
                       <Summary label="Cost Center" value={v.cost_center} />
                       <Summary label="Currency" value={v.currency} />
                       <Summary label="Price List" value={v.selling_price_list} />
+                      <Summary label="Fiscal Serial No" value={v.pana_fs_number} />
                     </div>
                   </div>
 

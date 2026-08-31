@@ -32,6 +32,7 @@ import {
   ConfirmDialog,
 } from "@/components/smart";
 import type { Address } from "@/types/doctype-types";
+import { ListErrorState } from "@/components/ui/list-error-state";
 
 // Address Type badge variant
 function getAddressTypeVariant(
@@ -217,7 +218,7 @@ export default function AddressesListPage() {
   if (error) {
     return (
       <div className="flex items-center justify-center h-64">
-        <p className="text-destructive">Failed to load addresses</p>
+        <ListErrorState error={error} label="addresses" />
       </div>
     );
   }

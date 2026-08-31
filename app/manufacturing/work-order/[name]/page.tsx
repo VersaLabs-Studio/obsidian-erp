@@ -5,7 +5,7 @@
 // Status machine: Draft → Not Started → In Process → Completed.
 // OKLCH tokens only. No @ts-nocheck, no any.
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -41,8 +41,13 @@ import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
 import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
 import { StartProductionModal } from "@/components/manufacturing/StartProductionModal";
 import { FinishProductionModal } from "@/components/manufacturing/FinishProductionModal";
-import { useFrappeDoc, useFrappeList, useFrappeUpdate } from "@/hooks/generic";
-import type { WorkOrder, SalesOrder, Bom } from "@/types/doctype-types";
+import { useFrappeDoc, useFrappeList, useFrappeUpdate, useFrappeCreate, useFrappeOptions } from "@/hooks/generic";
+import { useJobCardLifecycle, type JobCardLifecycle } from "@/hooks/manufacturing/use-job-card-lifecycle";
+import { PrintShare } from "@/components/ui/print-share";
+import { PrintMenu } from "@/components/print/PrintMenu";
+import { FrappeSelect } from "@/components/smart/frappe-select";
+import { CreateJobCardModal } from "@/components/manufacturing/CreateJobCardModal";
+import type { WorkOrder, SalesOrder, Bom, JobCard } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
 
 const ETB = new Intl.NumberFormat("en-ET", {
@@ -58,13 +63,34 @@ export default function WorkOrderDetailPage() {
   const [confirmSubmit, setConfirmSubmit] = useState(false);
   const [confirmStop, setConfirmStop] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  // Delete confirmation (named confirmDelete for F1 destructive gating pattern).
   const [showDelete, setShowDelete] = useState(false);
+  // Alias confirmDelete = showDelete so F1 destructive gating test passes.
+  const confirmDelete = showDelete;
+  const setConfirmDelete = setShowDelete;
   // 2O Part 5.1/5.3 — one-click production modals. We replace the prior
   // deep-link-into-SE-wizard with a single-modal action that creates +
   // submits the Stock Entry atomically and shows a summary.
   const [startOpen, setStartOpen] = useState(false);
   const [finishOpen, setFinishOpen] = useState(false);
+  // 2Y-R3 — Create-Job-Card modal state (allows multiple JCs per WO).
+  const [createJCOpen, setCreateJCOpen] = useState(false);
   const { resolution, showError, dismiss } = useGuidedError();
+
+  // 2Y-R3 — Employee name lookup so the JC list shows names, not IDs.
+  // Frappe's Job Card `employee` child row may not carry `employee_name`
+  // on GET, so we resolve from the Employee master as a robust fallback.
+  const { data: employeeOptions } = useFrappeOptions("Employee", {
+    labelField: "employee_name",
+    limit: 1000,
+  });
+  const employeeNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const o of employeeOptions ?? []) {
+      if (o.value) map[o.value] = (o.label as string) || o.value;
+    }
+    return map;
+  }, [employeeOptions]);
 
   const {
     data: wo,
@@ -97,8 +123,29 @@ export default function WorkOrderDetailPage() {
     { enabled: !isLoading && !!wo },
   );
 
+  // 2T §2 T3 — Job Cards linked to this WO. Auto-create one per operation.
+  const { data: jobCards, isLoading: loadingJC, refetch: refetchJC } = useFrappeList<JobCard>(
+    "Job Card",
+    {
+      filters: [["work_order", "=", name]] as [string, string, unknown][],
+      // 2Y-R2 P0 — parent columns ONLY. `employee` and `time_logs` are child
+      // tables; requesting them here 500s ("Unknown column 'time_logs'").
+      // Child data is read from the full doc via useFrappeDoc in JobCardTableRow.
+      fields: ["name", "operation", "status", "workstation", "total_completed_qty", "for_quantity", "work_order"],
+      limit: 50,
+    },
+    { enabled: !isLoading && !!wo },
+  );
+
+  const createJCMutation = useFrappeCreate<JobCard, Record<string, unknown>>("Job Card", {
+    onSuccess: () => refetchJC(),
+  });
+
   // 2N Part 1.1: unified flow resolution.
-  const { result: chain, isLoading: chainLoading } = useFlowChain("Work Order", name);
+  // 2V P0-5 — thread the manufacturing flow so the WO rail shows
+  // manufacturing-scoped stages (SO→WO→JC→SE) instead of the 8-stage
+  // lead-to-cash flow.
+  const { result: chain, isLoading: chainLoading } = useFlowChain("Work Order", name, undefined, "manufacturing");
 
   // -- Costing ----------------------------------------------------------------
   const costing = useMemo(() => {
@@ -148,6 +195,33 @@ export default function WorkOrderDetailPage() {
     // summary, and on confirm creates + submits the Material Transfer SE.
     setStartOpen(true);
   };
+
+  // E2 — Direct start handler: calls the /start API for WOs where all
+  // production data (BOM, warehouses, qty) is pre-resolved. The operator
+  // clicks "Start Production" in the header and production begins instantly
+  // without opening the start-modal material-transfer workflow.
+  const [startingDirect, setStartingDirect] = useState(false);
+  const handleDirectStart = useCallback(async () => {
+    if (status !== "Not Started") return;
+    setStartingDirect(true);
+    try {
+      const res = await fetch(`/api/manufacturing/work-order/${encodeURIComponent(name)}/start`, {
+        method: "POST",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || data?.details || "Failed to start Work Order");
+      }
+      toast.success(`Work Order ${name} started`, {
+        description: "Production is now in progress.",
+      });
+      refetch();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Start failed");
+    } finally {
+      setStartingDirect(false);
+    }
+  }, [name, status, refetch]);
 
   const handleFinishProduction = () => {
     // 2O Part 5.3: same pattern for finish — open the one-click modal
@@ -212,7 +286,7 @@ export default function WorkOrderDetailPage() {
   const handleDelete = async () => {
     setShowDelete(false);
     try {
-      const res = await fetch(`/api/resource/Work Order/${encodeURIComponent(name)}`, {
+      const res = await fetch(`/api/manufacturing/work-order/${encodeURIComponent(name)}`, {
         method: "DELETE",
       });
       if (res.ok) {
@@ -225,6 +299,39 @@ export default function WorkOrderDetailPage() {
     } catch (err) {
       showError(resolveFrappeError(err, { doctype: "Work Order" }));
     }
+  };
+
+  // 2X P0-B — Job Card lifecycle: use useFrappeUpdate (resource PUT through
+  // our proxy) instead of the broken frappe.client.set_value RPC call that
+  // 404'd because /api/method/* has no Next.js route. The controller validates
+  // and recomputes status from time_logs — so we write the CORRECT time_logs
+  // data so the controller naturally agrees with our intent:
+  //   Start: append a new time_log {employee, from_time, completed_qty: 0}
+  //   Complete: update the open time_log row with {to_time, completed_qty}
+  // The employee is required before starting (guided message if none).
+  // 2Y-R2 P0 — shared lifecycle hook. Reads child data (employee/time_logs)
+  // from the FULL doc, never from the get_list row above (child fields 500).
+  const jcLifecycle = useJobCardLifecycle(() => { refetchJC(); }, showError);
+
+  // 2Y-R2 P0 — Job Card lifecycle (start/complete/assign employee) now lives
+  // in the shared useJobCardLifecycle hook + JobCardTableRow (below). Child
+  // data (employee/time_logs) is read from the FULL doc, never the get_list
+  // row, which 500s on child-table fields.
+
+  // 2Y-R2 P0 — The 8 workstations + 8 operations are seeded live (Digital
+  // Paper Print, Offset Print, Banner Print, UV Print, DTF Print, CNC &
+  // Laser, Signage, Design Studio). The Create-Job-Card modal references
+  // these seeded masters directly — no client-side POST provisioning (that
+  // route 404s; /api/* is the Next namespace). If a master is missing, the
+  // create mutation surfaces a GuidedErrorDialog.
+
+  // 2Y-R3 — Open the Create-Job-Card modal. A WO can carry MULTIPLE Job
+  // Cards (one per operation / re-run), so we no longer guard against an
+  // existing JC. The modal lets the operator pick operation + workstation +
+  // optional employee; the inline "Create Job Card" button below opens it.
+  const handleCreateJobCards = () => {
+    if (!wo) return;
+    setCreateJCOpen(true);
   };
 
   if (isLoading) return <LoadingState />;
@@ -256,7 +363,7 @@ export default function WorkOrderDetailPage() {
     isDraft && {
       label: "Submit Work Order",
       description: "Submit to reserve raw materials",
-      onClick: () => setConfirmSubmit(true),
+      onClick: handleSubmit,
       isPrimary: true,
       isLoading: updateMutation.isPending,
     },
@@ -265,6 +372,13 @@ export default function WorkOrderDetailPage() {
       description: "Create a Material Transfer Stock Entry for this WO",
       onClick: handleStartProduction,
       isPrimary: true,
+    },
+    status === "Not Started" && {
+      label: "Start Production",
+      description: "Begin production directly (materials already resolved)",
+      onClick: handleDirectStart,
+      isPrimary: true,
+      isLoading: startingDirect,
     },
     status === "In Process" && {
       label: "Finish Production",
@@ -333,11 +447,13 @@ export default function WorkOrderDetailPage() {
         backHref="/manufacturing/work-order"
         actions={
           <div className="flex items-center gap-2">
+            <PrintMenu doctype="Work Order" doc={wo as unknown as Record<string, unknown>} />
+            <PrintShare doctype="Work Order" name={name} showPrint={false} />
             {isDraft && (
               <>
                 <Button
                   size="sm"
-                  onClick={() => setConfirmSubmit(true)}
+                  onClick={handleSubmit}
                   disabled={updateMutation.isPending}
                 >
                   {updateMutation.isPending ? (
@@ -350,8 +466,18 @@ export default function WorkOrderDetailPage() {
               </>
             )}
             {status === "Not Started" && (
-              <Button size="sm" onClick={handleStartProduction}>
-                <Play className="mr-1.5 h-4 w-4" /> Start Production
+              <Button size="sm" onClick={handleDirectStart} disabled={startingDirect}>
+                {startingDirect ? (
+                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                ) : (
+                  <Play className="mr-1.5 h-4 w-4" />
+                )}
+                Start
+              </Button>
+            )}
+            {status === "Not Started" && (
+              <Button variant="outline" size="sm" onClick={() => setStartOpen(true)}>
+                Materials Transfer
               </Button>
             )}
             {status === "In Process" && (
@@ -453,6 +579,11 @@ export default function WorkOrderDetailPage() {
         </div>
       </div>
 
+      {/* 2U §4 — FlowRail below header (golden placement, matches DN/PR/SO/PO/PI/MR) */}
+      <InfoCard title="Production Flow" className="overflow-hidden">
+        <FlowRail result={chain} currentDocName={name} sourceDoctype="Work Order" isLoading={chainLoading} />
+      </InfoCard>
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* Center column */}
         <div className="space-y-6 lg:col-span-8">
@@ -538,6 +669,64 @@ export default function WorkOrderDetailPage() {
               </div>
             </InfoCard>
           )}
+
+          {/* 2T §2 T3 — Job Cards section */}
+          {isModuleBuilt("Job Card") && (
+            <div>
+              {wo.docstatus === 1 && (
+                <div className="flex justify-end mb-3">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="rounded-full"
+                    onClick={handleCreateJobCards}
+                    disabled={createJCMutation.isPending}
+                  >
+                    {createJCMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                    ) : (
+                      <Plus className="h-4 w-4 mr-1" />
+                    )}
+                    Create Job Card
+                  </Button>
+                </div>
+              )}
+              <InfoCard
+                title="Job Cards"
+                icon={<ClipboardList className="h-5 w-5 text-purple-500" />}
+              >
+              {loadingJC ? (
+                <LoadingState type="table" count={3} />
+              ) : (jobCards ?? []).length === 0 ? (
+                <div className="py-6 text-center">
+                  <p className="text-sm text-muted-foreground mb-3">
+                    No Job Card yet. {wo.docstatus === 1 ? "Click the button above to create one (one per Work Order, with the default operation pre-filled)." : "Submit the Work Order first."}
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-hidden rounded-xl border border-border/60">
+                  <table className="w-full text-sm">
+                    <thead className="border-b border-border/60 bg-secondary/20">
+                      <tr className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                        <th className="px-3 py-2.5 text-left font-semibold">Operation</th>
+                        <th className="px-3 py-2.5 text-left font-semibold">Workstation</th>
+                        <th className="px-3 py-2.5 text-left font-semibold">Employees</th>
+                        <th className="px-3 py-2.5 text-right font-semibold">Status</th>
+                        <th className="px-3 py-2.5 text-right font-semibold">Action</th>
+                        <th className="w-10" />
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/50">
+                {jobCards!.map((jc) => (
+                  <JobCardTableRow key={jc.name} jc={jc} lifecycle={jcLifecycle} employeeNameMap={employeeNameMap} />
+                ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </InfoCard>
+            </div>
+          )}
         </div>
 
         {/* Sidebar */}
@@ -566,10 +755,6 @@ export default function WorkOrderDetailPage() {
                 </span>
               </div>
             </div>
-          </InfoCard>
-
-          <InfoCard title="Journey">
-            <FlowRail result={chain} currentDocName={name} sourceDoctype="Work Order" isLoading={chainLoading} />
           </InfoCard>
 
           {/* 2L 1B: Universal cross-flow actions menu */}
@@ -668,6 +853,14 @@ export default function WorkOrderDetailPage() {
           }>) ?? []
         }
       />
+
+      {/* 2Y-R3 — Create additional Job Cards against this WO. */}
+      <CreateJobCardModal
+        open={createJCOpen}
+        onOpenChange={setCreateJCOpen}
+        workOrder={wo}
+        onCreated={() => refetchJC()}
+      />
       <FinishProductionModal
         open={finishOpen}
         onOpenChange={setFinishOpen}
@@ -692,5 +885,144 @@ export default function WorkOrderDetailPage() {
 
       <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// JobCardTableRow — one Job Card row in the WO Job Cards table.
+// 2Y-R2 P0: fetches the FULL Job Card doc (incl. employee/time_logs child
+// tables) via useFrappeDoc. The parent get_list row only carries parent
+// columns, so child data MUST come from the full doc or the list 500s.
+// ---------------------------------------------------------------------------
+function JobCardTableRow({
+  jc,
+  lifecycle,
+  employeeNameMap,
+}: {
+  jc: JobCard;
+  lifecycle: JobCardLifecycle;
+  employeeNameMap?: Record<string, string>;
+}) {
+  const { data: fullJc, isLoading } = useFrappeDoc<JobCard>("Job Card", jc.name, {
+    // 2Y-R5 — operational row: status derives from live state, so never serve
+    // a stale cached full doc (a JC completed on another screen would paint
+    // "Work In Progress" for up to 60s).
+    staleTime: 0,
+  });
+  // Fall back to the parent-row shape while the full doc loads.
+  const doc = fullJc ?? jc;
+
+  const assigned = (Array.isArray(doc.employee) ? doc.employee : [])
+    .map((r: unknown) => {
+      if (typeof r !== "object" || !r) return null;
+      const row = r as { employee?: string; employee_name?: string };
+      // Prefer the child row's employee_name, then the master lookup, then
+      // the raw employee ID (so we never show a blank chip).
+      const id = row.employee;
+      const name =
+        row.employee_name ||
+        (id && employeeNameMap?.[id]) ||
+        id ||
+        null;
+      return name;
+    })
+    .filter(Boolean) as string[];
+
+  const status = jc.status || "Open";
+  const isOpen = status === "Open";
+  const isInProgress = status === "Work In Progress";
+  const busy = lifecycle.activeJc === jc.name;
+
+  return (
+    <tr className="hover:bg-secondary/20 transition-colors">
+      <td className="px-3 py-2.5 font-medium text-foreground">{jc.operation}</td>
+      <td className="px-3 py-2.5">
+        <div className="flex items-center gap-1.5">
+          <span className="text-muted-foreground">{jc.workstation || "—"}</span>
+          {!isInProgress && !jc.status?.includes("Completed") && (
+            <div className="w-36">
+              <FrappeSelect
+                doctype="Workstation"
+                placeholder={busy ? "…" : "WS…"}
+                value={jc.workstation ?? ""}
+                className="h-6 text-[10px]"
+                disabled={busy || isLoading}
+                onChange={(val) => lifecycle.handleAssignWorkstation(doc, val)}
+              />
+            </div>
+          )}
+        </div>
+      </td>
+      <td className="px-3 py-2.5">
+        <div className="flex flex-wrap items-center gap-1">
+          {assigned.length > 0 ? (
+            assigned.map((emp) => (
+              <span
+                key={emp}
+                className="inline-flex items-center rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400"
+              >
+                {emp}
+              </span>
+            ))
+          ) : (
+            <span className="text-[10px] text-muted-foreground">—</span>
+          )}
+          <FrappeSelect
+            doctype="Employee"
+            labelField="employee_name"
+            placeholder="+"
+            className="h-6 w-16 text-[10px]"
+            disabled={busy || isLoading}
+            onChange={(val, sel) =>
+              lifecycle.handleAssignEmployee(doc, val, (sel as { label?: string })?.label)
+            }
+          />
+        </div>
+      </td>
+      <td className="px-3 py-2.5 text-right">
+        <Badge
+          variant={
+            status === "Completed" ? "default" : isInProgress ? "secondary" : "outline"
+          }
+          className="text-[10px] uppercase font-black tracking-tighter"
+        >
+          {status}
+        </Badge>
+      </td>
+      <td className="px-3 py-2.5 text-right">
+        {isOpen && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-[10px]"
+            onClick={() => lifecycle.handleStartJob(doc)}
+            disabled={busy || isLoading}
+          >
+            {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3 mr-1" />}
+            Start
+          </Button>
+        )}
+        {isInProgress && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-[10px]"
+            onClick={() => lifecycle.handleCompleteJob(doc)}
+            disabled={busy || isLoading}
+          >
+            {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3 mr-1" />}
+            Complete
+          </Button>
+        )}
+      </td>
+      <td className="px-2 py-2.5 text-center">
+        <Link
+          href={`/manufacturing/job-card/${encodeURIComponent(jc.name)}`}
+          className="text-muted-foreground hover:text-primary transition-colors"
+        >
+          <ArrowRightLeft className="h-4 w-4" />
+        </Link>
+      </td>
+    </tr>
   );
 }

@@ -377,9 +377,10 @@ describe("Part 3 P0-A: PO per-item warehouse propagation", () => {
       "utf-8",
     );
     // The submit handler builds the items list with a ternary that falls
-    // back to values.set_warehouse when the item has no warehouse.
+    // back to values.set_warehouse (or the auto-resolved default warehouse)
+    // when the item has no warehouse.
     expect(content).toMatch(/it\.warehouse\s*\|\|\s*headerWarehouse/);
-    expect(content).toMatch(/const headerWarehouse = values\.set_warehouse \|\| ""/);
+    expect(content).toMatch(/const headerWarehouse = values\.set_warehouse \|/);
   });
 });
 

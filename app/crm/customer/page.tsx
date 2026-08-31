@@ -36,6 +36,7 @@ import {
 import { StatusBadge } from "@/components/smart/status-badge";
 import type { Customer } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
+import { ListErrorState } from "@/components/ui/list-error-state";
 
 function CustomerCard({
   customer,
@@ -227,9 +228,10 @@ export default function CustomersListPage() {
   if (isLoading) return <LoadingState type="cards" count={6} />;
   if (error)
     return (
-      <div className="p-8 text-center text-destructive bg-destructive/5 rounded-xl border border-destructive/20">
-        Failed to load customers
-      </div>
+      <ListErrorState
+        error={error}
+        label="customers"
+      />
     );
 
   return (

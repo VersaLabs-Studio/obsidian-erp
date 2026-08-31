@@ -41,6 +41,7 @@ import { KPICard } from "@/components/dashboard/KPICard";
 import { StatusBadge } from "@/components/smart/status-badge";
 import type { Opportunity } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
+import { ListErrorState } from "@/components/ui/list-error-state";
 
 function formatDate(dateStr?: string) {
   if (!dateStr) return "\u2014";
@@ -252,9 +253,10 @@ export default function OpportunityListPage() {
   if (isLoading) return <LoadingState type="cards" count={6} />;
   if (error)
     return (
-      <div className="p-8 text-center text-destructive">
-        Failed to load opportunities
-      </div>
+      <ListErrorState
+        error={error}
+        label="opportunities"
+      />
     );
 
   return (

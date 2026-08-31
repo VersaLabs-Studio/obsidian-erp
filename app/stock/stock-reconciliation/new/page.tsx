@@ -29,7 +29,7 @@ import { QuickAddField } from "@/components/quick-add/QuickAddField";
 import { FieldWrap } from "@/components/form/field-wrap";
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
 import { FlowWizard } from "@/components/flows/FlowWizard";
-import { useFrappeCreate } from "@/hooks/generic";
+import { useFrappeCreate, useFrappeUpdate } from "@/hooks/generic";
 import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
 import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
 import { getActiveCompany } from "@/lib/settings/company";
@@ -139,22 +139,24 @@ export default function NewStockReconciliationPage() {
 
   // -- Persistence ------------------------------------------------------------
   const { resolution, showError, dismiss } = useGuidedError();
+  // v4.1 C1 — born-submitted: create the count as a draft, then submit it
+  // in the same action so the ledger posts immediately (mirrors the SO
+  // cockpit + WO create path). If the submit half fails (e.g. valuation
+  // guard), the draft survives and the operator finishes it from detail.
   const createMutation = useFrappeCreate<
     { data: { name: string } },
     Record<string, unknown>
   >("Stock Reconciliation", {
-    successMessage: "Stock Reconciliation created",
-    onSuccess: (res) => {
-      const name = res?.data?.name;
-      if (name) {
-        router.push(`/stock/stock-reconciliation/${encodeURIComponent(name)}`);
-      }
-    },
+    showToast: false,
     onError: (err) =>
       showError(resolveFrappeError(err, { doctype: "Stock Reconciliation" })),
   });
+  const submitMutation = useFrappeUpdate<{ name: string }>(
+    "Stock Reconciliation",
+    { showToast: false },
+  );
 
-  const handleSubmit = useCallback(() => {
+  const handleSubmit = useCallback(async () => {
     const values = getValues();
     const items = (values.items ?? []).filter((it) => it.item_code && it.warehouse);
     if (items.length === 0) {
@@ -162,7 +164,7 @@ export default function NewStockReconciliationPage() {
       setStep(1);
       return;
     }
-    createMutation.mutate({
+    const res = await createMutation.mutateAsync({
       purpose: values.purpose,
       posting_date: values.posting_date,
       set_posting_time: 1,
@@ -177,7 +179,21 @@ export default function NewStockReconciliationPage() {
       })),
       docstatus: 0,
     });
-  }, [createMutation, getValues]);
+    const srName = res?.data?.name;
+    if (!srName) return; // create failed — onError already surfaced the guide
+    try {
+      await submitMutation.mutateAsync({
+        name: srName,
+        data: { docstatus: 1 },
+      });
+      toast.success("Stock Reconciliation created and submitted");
+    } catch {
+      toast.warning(
+        "Stock Reconciliation created as a draft — review and submit it.",
+      );
+    }
+    router.push(`/stock/stock-reconciliation/${encodeURIComponent(srName)}`);
+  }, [createMutation, submitMutation, getValues, router]);
 
   return (
     <div className="space-y-6 pb-12">
@@ -193,14 +209,14 @@ export default function NewStockReconciliationPage() {
             steps={WIZARD_STEPS}
             formData={watchedAll as unknown as Record<string, unknown>}
             validationResults={validationResults}
-            isSubmitting={createMutation.isPending}
+            isSubmitting={createMutation.isPending || submitMutation.isPending}
             onFormDataChange={() => {}}
             onStepChange={setStep}
             onTriedNextChange={setTriedNextSteps}
             onSubmit={handleSubmit}
             onCancel={() => router.back()}
-            submitLabel="Create Stock Reconciliation"
-            submittingLabel="Creating..."
+            submitLabel="Create & Submit"
+            submittingLabel="Submitting..."
             renderStep={(s) => {
               // ---- STEP 1 — Setup -------------------------------------------
               if (s.id === "step1") {

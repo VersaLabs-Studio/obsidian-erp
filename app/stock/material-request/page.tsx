@@ -40,6 +40,7 @@ import { StatusBadge } from "@/components/smart/status-badge";
 import { KPICard } from "@/components/dashboard/KPICard";
 import type { MaterialRequest } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
+import { ListErrorState } from "@/components/ui/list-error-state";
 
 const TYPE_CONFIG: Record<
   string,
@@ -295,9 +296,10 @@ export default function MaterialRequestListPage() {
   if (isLoading) return <LoadingState type="cards" count={6} />;
   if (error)
     return (
-      <div className="p-8 text-center text-destructive">
-        Failed to load material requests
-      </div>
+      <ListErrorState
+        error={error}
+        label="material requests"
+      />
     );
 
   return (

@@ -30,6 +30,7 @@ import {
 import { FrappeSelect } from "@/components/smart/frappe-select";
 import { InfoCard, DataPoint } from "@/components/ui/info-card";
 import type { ItemPrice } from "@/types/doctype-types";
+import { ListErrorState } from "@/components/ui/list-error-state";
 
 interface ItemPriceFilters {
   price_list?: string;
@@ -81,11 +82,10 @@ export default function ItemPriceListPage() {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center p-20 bg-destructive/5 rounded-2xl border border-destructive/10">
-        <p className="text-destructive font-bold text-lg">
-          Failed to load item prices
-        </p>
-      </div>
+      <ListErrorState
+        error={error}
+        label="item prices"
+      />
     );
   }
 

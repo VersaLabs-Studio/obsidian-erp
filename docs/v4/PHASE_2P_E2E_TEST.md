@@ -113,29 +113,57 @@
 
 ---
 
-## §C — Procure-to-Pay (Buying)  ·  run as `stock@` (receive) + `accounts@` (bill/pay)
+## §C — Procure-to-Pay (Buying) + Phase 2R retest  ·  run as `stock@` (receive) + `accounts@` (bill/pay)
+
+> **This section now doubles as the Phase 2R live retest** (build `047d910` on `feat/v4-phase-2r-procure-flowgraph`, cut from `17eb86f`). 2R was built to fix exactly this workflow — the "every operation is blind to each other" finding — plus the §B flow-rail/make-from/print residuals. Run §C → sign off (closes §B + §C) → continue straight into §D in the same session. The granular per-step **failure strings** live in `docs/v4/PHASE_2R_BUILD_REPORT.md` → "MANUAL LIVE-RETEST CHECKLIST" (steps cited inline as **[R-N]**).
+>
+> **Pre-flight for this session:** be on `feat/v4-phase-2r-procure-flowgraph` at `047d910`. `npx tsc --noEmit` = 0, `npx vitest run` = 401/401 (the `phase-2n` timeout is the only tolerated flake). Provision the Pana tenant (§0) if not already; you need at least one company with a `default_payable_account` set and a `Raw Materials - PAN` warehouse (2R best-effort-provisions it).
 
 **The business workflow.** To print the cards, the shop needs paper and ink. It requests the materials, orders them from a supplier, receives the delivery into stock, gets the supplier's bill, and pays it.
 
-**What the system automates.** A Material Request becomes a Purchase Order (prefilled); receiving the goods raises a Purchase Receipt that **increases on-hand stock automatically**; the supplier bill (Purchase Invoice) and payment chain link back to the PO. Receiving is one click — the operator never builds a stock document by hand.
+**What the system automates.** A Material Request becomes a Purchase Order (prefilled); receiving the goods raises a Purchase Receipt that **increases on-hand stock automatically**; the supplier bill (Purchase Invoice) and payment chain link back to the PO. Receiving is one click — the operator picks a warehouse only if they want to override the implicit **Stores** default.
 
-**Run it**
-1. **New Material Request**: *Art Paper 300gsm* qty 50, *Cyan Ink* qty 10. Submit.
-2. From the MR, **Create Purchase Order** (prefilled). Submit.
-3. As `stock@`: open the PO → **"Receive items"** → the **ReceiveMaterialsModal** lists ordered vs received per line. Receive in full (or partial — confirm partials work). Confirm → a **Purchase Receipt** is created+submitted; target is the implicit **Stores** warehouse.
-4. Confirm idempotency: reopen "Receive items" → it shows a "View existing" link for the receipt but still allows further partials.
-5. As `accounts@`: from the PO, **Create Purchase Invoice** → submit → **Create Payment Entry** → pay. The PO rail shows Receipt + Invoice + Payment stages resolved.
+### C1 — The buying chain, end to end (Parts 1–4 · the headline) — *seeds §D's stock*
+1. As `stock@`: **New Material Request** — *Art Paper 300gsm* qty 50, *Cyan Ink* qty 10. Submit.
+2. From the MR, **Create Purchase Order** — the form must hydrate with supplier + both lines + `material_request` set on the header **and each row** **[R-6]**. Submit.
+3. Open the PO → **"Receive items"**. The **ReceiveMaterialsModal** opens with per-line receive qty **prefilled to outstanding** and the **Receive button enabled** (the locked-button defect) **[R-14]**. Leave the warehouse selector at **Stores - PAN** for this line, or switch it to **Raw Materials - PAN** to confirm routing **[R-15, R-16]**. Confirm → a Purchase Receipt is created+submitted.
+4. Confirm the PR create form (if you open `/stock/purchase-receipt/new?purchase_order=PO-…`) shows exactly **one Posting Date field** (the dup-date fix) and prefills supplier + lines + `purchase_order` back-links **[R-10, R-18]**.
+5. **PR submit advances the MR** — reopen the originating MR: its status moved off `Pending` to reflect the received qty **[R-9]**. *(This was the headline §C failure: "PR submits but MR still Pending.")*
+6. As `accounts@`: from the PO **or** the PR, **Create Purchase Invoice** — form hydrates with supplier + lines + the `purchase_order`/`purchase_receipt` link, and `credit_to` is **defaulted from the company's `default_payable_account`** with no manual entry needed (the blocker that stopped you reaching PE) **[R-7, R-12]**. Submit.
+7. **PI submit advances the PO billing status** **[R-8]**. Then **Create Payment Entry** → pay in full. The PE create flow completes — the chain you previously couldn't finish.
 
-**Expected:** on-hand for paper/ink rises by the received qty (verify in §E); receiving never asks the operator to pick a warehouse; the PO→PR→PI→PE chain resolves on the rail.
+### C2 — Flow rail lights up from every node (Part 1 · full-depth graph) — *also closes §B F-B1/F-B3*
+8. Open the **MR** detail page. The rail shows **every** other stage `completed` with the right name: `Purchase Order`, `Purchase Receipt`, `Purchase Invoice`, `Payment Entry` — no stage stuck `pending` **[R-1]**.
+9. Open the **PE** detail page. Upstream stages (`Purchase Order`, `Material Request`, and on the sales side `Customer`/`Quotation` when present) resolve even though they're **>2 hops** away — the old pairwise cap left these dead **[R-2]**.
+10. **Network check:** on any detail page the rail issues **exactly one** `GET /api/flows/resolve?doctype=…&name=…` (+ the anchor-doc fetch), not the old 16-request storm **[R-4]**. This is the F-B3 perf fix — confirm first paint feels fast.
+11. **Sales-side regression** (closes §B F-B1): open a **Quotation → SO → DN → SI → PE** chain; every node's rail shows the full chain both directions **[R-3]**, and an SO with both a SI and a DN resolves both via the SO hub **[R-5]**.
+
+### C3 — Net-new buying & inventory surfaces (Parts 5–8)
+12. **Items V4** — `/stock/item` is the V4 card grid + KPI bar (not v3) **[R-19]**; `/stock/item/new` is the 3-step full-field wizard with the barcodes child-table, and Item Name → Item Code auto-fills **[R-20, R-21]**; create one, then edit it (item_code readOnly) **[R-22]**.
+13. **Settings UI** — `/stock/settings/uom` and `/stock/settings/item-group` each list/create/detail/edit in V4 style; a UOM/Group created here is immediately selectable in Item create **[R-23, R-24, R-25, R-26]**.
+14. **RFQ** — the sidebar's Buying group now shows **Requests for Quotation** between Purchase Orders and Purchase Receipts; it routes **[R-27]**.
+
+### C4 — Cross-cutting closeout (Parts 9, 11) — *also closes §B F-B4/F-B5*
+15. **Capability gate inert** — sign in as a role lacking `Sales Order` create; `/sales/sales-order/new` serves the wizard (no client-side block). On submit the server 403 renders the **calm PERMISSION guided dialog** ("You don't have permission for this action" + the real reason), not the scary "Something went wrong" **[R-28, R-29, R-30]**.
+16. **Print & Share system-wide** (F-B4) — open SO, DN, SI, PI, PO, PR, Quotation, PE → Print shows the **branded Pana letterhead**, single-column body, clean items table, timestamp footer, no app chrome; Email + Copy-link work from the Share menu **[R-31, R-32, R-33]**.
+
+**Expected:** the full MR→PO→PR→PI→PE chain prefills, propagates status, and resolves on the rail from every node; on-hand for paper/ink rises by the received qty (cross-checked in §E); the rail is one request, not sixteen.
+
+**Known gaps to expect (don't re-file these — already logged in the 2R report):**
+- **Customer V4 was NOT rebuilt** — it was already V4 (verified live in 2Q); the handoff's "rebuild" claim was a scope error, reported honestly (KNOWN GAP #1). Don't expect a changed Customer module.
+- **Multi-PR bill edge** — a PI built from *two* PRs may not fully resolve the PR stage (`items[].purchase_receipt` parent-pointer limitation, KNOWN GAP #3). Single-PR bills are fine.
+- **Live field-name verification is yours** — if a stage shows `null`, it's likely a real ERPNext v15 field-name mismatch the resolver caught cleanly (no false positive); note the doctype+stage so the mesh can correct the registry.
 
 **Findings:**
 - …
 
-**Sign-off:** ☐ Procure-to-Pay verified — proceed to §D.
+**Sign-off:** ☐ Procure-to-Pay + 2R retest verified (closes §B residuals F-B1/F-B3/F-B4/F-B5 + all of §C) — proceed to §D **in the same session**.
 
 ---
 
 ## §D — Plan-to-Produce (Manufacturing)  ·  run as `mfg@`  ·  *the SME automation centerpiece*
+
+> **Continue here directly after §C signs off** — same session, same seeded data. The paper/ink you received in §C-C1 is the raw stock this section consumes (§D step 6 cross-checks it). 2R did **not** touch manufacturing, so this is a fresh-feature pass, not a retest: capture findings in the **Findings** block and we'll triage into the next handoff exactly as we did for §B/§C.
 
 **The business workflow.** Now the shop actually prints. It starts a print job for 1,000 business cards, the job consumes paper and ink, and finished cards land in stock ready to deliver. In raw Frappe this means BOMs, Work Orders, two kinds of Stock Entries, WIP vs FG warehouses, and backflush settings — far too much for an SME. v4 collapses it to **three verbs: Create job → Start job → Finish job.**
 
@@ -251,7 +279,7 @@
 | §0 | Pre-flight | ☐ | |
 | §A | RBAC & Roles | ☐ | |
 | §B | Lead-to-Cash | ☐ | |
-| §C | Procure-to-Pay | ☐ | |
+| §C | Procure-to-Pay **+ Phase 2R retest** | ☐ | |
 | §D | Plan-to-Produce | ☐ | |
 | §E | Stock Health | ☐ | |
 | §F | Financial Reporting | ☐ | |

@@ -38,6 +38,7 @@ import { ItemRateAutoFill } from "@/lib/flows/item-price-lookup";
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
 import { FlowWizard } from "@/components/flows/FlowWizard";
 import { useFrappeCreate, useFrappeDoc } from "@/hooks/generic";
+import { useMakeFrom } from "@/hooks/flows/use-make-from";
 import {
   getAutoFillMapping,
   applyAutoFill,
@@ -133,6 +134,11 @@ export default function NewPurchaseOrderPage() {
   const searchParams = useSearchParams();
   const materialRequestId = searchParams.get("material_request");
   const supplierQuotationId = searchParams.get("supplier_quotation");
+  // 2V P0-2 — shortfall prefill: optional shortfall param from the
+  // StartProductionModal. Format: "ITEM-001:qty,ITEM-002:qty". Items are
+  // prefilled with the specified qty; supplier stays blank.
+  const shortfallParam = searchParams.get("shortfall");
+  const workOrderParam = searchParams.get("work_order");
 
   const [step, setStep] = useState(0);
   const [autoFilledFields, setAutoFilledFields] = useState<Set<string>>(
@@ -174,7 +180,56 @@ export default function NewPurchaseOrderPage() {
       enabled: !!supplierQuotationId,
     });
 
+  // 2R Part 2 — canonical make-from (server mapper). Takes priority
+  // over the hand-mapping registry below. The registry remains as a
+  // silent fallback for the route-error case (e.g. the user lacks
+  // CREATE on PO, the mapper errors out, or the MR has no supplier).
+  const { draft: mrDraft } = useMakeFrom({
+    sourceDoctype: "Material Request",
+    sourceName: materialRequestId,
+    targetDoctype: "Purchase Order",
+    enabled: !!materialRequestId,
+  });
+  const { draft: sqDraft } = useMakeFrom({
+    sourceDoctype: "Supplier Quotation",
+    sourceName: supplierQuotationId,
+    targetDoctype: "Purchase Order",
+    enabled: !!supplierQuotationId,
+  });
+  const canonicalDraft = mrDraft ?? sqDraft;
+  const canonicalSourceType = materialRequestId
+    ? "Material Request"
+    : supplierQuotationId
+      ? "Supplier Quotation"
+      : null;
+
+  // 2R Part 2 — hydrate from the canonical draft when it arrives.
+  // Runs BEFORE the hand-mapping fallback effect so the canonical path
+  // wins; the fallback only runs when `canonicalDraft` is null.
   useEffect(() => {
+    if (!canonicalDraft || !canonicalSourceType) return;
+    const d = canonicalDraft.doc as Partial<POForm> & { items?: POItem[] };
+    reset({
+      ...getValues(),
+      ...d,
+      items: Array.isArray(d.items) && d.items.length > 0 ? d.items : [{ ...EMPTY_ITEM }],
+      schedule_date: "",
+    });
+    // Mark every header field from the draft as auto-filled.
+    const filled = new Set<string>(
+      Object.keys(d).filter((k) => k !== "items" && k !== "schedule_date"),
+    );
+    filled.add("items");
+    setAutoFilledFields(filled);
+    toast.success(`Loaded from ${canonicalSourceType} ${materialRequestId ?? supplierQuotationId}`, {
+      description: "Set the schedule date to continue.",
+    });
+  }, [canonicalDraft, canonicalSourceType, materialRequestId, supplierQuotationId, reset, getValues]);
+
+  useEffect(() => {
+    // 2R Part 2 — the canonical server-mapper draft takes priority.
+    // Skip the hand-mapping fallback when the draft is already present.
+    if (canonicalDraft) return;
     const source = materialRequest ?? supplierQuotation;
     const sourceType = materialRequest
       ? "Material Request"
@@ -213,7 +268,61 @@ export default function NewPurchaseOrderPage() {
     toast.success(`Loaded from ${sourceType} ${materialRequestId ?? supplierQuotationId}`, {
       description: "Set the schedule date to continue.",
     });
-  }, [materialRequest, supplierQuotation, materialRequestId, supplierQuotationId, reset, getValues]);
+  }, [
+    canonicalDraft,
+    materialRequest,
+    supplierQuotation,
+    materialRequestId,
+    supplierQuotationId,
+    reset,
+    getValues,
+  ]);
+
+  // 2V P0-2 — shortfall prefill. When ?shortfall= is provided (from
+  // StartProductionModal), populate items with the shortfall pairs.
+  // Runs only when no canonical source doc auto-fill is in progress.
+  useEffect(() => {
+    if (!shortfallParam) return;
+    if (canonicalDraft || materialRequest || supplierQuotation) return;
+
+    const pairs = shortfallParam.split(",").filter(Boolean);
+    const items: POItem[] = pairs.map((pair) => {
+      const [item_code, qtyStr] = pair.split(":");
+      return {
+        item_code: item_code ?? "",
+        item_name: "",
+        description: "",
+        qty: Math.max(1, Number(qtyStr) || 1),
+        rate: 0,
+        amount: 0,
+        uom: "Nos",
+        warehouse: "",
+      };
+    });
+
+    if (items.length === 0) return;
+
+    reset({
+      ...getValues(),
+      items,
+      ...(workOrderParam ? { material_request: `WO: ${workOrderParam}` } : {}),
+      schedule_date: "",
+    });
+
+    setAutoFilledFields(new Set(["items"]));
+
+    toast.success("Shortfall items loaded", {
+      description: `${items.length} item(s) prefilled from the production shortfall. Set a supplier to continue.`,
+    });
+  }, [
+    shortfallParam,
+    workOrderParam,
+    canonicalDraft,
+    materialRequest,
+    supplierQuotation,
+    reset,
+    getValues,
+  ]);
 
   const isAuto = useCallback(
     (field: string) => autoFilledFields.has(field),
@@ -276,10 +385,9 @@ export default function NewPurchaseOrderPage() {
       return;
     }
     // 2L P0-A: propagate the header `set_warehouse` to every item that
-    // lacks a per-row warehouse. Frappe's Purchase Order Item requires
-    // `warehouse` per row; the wizard exposes a single header "Receipt
-    // Warehouse" (`set_warehouse`). When the user only fills the header,
-    // each item is given the header value here.
+    // lacks a per-row warehouse. Server-side warehouse backfill (in the
+    // PO create API route) fills any remaining blanks with the default
+    // Stores warehouse, so items always reach ERPNext with a warehouse.
     const headerWarehouse = values.set_warehouse || "";
     createMutation.mutate({
       ...values,

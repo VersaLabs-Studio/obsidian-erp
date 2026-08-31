@@ -42,8 +42,9 @@ import {
 } from "@/lib/flows/flow-auto-fill";
 import { validateWizardStep } from "@/lib/flows/flow-validation";
 import type { StepValidationResult } from "@/lib/flows/flow-validation";
+import { distributeAllocations } from "@/lib/accounting/payment-allocation";
 import type { WizardStep } from "@/types/flow-types";
-import type { PaymentEntry, SalesInvoice } from "@/types/doctype-types";
+import type { PaymentEntry, SalesInvoice, PurchaseInvoice } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
 import { FieldWrap } from "@/components/form/field-wrap";
 
@@ -112,8 +113,17 @@ function CreatePaymentEntryForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const salesInvoiceId = searchParams.get("sales_invoice");
+  const purchaseInvoiceId = searchParams.get("purchase_invoice");
+  const invoiceParam = searchParams.get("invoice");
   const partyTypeParam = searchParams.get("party_type");
   const partyParam = searchParams.get("party");
+  const amountParam = searchParams.get("amount");
+  const paymentTypeParam = searchParams.get("payment_type");
+
+  // 2S Part 3 — resolve the invoice source: explicit sales_invoice param,
+  // explicit purchase_invoice param, or generic "invoice" param from the PI
+  // detail page's WhatsNext card (which sends ?invoice=PINV-xxx).
+  const resolvedPIId = purchaseInvoiceId ?? (invoiceParam && partyTypeParam === "Supplier" ? invoiceParam : null);
 
   const [step, setStep] = useState(0);
   const [autoFilledFields, setAutoFilledFields] = useState<Set<string>>(
@@ -207,10 +217,83 @@ function CreatePaymentEntryForm() {
     });
   }, [salesInvoice, salesInvoiceId, reset, getValues]);
 
+  // -- 2S Part 3 — Auto-fill from upstream Purchase Invoice via the registry -
+  const { data: purchaseInvoice, isLoading: loadingPI } =
+    useFrappeDoc<PurchaseInvoice>("Purchase Invoice", resolvedPIId ?? "", {
+      enabled: !!resolvedPIId,
+    });
+
+  useEffect(() => {
+    if (!purchaseInvoice) return;
+    const mapping = getAutoFillMapping("Purchase Invoice", "Payment Entry");
+    if (!mapping) return;
+
+    const header = applyAutoFill(
+      purchaseInvoice as unknown as Record<string, unknown>,
+      mapping,
+    );
+
+    // Build a reference from the invoice
+    const outstandingAmt = purchaseInvoice.outstanding_amount ?? purchaseInvoice.grand_total ?? 0;
+    const ref: PEReference = {
+      reference_doctype: "Purchase Invoice",
+      reference_name: purchaseInvoice.name,
+      allocated_amount: outstandingAmt,
+      total_amount: purchaseInvoice.grand_total ?? 0,
+      outstanding_amount: purchaseInvoice.outstanding_amount ?? 0,
+    };
+
+    reset({
+      ...getValues(),
+      ...(header as Partial<PEForm>),
+      party_type: "Supplier",
+      payment_type: "Pay",
+      paid_amount: outstandingAmt,
+      received_amount: outstandingAmt,
+      references: [ref],
+    });
+
+    const filled = new Set<string>([
+      ...mapping.headerMappings
+        .filter((m) => m.isReadOnly)
+        .map((m) => m.targetField),
+      "references",
+      "paid_amount",
+      "party_type",
+      "payment_type",
+    ]);
+    setAutoFilledFields(filled);
+
+    toast.success(`Loaded from Purchase Invoice ${resolvedPIId}`, {
+      description: "Review the payment details to continue.",
+    });
+  }, [purchaseInvoice, resolvedPIId, reset, getValues]);
+
   // Sync received_amount with paid_amount for ETB
   useEffect(() => {
     setValue("received_amount", watchedPaidAmount);
   }, [watchedPaidAmount, setValue]);
+
+  // 2U §A3 — keep each invoice allocation distributed from the (authoritative)
+  // Paid Amount, capped at the invoice outstanding. This keeps the live
+  // Difference indicator at zero and guarantees ERPNext's
+  // `difference_amount == 0` submit guard passes — the bug that blocked
+  // partial payments ("Difference Amount must be zero"). The equality guard
+  // makes the effect converge (no setValue once allocations already match).
+  useEffect(() => {
+    const refs = watchedReferences ?? [];
+    if (refs.length === 0) return;
+    let remaining = Number(watchedPaidAmount) || 0;
+    refs.forEach((r, i) => {
+      const outstanding = Number(r?.outstanding_amount) || 0;
+      const cap = outstanding > 0 ? outstanding : remaining;
+      const alloc = Math.max(0, Math.min(remaining, cap));
+      remaining -= alloc;
+      if (Number(r?.allocated_amount) !== alloc) {
+        setValue(`references.${i}.allocated_amount`, alloc);
+      }
+    });
+  }, [watchedPaidAmount, watchedReferences, setValue]);
 
   // Fetch outstanding invoices for the selected party
   const invoiceDoctype = watchedPartyType === "Supplier" ? "Purchase Invoice" : "Sales Invoice";
@@ -349,18 +432,23 @@ function CreatePaymentEntryForm() {
 
   const handleSubmit = useCallback(() => {
     const values = getValues();
+    // 2U §A3 — distribute the typed Paid Amount across the referenced
+    // invoices so paid_amount === Σ allocated_amount. This is authoritative
+    // at submit (independent of whatever the live effect did), so the PE can
+    // never post with a non-zero difference_amount.
+    const { references: distributedRefs, paidAmount: effectivePaid } =
+      distributeAllocations(Number(values.paid_amount) || 0, values.references ?? []);
     createMutation.mutate({
       ...values,
       company: getActiveCompany(),
       naming_series: "ACC-PAY-.YYYY.-",
-      received_amount: values.paid_amount,
+      paid_amount: effectivePaid,
+      received_amount: effectivePaid,
       source_exchange_rate: 1,
       target_exchange_rate: 1,
-      base_paid_amount: values.paid_amount,
-      base_received_amount: values.paid_amount,
-      references: (values.references ?? []).filter(
-        (ref) => ref.reference_name && ref.allocated_amount > 0,
-      ),
+      base_paid_amount: effectivePaid,
+      base_received_amount: effectivePaid,
+      references: distributedRefs,
     });
   }, [createMutation, getValues]);
 
@@ -371,7 +459,9 @@ function CreatePaymentEntryForm() {
         subtitle={
           salesInvoiceId
             ? `From Sales Invoice ${salesInvoiceId}`
-            : "Record a payment in three steps"
+            : resolvedPIId
+              ? `From Purchase Invoice ${resolvedPIId}`
+              : "Record a payment in three steps"
         }
         backHref="/accounting/payment-entry"
       />
@@ -414,7 +504,7 @@ function CreatePaymentEntryForm() {
                       />
                       <FieldWrap
                         auto={isAuto("party_type")}
-                        loading={loadingInvoice}
+                        loading={loadingInvoice || loadingPI}
                         error={triedNextSteps.has(step) ? validationResults?.step1?.errors?.party_type : undefined}
                       >
                         <FormSelect
@@ -435,7 +525,7 @@ function CreatePaymentEntryForm() {
                       </FieldWrap>
                       <FieldWrap
                         auto={isAuto("party")}
-                        loading={loadingInvoice}
+                        loading={loadingInvoice || loadingPI}
                         error={triedNextSteps.has(step) ? validationResults?.step1?.errors?.party : undefined}
                       >
                         {/* 2M Part 4B: Quick-Add enabled Party. Doctype is

@@ -16,6 +16,7 @@ import {
   Plus,
   Trash2,
   Lock,
+  Boxes,
 } from "lucide-react";
 
 import { PageHeader } from "@/components/smart";
@@ -32,6 +33,7 @@ import {
 import { QuickAddField } from "@/components/quick-add/QuickAddField";
 import { ItemRateAutoFill } from "@/lib/flows/item-price-lookup";
 import { FieldWrap } from "@/components/form/field-wrap";
+import { StockLevelModal } from "@/components/stock/StockLevelModal";
 import { Form, FormField, FormItem, FormControl } from "@/components/ui/form";
 import { FlowWizard } from "@/components/flows/FlowWizard";
 import { useFrappeCreate, useFrappeDoc } from "@/hooks/generic";
@@ -76,6 +78,7 @@ interface QuotationForm {
   contact_person?: string;
   taxes_and_charges?: string;
   tc_name?: string;
+  payment_terms_template?: string;
   items: QuotationItem[];
 }
 
@@ -129,6 +132,8 @@ export default function NewQuotationPage() {
 
   const [step, setStep] = useState(0);
   const [triedNextSteps, setTriedNextSteps] = useState<Set<number>>(new Set());
+  // 2T §3 — StockLevelModal state
+  const [stockModalOpen, setStockModalOpen] = useState(false);
 
   const form = useForm<QuotationForm>({
     defaultValues: {
@@ -146,6 +151,7 @@ export default function NewQuotationPage() {
       price_list_currency: "ETB",
       conversion_rate: 1,
       plc_conversion_rate: 1,
+      payment_terms_template: "",
       status: "Draft",
       customer_address: "",
       contact_person: "",
@@ -391,6 +397,17 @@ export default function NewQuotationPage() {
                         }
                         placeholder="Select address..."
                       />
+                      {/* 2T §1A.3 — Payment Terms Template selector for Quotation.
+                          Lets the user set installment-based payment schedules.
+                          ERPNext applies the template's payment_schedule entries
+                          to auto-populate due dates and amounts against the doc date. */}
+                      <FormFrappeSelect
+                        control={control}
+                        name="payment_terms_template"
+                        label="Payment Terms"
+                        doctype="Payment Terms Template"
+                        placeholder="Select payment terms..."
+                      />
                     </div>
                   </InfoCard>
                 </div>
@@ -515,15 +532,27 @@ export default function NewQuotationPage() {
                         </tbody>
                       </table>
                       <div className="flex items-center justify-between border-t border-border/60 bg-secondary/10 px-3 py-3">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="rounded-full border-dashed"
-                          onClick={() => append({ ...EMPTY_ITEM })}
-                        >
-                          <Plus className="mr-1.5 h-4 w-4" /> Add Item
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="rounded-full border-dashed"
+                            onClick={() => append({ ...EMPTY_ITEM })}
+                          >
+                            <Plus className="mr-1.5 h-4 w-4" /> Add Item
+                          </Button>
+                          {/* 2T §3 — Stock check button for Quotation */}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="rounded-full text-muted-foreground"
+                            onClick={() => setStockModalOpen(true)}
+                          >
+                            <Boxes className="mr-1.5 h-4 w-4" /> Check Stock
+                          </Button>
+                        </div>
                         <div className="text-right">
                           <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                             Subtotal
@@ -574,6 +603,18 @@ export default function NewQuotationPage() {
       </Form>
 
       <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
+
+      {/* 2T §3 — Stock-level modal for Quotation create */}
+      <StockLevelModal
+        open={stockModalOpen}
+        onOpenChange={setStockModalOpen}
+        items={(watchedItems ?? [])
+          .filter((it): it is QuotationItem & { item_code: string } => Boolean(it?.item_code))
+          .map((it) => ({
+            item_code: it.item_code,
+            item_name: it.item_name,
+          }))}
+      />
     </div>
   );
 }

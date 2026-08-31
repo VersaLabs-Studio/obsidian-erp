@@ -26,7 +26,7 @@ export function useFrappeDoc<T>(
     queryKey: [doctype, "doc", name],
     queryFn: async (): Promise<T> => {
       const url = `/api/${apiPath}/${encodeURIComponent(name)}`;
-      const response = await fetch(url);
+      const response = await fetch(url, { cache: "no-store" });
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));

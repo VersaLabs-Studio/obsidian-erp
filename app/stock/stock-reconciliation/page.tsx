@@ -40,6 +40,7 @@ import { KPICard } from "@/components/dashboard/KPICard";
 import { CommandPalette } from "@/components/command/CommandPalette";
 import type { StockReconciliation } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
+import { ListErrorState } from "@/components/ui/list-error-state";
 
 function getDisplayStatus(sr: StockReconciliation): string {
   if (sr.docstatus === 2) return "Cancelled";
@@ -260,9 +261,10 @@ export default function StockReconciliationListPage() {
   if (isLoading) return <LoadingState type="cards" count={6} />;
   if (error)
     return (
-      <div className="p-8 text-center text-destructive">
-        Failed to load stock reconciliations
-      </div>
+      <ListErrorState
+        error={error}
+        label="stock reconciliations"
+      />
     );
 
   return (

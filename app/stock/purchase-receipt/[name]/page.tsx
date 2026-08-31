@@ -15,10 +15,10 @@ import {
   Edit3,
   Send,
   Trash2,
+  Ban,
   Loader2,
   Truck,
   Package,
-  Receipt,
 } from "lucide-react";
 
 import { PageHeader, LoadingState, ConfirmDialog } from "@/components/smart";
@@ -30,6 +30,8 @@ import { isModuleBuilt } from "@/lib/flows/module-availability";
 import { WhatsNext } from "@/components/smart/WhatsNext";
 import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
 import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
+import { PrintShare } from "@/components/ui/print-share";
+import { PrintMenu } from "@/components/print/PrintMenu";
 import { useFlowChain } from "@/hooks/flows/use-flow-chain";
 import { useFrappeDoc, useFrappeList, useFrappeUpdate, useFrappeDelete } from "@/hooks/generic";
 import type { PurchaseReceipt } from "@/types/doctype-types";
@@ -55,9 +57,14 @@ export default function PurchaseReceiptDetailPage() {
 
   const [confirmSubmit, setConfirmSubmit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  // 4.1 A3 — one-click "Bill" (PR → Purchase Invoice, submitted).
+  const [confirmBill, setConfirmBill] = useState(false);
+  const [billing, setBilling] = useState(false);
   const { resolution, showError, dismiss } = useGuidedError();
 
-  const { data: pr, isLoading, error } = useFrappeDoc<PurchaseReceipt>(
+  const { data: pr, isLoading, error, refetch } = useFrappeDoc<PurchaseReceipt>(
     "Purchase Receipt",
     name,
   );
@@ -110,6 +117,63 @@ export default function PurchaseReceiptDetailPage() {
     deleteMutation.mutate(name);
   };
 
+  const handleConfirmDelete = async () => {
+    setConfirmDelete(false);
+    try {
+      const res = await fetch(`/api/stock/purchase-receipt/${encodeURIComponent(name)}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        toast.success("Purchase Receipt deleted");
+        router.push("/stock/purchase-receipt");
+      } else {
+        const body = await res.json().catch(() => ({}));
+        showError(resolveFrappeError(body, { doctype: "Purchase Receipt" }));
+      }
+    } catch (err) {
+      showError(resolveFrappeError(err, { doctype: "Purchase Receipt" }));
+    }
+  };
+
+  const handleCancel = () => {
+    setConfirmCancel(false);
+    updateMutation.mutate(
+      { name, data: { docstatus: 2 } },
+      {
+        onSuccess: () => toast.success(`Purchase Receipt ${name} cancelled`),
+        onError: (err) =>
+          showError(resolveFrappeError(err, { doctype: "Purchase Receipt" })),
+      },
+    );
+  };
+
+  // 4.1 A3 — one-click bill: build+submit a Purchase Invoice from this receipt
+  // via ERPNext's make_purchase_invoice mapper. The PI wizard stays as the
+  // advanced path (edit rates, split, partial billing).
+  const handleBill = async () => {
+    setConfirmBill(false);
+    setBilling(true);
+    try {
+      const res = await fetch(
+        `/api/buying/purchase-receipt/${encodeURIComponent(name)}/bill`,
+        { method: "POST", headers: { "Content-Type": "application/json" } },
+      );
+      const data = await res.json();
+      if (res.ok && data?.success) {
+        toast.success("Vendor bill raised", {
+          description: data?.data?.purchase_invoice,
+        });
+        refetch();
+      } else {
+        toast.error(data?.details || data?.error || "Billing failed");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Billing failed");
+    } finally {
+      setBilling(false);
+    }
+  };
+
   if (isLoading) return <LoadingState />;
   if (error || !pr) {
     return (
@@ -132,13 +196,22 @@ export default function PurchaseReceiptDetailPage() {
     isDraft && {
       label: "Submit Purchase Receipt",
       description: "Confirm receipt and add stock",
-      onClick: () => setConfirmSubmit(true),
+      onClick: handleSubmit,
       isPrimary: true,
       isLoading: updateMutation.isPending,
     },
     isSubmitted && {
-      label: "Create Purchase Invoice",
-      description: "Create bill from this receipt",
+      label: "Bill",
+      description: "Raise the vendor bill from this receipt in one click",
+      onClick: handleBill,
+      isPrimary: true,
+      isLoading: billing,
+      disabled: !isModuleBuilt("Purchase Invoice"),
+      disabledReason: "Module not available",
+    },
+    isSubmitted && {
+      label: "Purchase Invoice (advanced)",
+      description: "Edit rates, split, or bill partially",
       onClick: () => router.push(`/accounting/purchase-invoice/new?purchase_receipt=${encodeURIComponent(name)}`),
       disabled: !isModuleBuilt("Purchase Invoice"),
       disabledReason: "Module not available",
@@ -153,6 +226,8 @@ export default function PurchaseReceiptDetailPage() {
         backHref="/stock/purchase-receipt"
         actions={
           <div className="flex items-center gap-2">
+            <PrintMenu doctype="Purchase Receipt" doc={pr as unknown as Record<string, unknown>} />
+            <PrintShare doctype="Purchase Receipt" name={pr.name} showPrint={false} />
             {isDraft && (
               <>
                 <Button variant="outline" size="sm" asChild>
@@ -162,7 +237,7 @@ export default function PurchaseReceiptDetailPage() {
                 </Button>
                 <Button
                   size="sm"
-                  onClick={() => setConfirmSubmit(true)}
+                  onClick={handleSubmit}
                   disabled={updateMutation.isPending}
                 >
                   {updateMutation.isPending ? (
@@ -176,34 +251,28 @@ export default function PurchaseReceiptDetailPage() {
                   variant="ghost"
                   size="icon"
                   className="text-destructive hover:text-destructive"
-                  onClick={() => setShowDelete(true)}
+                  onClick={() => setConfirmDelete(true)}
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => setConfirmCancel(true)}
+                >
+                  <Ban className="mr-1.5 h-4 w-4" /> Cancel
+                </Button>
               </>
-            )}
-            {isSubmitted && (
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!isModuleBuilt("Purchase Invoice")}
-                title={!isModuleBuilt("Purchase Invoice") ? "Module not available" : undefined}
-                asChild={isModuleBuilt("Purchase Invoice")}
-              >
-                {isModuleBuilt("Purchase Invoice") ? (
-                  <Link href={`/accounting/purchase-invoice/new?purchase_receipt=${encodeURIComponent(name)}`}>
-                    <Receipt className="mr-1.5 h-4 w-4" /> Create Invoice
-                  </Link>
-                ) : (
-                  <>
-                    <Receipt className="mr-1.5 h-4 w-4" /> Create Invoice
-                  </>
-                )}
-              </Button>
             )}
           </div>
         }
       />
+
+      {/* 2U §A — FlowRail below header (golden placement, matches DN/SO/PI/MR) */}
+      <InfoCard title="Receipt Flow" className="overflow-hidden">
+        <FlowRail result={chain} currentDocName={name} sourceDoctype="Purchase Receipt" isLoading={chainLoading} />
+      </InfoCard>
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
         {/* Center column */}
@@ -279,10 +348,6 @@ export default function PurchaseReceiptDetailPage() {
             </div>
           </InfoCard>
 
-          <InfoCard title="Flow Tracker">
-            <FlowRail result={chain} currentDocName={name} sourceDoctype="Purchase Receipt" isLoading={chainLoading} />
-          </InfoCard>
-
           <InfoCard title="What's Next">
             <WhatsNext actions={whatsNext} />
           </InfoCard>
@@ -318,21 +383,22 @@ export default function PurchaseReceiptDetailPage() {
       </div>
 
       <ConfirmDialog
-        open={confirmSubmit}
-        onOpenChange={setConfirmSubmit}
-        title="Submit this Purchase Receipt?"
-        description="Submitting confirms receipt and adds stock. This cannot be undone without cancelling."
-        confirmText="Submit"
-        onConfirm={handleSubmit}
+        open={confirmCancel}
+        onOpenChange={setConfirmCancel}
+        title="Cancel this Purchase Receipt?"
+        description="Cancelling reverses the accounting entries. This action cannot be undone."
+        confirmText="Cancel"
+        variant="destructive"
+        onConfirm={handleCancel}
       />
       <ConfirmDialog
-        open={showDelete}
-        onOpenChange={setShowDelete}
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
         title="Delete this Purchase Receipt?"
-        description="This action cannot be undone."
+        description={`Are you sure you want to delete "${pr.name}"? This action cannot be undone.`}
         confirmText="Delete"
         variant="destructive"
-        onConfirm={handleDelete}
+        onConfirm={handleConfirmDelete}
       />
       <GuidedErrorDialog resolution={resolution} onDismiss={dismiss} />
     </div>

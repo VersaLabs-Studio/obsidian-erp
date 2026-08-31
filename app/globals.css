@@ -517,3 +517,23 @@
     }
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * 2Q Part 4 (F-A3) — bare-shell 404.
+ * The not-found.tsx page sets `html.is-not-found` via useLayoutEffect
+ * (synchronous, before paint). This rule hides the authenticated
+ * Layout's <aside> (sidebar) and <header> (topbar) so the 404 renders
+ * as a clean centered state without authenticated chrome. The <main>
+ * padding is also reset to let the 404 fill the viewport.
+ * ------------------------------------------------------------------------- */
+html.is-not-found aside,
+html.is-not-found header {
+  display: none !important;
+}
+html.is-not-found body {
+  background: var(--color-background) !important;
+}
+html.is-not-found main {
+  padding: 0 !important;
+  max-width: none !important;
+}

@@ -37,9 +37,12 @@
 //   { sourceDoctype: "Sales Order",       targetDoctype: "Sales Invoice"   }
 //   { sourceDoctype: "Sales Order",       targetDoctype: "Delivery Note"   }
 //   { sourceDoctype: "Delivery Note",      targetDoctype: "Sales Invoice"   }
+//   { sourceDoctype: "Quotation",         targetDoctype: "Sales Order"     }
 //   { sourceDoctype: "Purchase Order",     targetDoctype: "Purchase Receipt" }
 //   { sourceDoctype: "Purchase Order",     targetDoctype: "Purchase Invoice" }
-//   { sourceDoctype: "Purchase Invoice",   targetDoctype: "Payment Entry"  } // future
+//   { sourceDoctype: "Purchase Receipt",   targetDoctype: "Purchase Invoice" }
+//   { sourceDoctype: "Material Request",   targetDoctype: "Purchase Order"   }
+//   { sourceDoctype: "Purchase Invoice",   targetDoctype: "Payment Entry"   } // future
 //
 // The route returns the draft as JSON: `{ doctype, doc }`. The wizard
 // hydrates from it. (The draft is NOT persisted — that's the wizard's
@@ -67,6 +70,13 @@ const MAPPERS: Record<MapperKey, { method: string }> = {
     method:
       "erpnext.stock.doctype.delivery_note.delivery_note.make_sales_invoice",
   },
+  // 2R Part 2 — the missing Quotation→SO canonical mapper. ERPNext's
+  // `make_sales_order(source_name, target_doc=None)` carries every line
+  // and the per-item back-pointer; the wizard hydrates from this draft.
+  "Quotation->Sales Order": {
+    method:
+      "erpnext.selling.doctype.quotation.quotation.make_sales_order",
+  },
   "Purchase Order->Purchase Receipt": {
     method:
       "erpnext.buying.doctype.purchase_order.purchase_order.make_purchase_receipt",
@@ -74,6 +84,21 @@ const MAPPERS: Record<MapperKey, { method: string }> = {
   "Purchase Order->Purchase Invoice": {
     method:
       "erpnext.buying.doctype.purchase_order.purchase_order.make_purchase_invoice",
+  },
+  // 2R Part 2 — the missing PR→PI canonical mapper. ERPNext's
+  // `make_purchase_invoice(source_name, target_doc=None)` carries every
+  // received line, the supplier, and the per-item back-link.
+  "Purchase Receipt->Purchase Invoice": {
+    method:
+      "erpnext.stock.doctype.purchase_receipt.purchase_receipt.make_purchase_invoice",
+  },
+  // 2R Part 2 — the missing MR→PO canonical mapper. ERPNext's
+  // `make_purchase_order(source_name, target_doc=None)` carries every
+  // requested item, sets `material_request` on each row, and the per-
+  // item back-link propagates status to the MR on submit.
+  "Material Request->Purchase Order": {
+    method:
+      "erpnext.stock.doctype.material_request.material_request.make_purchase_order",
   },
 };
 
@@ -178,6 +203,27 @@ export async function POST(request: NextRequest) {
         },
         { status: 502 },
       );
+    }
+
+    // 9R.14 — Date-validated targets carry stale payment_schedule rows
+    // from the source document. Their due_dates were computed against the
+    // source's earlier transaction_date, so ERPNext rejects them with
+    // "Due Date in the Payment Terms table cannot be before Posting Date".
+    // Fix: zero the schedule rows + null out due dates while KEEPING the
+    // payment_terms_template. ERPNext's set_payment_schedule() rebuilds
+    // fresh dates from the template against the NEW doc's posting_date
+    // during validate — but ONLY when payment_schedule is empty.
+    const DATE_VALIDATED_TARGETS = new Set([
+      "Sales Order",
+      "Purchase Invoice",
+      "Sales Invoice",
+      "Delivery Note",
+      "Purchase Receipt",
+    ]);
+    if (DATE_VALIDATED_TARGETS.has(body.targetDoctype)) {
+      doc.payment_schedule = [];
+      doc.due_date = null;
+      doc.payment_due_date = null;
     }
 
     return NextResponse.json({

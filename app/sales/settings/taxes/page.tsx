@@ -34,6 +34,7 @@ import {
   ConfirmDialog,
 } from "@/components/smart";
 import type { SalesTaxesandChargesTemplate } from "@/types/doctype-types";
+import { ListErrorState } from "@/components/ui/list-error-state";
 
 // Tax Template Row Component
 function TaxTemplateRow({
@@ -145,11 +146,10 @@ export default function TaxTemplatesPage() {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-destructive font-bold text-lg">
-          Failed to load tax templates
-        </p>
-      </div>
+      <ListErrorState
+        error={error}
+        label="tax templates"
+      />
     );
   }
 

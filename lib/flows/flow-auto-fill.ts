@@ -245,6 +245,29 @@ export const AUTO_FILL_REGISTRY: Record<string, AutoFillRegistryEntry> = {
   },
 
   // =========================================================================
+  // PURCHASE INVOICE → PAYMENT ENTRY (2S Part 3)
+  // Mirror of SI→PE but for supplier payments.
+  // =========================================================================
+  "Purchase Invoice->Payment Entry": {
+    sourceDoctype: "Purchase Invoice",
+    targetDoctype: "Payment Entry",
+    headerMappings: [
+      { sourceField: "supplier", targetField: "party", isReadOnly: true, sourceLabel: "Supplier" },
+      { sourceField: "supplier_name", targetField: "party_name", isReadOnly: true, sourceLabel: "Supplier Name" },
+      { sourceField: "company", targetField: "company", isReadOnly: true, sourceLabel: "Company" },
+      { sourceField: "currency", targetField: "paid_from_account_currency", isReadOnly: true, sourceLabel: "Currency" },
+    ],
+    itemMappings: [],
+    userMustFill: ["mode_of_payment", "paid_from", "paid_to"],
+    defaults: {
+      naming_series: "ACC-PAY-.YYYY.-",
+      payment_type: "Pay",
+      party_type: "Supplier",
+      docstatus: 0,
+    },
+  },
+
+  // =========================================================================
   // PURCHASE ORDER → PURCHASE RECEIPT
   // =========================================================================
   "Purchase Order->Purchase Receipt": {

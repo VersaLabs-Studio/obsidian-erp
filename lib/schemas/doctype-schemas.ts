@@ -386,6 +386,7 @@ export const DepartmentCreateSchema = DepartmentSchema.pick({
 }).extend({
   disabled: z.union([z.literal(0), z.literal(1)]).optional(),
   is_group: z.union([z.literal(0), z.literal(1)]).optional(),
+  parent_department: z.string().optional(),
 }).partial();
 
 export const DepartmentUpdateSchema = DepartmentSchema.partial().omit({

@@ -42,6 +42,7 @@ import { KPICard } from "@/components/dashboard/KPICard";
 import { StatusBadge } from "@/components/smart/status-badge";
 import type { Lead } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
+import { ListErrorState } from "@/components/ui/list-error-state";
 
 function LeadCard({
   lead,
@@ -248,9 +249,10 @@ export default function LeadListPage() {
   if (isLoading) return <LoadingState type="cards" count={6} />;
   if (error)
     return (
-      <div className="p-8 text-center text-destructive">
-        Failed to load leads
-      </div>
+      <ListErrorState
+        error={error}
+        label="leads"
+      />
     );
 
   return (

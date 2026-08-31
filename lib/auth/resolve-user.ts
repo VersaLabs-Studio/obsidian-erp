@@ -51,6 +51,17 @@ export interface UserContext {
   tenantId: string;
   /** Frappe session cookie value to forward in API calls. */
   frappeSession: string;
+  /**
+   * 2Q Part 3 (F-A2) — doctypes the user can CREATE (from Frappe boot
+   * `frappe.boot.user.can_create`). Powers the fail-FAST capability gate
+   * on `/new` and `/[name]/edit` pages. The server still enforces perm —
+   * this is a cosmetic gate (per the handoff's honesty guardrail).
+   */
+  canCreate?: string[];
+  /** Doctypes the user can READ (`frappe.boot.user.can_read`). */
+  canRead?: string[];
+  /** Doctypes the user can WRITE (`frappe.boot.user.can_write`). */
+  canWrite?: string[];
 }
 
 export class UnauthorizedError extends Error {
@@ -174,6 +185,64 @@ async function fetchUserDoc(
   return doc && typeof doc === "object" ? (doc as FrappeUserDoc) : null;
 }
 
+// ---------------------------------------------------------------------------
+// 2Q Part 3 (F-A2): fetch Frappe boot perms for the user.
+//
+// `frappe.boot.user.can_create / can_read / can_write` are the
+// authoritative lists of doctypes the requesting user can create/read/
+// write. They are computed by Frappe from the user's roles + DocPerms.
+// We use them as the source of truth for the cosmetic `<RequirePermission>`
+// gate (the server still enforces perm — this is a fail-FAST UX layer,
+// not a security boundary).
+//
+// Boot info is expensive to fetch (it includes the entire client boot
+// payload), so we cache it per userId for the request lifetime. The
+// cache is process-local (not shared across requests), so a new
+// request gets a fresh boot call — that's fine: a user can be added
+// to a role mid-session and a stale cache would deny them.
+// ---------------------------------------------------------------------------
+interface FrappeBootUser {
+  can_create?: string[];
+  can_read?: string[];
+  can_write?: string[];
+}
+
+const _bootCache = new Map<
+  string,
+  { value: FrappeBootUser; ts: number }
+>();
+const BOOT_CACHE_TTL_MS = 30 * 1000; // short TTL — fail-FAST, not authoritative
+
+async function fetchBootUser(
+  base: string,
+  headers: Record<string, string>,
+  cacheKey: string,
+): Promise<FrappeBootUser> {
+  const cached = _bootCache.get(cacheKey);
+  if (cached && Date.now() - cached.ts < BOOT_CACHE_TTL_MS) {
+    return cached.value;
+  }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const raw: any = await fetch(`${base}/api/method/frappe.boot`, {
+      headers,
+      cache: "no-store",
+    }).then((r) => r.json().catch(() => null));
+    const user = (raw?.message?.user ?? raw?.user) as
+      | FrappeBootUser
+      | undefined;
+    const value: FrappeBootUser = {
+      can_create: Array.isArray(user?.can_create) ? user!.can_create : [],
+      can_read: Array.isArray(user?.can_read) ? user!.can_read : [],
+      can_write: Array.isArray(user?.can_write) ? user!.can_write : [],
+    };
+    _bootCache.set(cacheKey, { value, ts: Date.now() });
+    return value;
+  } catch {
+    return { can_create: [], can_read: [], can_write: [] };
+  }
+}
+
 /**
  * Fallback role source: query the `Has Role` doctype directly. Used only
  * when the User doc didn't carry its roles child table. The doctype name
@@ -211,6 +280,9 @@ async function fetchUserFromFrappe(sid: string): Promise<{
   email?: string;
   fullName?: string;
   roles: string[];
+  canCreate: string[];
+  canRead: string[];
+  canWrite: string[];
 } | null> {
   const base = getErpBaseUrl();
   if (!base) return null;
@@ -257,11 +329,22 @@ async function fetchUserFromFrappe(sid: string): Promise<{
       roles = await fetchHasRole(base, userId, { Cookie: `sid=${sid}` });
     }
 
+    // Step 3 — 2Q Part 3 (F-A2): fetch the user's DocPerms via
+    // `frappe.boot.user.can_create / can_read / can_write`. We use
+    // the user's own sid here because boot info is the user's OWN
+    // view of their permissions; using the service account would
+    // surface admin perms instead of the user's. The 30s cache
+    // (BOOT_CACHE_TTL_MS) keeps the cost bounded for page navigations.
+    const boot = await fetchBootUser(base, { Cookie: `sid=${sid}` }, userId);
+
     return {
       userId,
       email: userDoc?.email ?? undefined,
       fullName: userDoc?.full_name ?? userDoc?.first_name ?? undefined,
       roles,
+      canCreate: boot.can_create ?? [],
+      canRead: boot.can_read ?? [],
+      canWrite: boot.can_write ?? [],
     };
   } catch {
     return null;
@@ -290,6 +373,9 @@ export async function resolveUserContext(
     roles: user.roles,
     tenantId: readActiveCompanyCookie(request),
     frappeSession: sid,
+    canCreate: user.canCreate,
+    canRead: user.canRead,
+    canWrite: user.canWrite,
   };
   _resolutionCache.set(request, ctx);
   return ctx;

@@ -79,9 +79,21 @@ const strategies: ErrorStrategy[] = [
         severity: "warning",
         actions: [
           {
-            label: "Create Material Request",
+            label: "Create Purchase Order",
             kind: "prefill",
             variant: "default",
+            run: () => {
+              const params = new URLSearchParams({
+                shortfall: `${itemCode}:${qty}`,
+                warehouse: warehouse,
+              });
+              window.location.href = `/buying/purchase-order/new?${params.toString()}`;
+            },
+          },
+          {
+            label: "Create Purchase Receipt",
+            kind: "prefill",
+            variant: "secondary",
             run: () => {
               const params = new URLSearchParams({
                 item_code: itemCode,
@@ -89,13 +101,51 @@ const strategies: ErrorStrategy[] = [
                 qty: qty,
                 warehouse: warehouse,
               });
-              window.location.href = `/stock/material-request/new?${params.toString()}`;
+              window.location.href = `/stock/purchase-receipt/new?${params.toString()}`;
             },
           },
           {
             label: "Dismiss",
             kind: "dismiss",
             variant: "ghost",
+            run: () => {},
+          },
+        ],
+      };
+    },
+  },
+
+  // 2Y-R5 P1 — DATE_VALIDATION. ERPNext's `validate_from_to_dates` raises
+  // "<Field A> must be after <Field B>" (or "must be before"). Previously fell
+  // through to GENERIC_FALLBACK ("The server rejected this action"), hiding
+  // the real cause. Surface the exact field pair as a guided message so the
+  // operator knows which dates to fix.
+  {
+    code: "DATE_VALIDATION",
+    match: (m) =>
+      /must be (after|before|>=|>|<=|<)\s+(the\s+)?(Date|Posting)/i.test(m) &&
+      /date/i.test(m),
+    resolve: (msg) => {
+      // Parse: "<Field A> must be after <Field B>" — the two field names
+      // bracket the verb phrase.
+      const pair = msg.match(/^(.+?)\s+must\s+(be\s+)?(after|before|>=|>|<=|<)\s+(?:the\s+)?(.+)$/i);
+      const fieldA = pair?.[1]?.trim() ?? "The start date";
+      const verb = pair?.[3]?.toLowerCase() ?? "after";
+      const fieldB = pair?.[4]?.trim() ?? "the end date";
+      const isAfter = verb === "after" || verb === ">" || verb === ">=";
+      return {
+        title: `${fieldA} must be ${verb} ${fieldB}`,
+        explanation: `${fieldA} must come ${verb} ${fieldB}. Move ${fieldA} ${isAfter ? "to a later date" : "to an earlier date"} (or adjust ${fieldB}), then try again.`,
+        details: [
+          `${fieldA}: currently too ${isAfter ? "early" : "late"} relative to ${fieldB}`,
+          `Check both dates on the record before retrying.`,
+        ],
+        severity: "warning",
+        actions: [
+          {
+            label: "Dismiss",
+            kind: "dismiss" as const,
+            variant: "ghost" as const,
             run: () => {},
           },
         ],
@@ -551,6 +601,215 @@ const strategies: ErrorStrategy[] = [
             run: () => {
               window.location.href = `/${route}/${encodeURIComponent(linkedName)}`;
             },
+          },
+          {
+            label: "Dismiss",
+            kind: "dismiss" as const,
+            variant: "ghost" as const,
+            run: () => {},
+          },
+        ],
+      };
+    },
+  },
+  // 9R.6 — DOCSTATUS_REQUIRED. ERPNext's mapper (make_sales_order,
+  // make_delivery_note, etc.) refuses to build a target from a draft
+  // source: "Cannot map because following condition fails: docstatus=1".
+  {
+    code: "DOCSTATUS_REQUIRED",
+    match: (m) =>
+      /Cannot map because following condition fails:\s*docstatus=1/i.test(m) ||
+      /docstatus\s*=\s*1/i.test(m),
+    resolve: (msg) => {
+      // Try to extract the source doctype name
+      const docMatch = msg.match(/([A-Z][A-Za-z\s]+)\s+([A-Z]{2,}-[\w-]+-\d+)/i);
+      const docType = docMatch?.[1]?.trim() ?? "Source document";
+      const docName = docMatch?.[2]?.trim() ?? "";
+      return {
+        title: "Document must be submitted first",
+        explanation: `${docType}${docName ? ` ${docName}` : ""} must be submitted before you can create a downstream document from it. The source is currently a draft.`,
+        details: [
+          "Submit this document first, then try again.",
+          "You can find the Submit button on the document's detail page.",
+        ],
+        severity: "warning",
+        actions: docName
+          ? [
+              {
+                label: `Open ${docType} to submit it`,
+                kind: "navigate" as const,
+                variant: "default" as const,
+                run: () => {},
+              },
+              {
+                label: "Dismiss",
+                kind: "dismiss" as const,
+                variant: "ghost" as const,
+                run: () => {},
+              },
+            ]
+          : [
+              {
+                label: "Dismiss",
+                kind: "dismiss" as const,
+                variant: "ghost" as const,
+                run: () => {},
+              },
+            ],
+      };
+    },
+  },
+
+  // 9R.1 — PAYMENT_TERMS_DATE_CONFLICT. ERPNext's
+  // `accounts_controller.validate_payment_schedule_dates` raises
+  // "Row N: Due Date in the Payment Terms table cannot be before Posting
+  // Date" when a Customer's default Payment Terms Template produces a
+  // schedule whose due_date precedes the document's transaction_date.
+  {
+    code: "PAYMENT_TERMS_DATE_CONFLICT",
+    match: (m) =>
+      /Due Date in the Payment Terms table cannot be before/i.test(m) ||
+      /Payment Terms.*due date.*before.*posting date/i.test(m),
+    resolve: (msg) => {
+      // Try to extract the row number
+      const rowMatch = msg.match(/Row\s+(\d+)/i);
+      const row = rowMatch?.[1] ?? "N";
+      return {
+        title: "Payment terms date conflict",
+        explanation: `Row ${row}: The payment schedule due date falls before the order date. This usually happens when the customer's default Payment Terms Template produces a due date that's too early for this document.`,
+        details: [
+          `Row: ${row}`,
+          "The customer's default Payment Terms Template may need adjustment.",
+          "You can also remove payment terms on this order and add them later.",
+        ],
+        severity: "warning",
+        actions: [
+          {
+            label: "Remove payment terms from this order",
+            kind: "dismiss",
+            variant: "default",
+            run: () => {},
+          },
+          {
+            label: "Dismiss",
+            kind: "dismiss",
+            variant: "ghost",
+            run: () => {},
+          },
+        ],
+      };
+    },
+  },
+
+  // 2Y-R3 — ITEM_NOT_PURCHASEABLE / ITEM_NOT_SALESABLE. ERPNext's
+  // buying/selling controller raises "Following item X is not marked as
+  // purchase item" (or "sales item") when a line item's `is_purchase_item`
+  // / `is_sales_item` flag is off. Previously this fell through to
+  // GENERIC_FALLBACK ("The server rejected this action"), hiding the real
+  // cause. We surface the item + the exact flag to toggle in Item master.
+  {
+    code: "ITEM_NOT_PURCHASEABLE",
+    match: (m) =>
+      /is not marked as (purchase|sales) item/i.test(m) ||
+      /not marked as (purchase|sales) item/i.test(m),
+    resolve: (msg) => {
+      const itemMatch = msg.match(/item\s+([A-Z0-9][A-Z0-9\-_ ]*?)\s+is not marked/i);
+      const item = itemMatch?.[1]?.trim() ?? "this item";
+      const kind = /sales/i.test(msg) ? "sales" : "purchase";
+      const flag = kind === "sales" ? "Is Sales Item" : "Is Purchase Item";
+      return {
+        title: `Item not enabled for ${kind}`,
+        explanation: `The item "${item}" is not marked as a ${kind} item, so it can't be used on this transaction. Enable "${flag}" on the Item master, then try again.`,
+        details: [
+          `Item: ${item}`,
+          `Missing flag: ${flag}`,
+          'Open the Item and tick the flag under the "Item" section, then save.',
+        ],
+        severity: "warning",
+        actions: [
+          {
+            label: "Open Item",
+            kind: "navigate",
+            variant: "default",
+            href: `/stock/item/${encodeURIComponent(item)}`,
+            run: () => {
+              window.location.href = `/stock/item/${encodeURIComponent(item)}`;
+            },
+          },
+          {
+            label: "Dismiss",
+            kind: "dismiss",
+            variant: "ghost",
+            run: () => {},
+          },
+        ],
+      };
+    },
+  },
+
+  // 2Y-R3 — EXPENSE_HEAD_CHANGED_INFO. ERPNext emits an *info* msgprint
+  // ("Row N: Expense Head changed to Stock Received But Not Billed - P as no
+  // Purchase Receipt is created against Item X…") during Purchase Invoice
+  // creation. It is a benign accounting note (raise_exception falsy), NOT a
+  // failure — the invoice IS created. Previously it fell through to
+  // GENERIC_FALLBACK ("The server rejected this action"), scaring the user.
+  // We surface it as severity "info" so the GuidedErrorDialog shows a calm
+  // toast with a Dismiss action instead of a hard error dialog.
+  {
+    code: "EXPENSE_HEAD_CHANGED_INFO",
+    match: (m) =>
+      /Expense Head changed to Stock Received But Not Billed/i.test(m) ||
+      /no Purchase Receipt is created against Item/i.test(m),
+    resolve: (msg) => {
+      return {
+        title: "Expense account auto-set",
+        explanation:
+          "ERPNext automatically set the expense account because no Purchase Receipt exists yet for this item. This is normal — the account will update once a Purchase Receipt is created.",
+        severity: "warning",
+        actions: [
+          {
+            label: "OK",
+            kind: "dismiss",
+            variant: "default",
+            run: () => {},
+          },
+        ],
+      };
+    },
+  },
+
+  // 2R Part 9 — PERMISSION. A 403/PermissionError on submit (e.g. a
+  // Sales User hitting Save on a doc their role can't create) used to
+  // fall through to the GENERIC_FALLBACK "Something went wrong" dialog.
+  // The handoff: extend the 2Q list-error grace (ListErrorState) to
+  // action rejections — the same calm guided message, the same
+  // permission reason verbatim, no scary generic dialog. We surface the
+  // server's permission reason (e.g. "You do not have permission to
+  // create Sales Order") so the operator can ask an admin for the role
+  // or check the workspace.
+  {
+    code: "PERMISSION",
+    match: (m) =>
+      /permission\s+to\s+(?:read|create|write|delete|submit|cancel|access|view)/i.test(m) ||
+      /not\s+have\s+(?:permission|access)/i.test(m) ||
+      /\bpermission\s+denied\b/i.test(m) ||
+      /\bpermissionerror\b/i.test(m) ||
+      /\bforbidden\b/i.test(m),
+    resolve: (msg) => {
+      // Strip Frappe's `_("...")` i18n wrapper if present.
+      const reason = msg.replace(/^_\(["']|["']\)$/g, "").trim() || msg;
+      return {
+        title: "You don't have permission for this action",
+        explanation:
+          "Your role is missing the permission for this doctype. The server rejected the request before any change was made — nothing was saved.",
+        details: [reason],
+        severity: "warning",
+        actions: [
+          {
+            label: "Ask an admin to grant access",
+            kind: "info" as const,
+            variant: "secondary" as const,
+            run: () => {},
           },
           {
             label: "Dismiss",

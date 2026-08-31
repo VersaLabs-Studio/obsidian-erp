@@ -21,6 +21,7 @@ import { FrappeSelect } from "@/components/smart/frappe-select";
 import { KPICard } from "@/components/dashboard/KPICard";
 import { getDocTypeRoute } from "@/lib/flows/flow-chain-resolver";
 import { cn } from "@/lib/utils";
+import { ListErrorState } from "@/components/ui/list-error-state";
 
 interface StockLedgerEntry {
   name: string;
@@ -116,9 +117,10 @@ export default function StockLedgerPage() {
 
   if (error) {
     return (
-      <div className="p-8 text-center text-destructive">
-        Failed to load stock ledger
-      </div>
+      <ListErrorState
+        error={error}
+        label="stock ledger"
+      />
     );
   }
 

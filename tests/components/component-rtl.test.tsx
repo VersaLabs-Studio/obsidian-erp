@@ -260,9 +260,15 @@ describe("GuidedErrorDialog — RTL", () => {
     severity: "warning",
     actions: [
       {
-        label: "Create Material Request",
+        label: "Create Purchase Order",
         kind: "prefill",
         variant: "default",
+        run: vi.fn(),
+      },
+      {
+        label: "Create Purchase Receipt",
+        kind: "prefill",
+        variant: "secondary",
         run: vi.fn(),
       },
       {
@@ -315,8 +321,9 @@ describe("GuidedErrorDialog — RTL", () => {
       />,
     );
 
+    // 2X P0-E — primary action is now "Create Purchase Order"
     expect(
-      screen.getByRole("button", { name: /create material request/i }),
+      screen.getByRole("button", { name: /create purchase order/i }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /dismiss/i }),

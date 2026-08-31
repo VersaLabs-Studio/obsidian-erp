@@ -35,6 +35,7 @@ import {
 import { KPICard } from "@/components/dashboard/KPICard";
 import type { JournalEntry } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
+import { ListErrorState } from "@/components/ui/list-error-state";
 
 const ETB = new Intl.NumberFormat("en-ET", {
   style: "currency",
@@ -230,9 +231,10 @@ export default function JournalEntryListPage() {
   if (isLoading) return <LoadingState type="cards" count={6} />;
   if (error)
     return (
-      <div className="p-8 text-center text-destructive">
-        Failed to load journal entries
-      </div>
+      <ListErrorState
+        error={error}
+        label="journal entries"
+      />
     );
 
   return (

@@ -34,6 +34,7 @@ import {
   ConfirmDialog,
 } from "@/components/smart";
 import type { Group } from "@/types/doctype-types";
+import { ListErrorState } from "@/components/ui/list-error-state";
 
 //  Group Row Component
 function GroupRow({
@@ -142,7 +143,7 @@ export default function GroupsPage() {
   if (error) {
     return (
       <div className="flex items-center justify-center h-64">
-        <p className="text-destructive">Failed to load groups</p>
+        <ListErrorState error={error} label="groups" />
       </div>
     );
   }

@@ -109,16 +109,23 @@ const STATUS_TEXT: Record<FlowStageStatus, string> = {
 };
 
 // ---------------------------------------------------------------------------
-// Progress ring (20px SVG)
+// Progress ring (20px SVG) — 2Q Part 9 adds the percentage label inside
+// the ring for at-a-glance completion (the B1 container language keeps
+// the ring subtle, no black borders).
 // ---------------------------------------------------------------------------
 function ProgressRing({ completed, total }: { completed: number; total: number }) {
   const r = 8;
   const circumference = 2 * Math.PI * r;
   const ratio = total > 0 ? completed / total : 0;
   const dash = ratio * circumference;
+  const pct = Math.round(ratio * 100);
 
   return (
-    <div className="flex items-center gap-1.5">
+    <div
+      className="flex items-center gap-1.5"
+      data-testid="flow-progress"
+      data-pct={pct}
+    >
       <svg width={20} height={20} className="shrink-0 -rotate-90" aria-hidden="true">
         <circle
           cx={10}
@@ -142,7 +149,7 @@ function ProgressRing({ completed, total }: { completed: number; total: number }
         />
       </svg>
       <span className="text-xs font-medium text-muted-foreground tabular-nums">
-        {completed}/{total}
+        {pct}%
       </span>
     </div>
   );
@@ -415,6 +422,15 @@ interface FlowRailProps {
   isLoading?: boolean;
   error?: Error | null;
   className?: string;
+  /** 2V P0-6 — When set, the "Create" affordance in the focus zone calls
+   *  this callback instead of navigating. The page uses this to intercept
+   *  the create action (e.g. SO page intercepts Work Order creation to run
+   *  its inline multi-create engine). */
+  onCreateDownstream?: (targetDoctype: string) => void;
+  /** 2V P0-6 — When set, the "Create" affordance is disabled with the
+   *  given reason tooltip. Used on draft docs where downstream creation
+   *  is not yet permitted (e.g. draft SO → "Submit the Sales Order first"). */
+  disableCreate?: string;
 }
 
 export function FlowRail({
@@ -424,6 +440,8 @@ export function FlowRail({
   isLoading,
   error,
   className,
+  onCreateDownstream,
+  disableCreate,
 }: FlowRailProps) {
   const prefersReducedMotion = useReducedMotion();
 
@@ -511,12 +529,18 @@ export function FlowRail({
               const isCurrent = stage.status === "current";
               const isNextCreate = index === nextBuildableIndex && !!createHref;
 
+              const isCreateDisabled = link?.create && !!disableCreate;
+              // 2W A1 — when a create node is disabled (e.g. draft SO), drop
+              // the "create here" affordance treatment so the ribbon stays
+              // consistent with the focus-zone gate.
+              const showCreateAffordance = isNextCreate && !isCreateDisabled;
+
               const column = (
                 <StageColumn
                   stage={stage}
                   isCurrent={isCurrent}
-                  isNextCreate={isNextCreate}
-                  interactive={!!link}
+                  isNextCreate={showCreateAffordance}
+                  interactive={!!link && !isCreateDisabled}
                   prefersReducedMotion={!!prefersReducedMotion}
                   index={index}
                 />
@@ -530,8 +554,11 @@ export function FlowRail({
 
               return (
                 <React.Fragment key={stage.id}>
-                  <li title={title}>
-                    {link ? (
+                  <li
+                    title={isCreateDisabled ? disableCreate : title}
+                    aria-disabled={isCreateDisabled ? "true" : undefined}
+                  >
+                    {link && !isCreateDisabled ? (
                       <Link
                         href={link.href}
                         aria-label={
@@ -583,11 +610,28 @@ export function FlowRail({
                 </p>
               )}
             </div>
-            <Link href={createHref} className="shrink-0">
-              <Button size="sm" className="gap-1.5">
+            {disableCreate ? (
+              <span
+                className="inline-flex cursor-not-allowed items-center gap-1 rounded-xl bg-muted/50 px-4 py-2 text-xs text-muted-foreground"
+                title={disableCreate}
+              >
+                {disableCreate}
+              </span>
+            ) : onCreateDownstream ? (
+              <Button
+                size="sm"
+                className="gap-1.5"
+                onClick={() => onCreateDownstream(nextBuildable.doctype)}
+              >
                 Create <ArrowRight className="h-3.5 w-3.5" />
               </Button>
-            </Link>
+            ) : (
+              <Link href={createHref} className="shrink-0">
+                <Button size="sm" className="gap-1.5">
+                  Create <ArrowRight className="h-3.5 w-3.5" />
+                </Button>
+              </Link>
+            )}
           </motion.div>
         )}
 

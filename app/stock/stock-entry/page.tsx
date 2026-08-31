@@ -44,6 +44,7 @@ import { StatusBadge } from "@/components/smart/status-badge";
 import { KPICard } from "@/components/dashboard/KPICard";
 import type { StockEntry } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
+import { ListErrorState } from "@/components/ui/list-error-state";
 
 const PURPOSE_CONFIG: Record<
   string,
@@ -356,9 +357,10 @@ export default function StockEntryListPage() {
   if (isLoading) return <LoadingState type="cards" count={6} />;
   if (error)
     return (
-      <div className="p-8 text-center text-destructive">
-        Failed to load stock entries
-      </div>
+      <ListErrorState
+        error={error}
+        label="stock entries"
+      />
     );
 
   return (

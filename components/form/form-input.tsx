@@ -29,6 +29,14 @@ interface FormInputProps<T extends FieldValues> {
   className?: string;
   /** Whether input is disabled */
   disabled?: boolean;
+  /** Whether input is read-only (still receives focus but cannot be edited) */
+  readOnly?: boolean;
+  /**
+   * Optional side-effect callback that fires AFTER the field's internal
+   * onChange. Used by callers that need to react to value changes
+   * (e.g. the Item form auto-generates the item_code from the name).
+   */
+  onChangeAfter?: (value: string) => void;
   /** Show loading spinner */
   loading?: boolean;
   /** Custom icon on the right */
@@ -59,6 +67,8 @@ export function FormInput<T extends FieldValues>({
   type = "text",
   className,
   disabled = false,
+  readOnly = false,
+  onChangeAfter,
   loading = false,
   rightIcon,
 }: FormInputProps<T>) {
@@ -83,15 +93,18 @@ export function FormInput<T extends FieldValues>({
                   } else {
                     field.onChange(val);
                   }
+                  onChangeAfter?.(val);
                 }}
                 onFocus={(e) => e.target.select()}
                 onWheel={(e) => e.currentTarget.blur()}
                 type={type}
                 placeholder={placeholder}
                 disabled={disabled || loading}
+                readOnly={readOnly}
                 className={cn(
                   "h-12 rounded-xl bg-secondary/30 hover:bg-secondary/50 focus:bg-card border-0",
                   loading && "pr-10",
+                  readOnly && "cursor-not-allowed opacity-70",
                   className,
                 )}
               />

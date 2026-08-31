@@ -1,0 +1,270 @@
+/* app/print.css
+ * Obsidian ERP v4.0 — Premium print/PDF stylesheet.
+ *
+ * 2Y-R2 REWRITE. Printing no longer restyles the on-screen detail page.
+ * Instead, every detail page renders a dedicated, self-contained
+ * <PrintDocument> (class `.print-document`) that is hidden on screen and
+ * becomes the ONLY visible element in print. This is a real document
+ * template (letterhead → parties → items → totals → signatures), driven
+ * by lib/print/print-config.ts, so "SO prints SALES ORDER, SI prints TAX
+ * INVOICE, DN gate pass hides prices" all come from data — not from
+ * fragile CSS ::before text and nth-child column hiding.
+ */
+
+/* Hidden on screen; only the print layer shows it. */
+.print-document {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: A4;
+    /* 2Y-R3 — margin: 0 is the best-effort to suppress the browser's
+       automatic print header (URL + page number) and footer (date + page
+       title). Browsers render those in the margin box; with no margin they
+       are far less likely to appear. NOTE: the definitive control is the
+       print dialog's "Headers and footers" checkbox (Chrome/Edge: uncheck
+       it under "More settings") — CSS cannot force that checkbox off. */
+    margin: 0;
+  }
+
+  /* Isolate the print document: hide everything, then reveal only it.
+     `visibility` (not display) preserves the print-document's own layout. */
+  body * {
+    visibility: hidden !important;
+  }
+  .print-document,
+  .print-document * {
+    visibility: visible !important;
+  }
+  .print-document {
+    /* Brand accent (Pana gold). <PrintDocument> overrides via inline
+       --pd-accent from lib/print/brand.ts; this is the fallback. */
+    --pd-accent: #f59e0b;
+    display: block !important;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    color: #14161a;
+    font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  /* ---------- Letterhead ---------- */
+  .print-document .pd-letterhead {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding-bottom: 10px;
+    border-bottom: 2.5px solid var(--pd-accent, #f59e0b);
+  }
+  .print-document .pd-logo {
+    height: 46px;
+    width: auto;
+    max-width: 220px;
+    object-fit: contain;
+    display: block;
+  }
+  /* Shown only when the logo image fails to load (see onError in
+     PrintDocument). Hidden by default so the logo is the primary mark. */
+  .print-document .pd-brand-fallback {
+    display: none;
+  }
+  .print-document .pd-brand-name {
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    color: #14161a;
+    text-transform: uppercase;
+  }
+  .print-document .pd-brand-meta {
+    font-size: 10.5px;
+    color: #6b7280;
+    margin-top: 2px;
+  }
+  .print-document .pd-title-block {
+    text-align: right;
+  }
+  .print-document .pd-title {
+    font-size: 17px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    color: var(--pd-accent, #f59e0b);
+  }
+  .print-document .pd-currency {
+    font-size: 10px;
+    color: #6b7280;
+    margin-top: 2px;
+  }
+
+  /* ---------- Meta row (parties + header fields) ---------- */
+  .print-document .pd-meta-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 18px;
+    margin: 16px 0;
+  }
+  .print-document .pd-label {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #9ca3af;
+    margin-bottom: 3px;
+  }
+  .print-document .pd-party {
+    flex: 1;
+  }
+  .print-document .pd-party-name {
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .print-document .pd-address {
+    font-size: 11px;
+    color: #4b5563;
+    white-space: pre-line;
+  }
+  .print-document .pd-header-fields {
+    min-width: 210px;
+    display: grid;
+    gap: 3px;
+  }
+  .print-document .pd-hf {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 11px;
+    border-bottom: 1px dotted #e5e7eb;
+    padding-bottom: 2px;
+  }
+  .print-document .pd-hf-label {
+    color: #6b7280;
+  }
+  .print-document .pd-hf-value {
+    font-weight: 600;
+    text-align: right;
+  }
+
+  /* ---------- Logistics box (gate pass) ---------- */
+  .print-document .pd-logistics {
+    border: 2px solid #14161a;
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 14px;
+  }
+  .print-document .pd-logistics-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 24px;
+    font-size: 11.5px;
+    font-weight: 600;
+    margin-top: 4px;
+  }
+
+  /* ---------- Items table ---------- */
+  .print-document .pd-items {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 4px 0 14px;
+  }
+  .print-document .pd-items thead th {
+    background: #f3f4f6;
+    font-size: 9.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #374151;
+    padding: 7px 8px;
+    border-bottom: 1.5px solid #d1d5db;
+  }
+  .print-document .pd-items tbody td {
+    padding: 6px 8px;
+    border-bottom: 1px solid #f0f1f3;
+    font-size: 11.5px;
+    vertical-align: top;
+  }
+  .print-document .pd-items tr {
+    page-break-inside: avoid;
+  }
+  .print-document .pd-idx {
+    width: 26px;
+    color: #9ca3af;
+    text-align: right;
+  }
+
+  /* ---------- Totals ---------- */
+  .print-document .pd-totals {
+    margin-left: auto;
+    width: 46%;
+    page-break-inside: avoid;
+  }
+  .print-document .pd-total-line {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    font-size: 12px;
+    border-bottom: 1px solid #f0f1f3;
+  }
+  .print-document .pd-grand {
+    font-size: 14px;
+    font-weight: 800;
+    color: #14161a;
+    border-bottom: none;
+    border-top: 2px solid #14161a;
+    margin-top: 2px;
+    padding-top: 7px;
+  }
+  .print-document .pd-in-words {
+    font-size: 10.5px;
+    font-style: italic;
+    color: #6b7280;
+    margin-top: 6px;
+  }
+
+  /* ---------- Terms ---------- */
+  .print-document .pd-terms {
+    margin-top: 16px;
+    page-break-inside: avoid;
+  }
+  .print-document .pd-terms-body {
+    font-size: 10.5px;
+    color: #4b5563;
+    white-space: pre-line;
+  }
+
+  /* ---------- Signatures ---------- */
+  .print-document .pd-signatures {
+    display: flex;
+    justify-content: space-between;
+    gap: 28px;
+    margin-top: 42px;
+    page-break-inside: avoid;
+  }
+  .print-document .pd-sign {
+    flex: 1;
+    text-align: center;
+  }
+  .print-document .pd-sign-line {
+    border-top: 1px solid #14161a;
+    margin-bottom: 4px;
+  }
+  .print-document .pd-sign-label {
+    font-size: 10px;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* ---------- Footer note ---------- */
+  .print-document .pd-footer-note {
+    margin-top: 18px;
+    padding-top: 6px;
+    border-top: 1px solid #e5e7eb;
+    font-size: 9.5px;
+    color: #9ca3af;
+    text-align: center;
+    letter-spacing: 0.03em;
+  }
+}

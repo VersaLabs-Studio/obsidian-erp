@@ -26,6 +26,7 @@ import {
   ConfirmDialog,
 } from "@/components/smart";
 import type { IndustryType } from "@/types/doctype-types";
+import { ListErrorState } from "@/components/ui/list-error-state";
 
 // Industry Type Row Component
 function IndustryTypeRow({
@@ -117,7 +118,7 @@ export default function IndustryTypesPage() {
   if (error) {
     return (
       <div className="flex items-center justify-center h-64">
-        <p className="text-destructive">Failed to load industry types</p>
+        <ListErrorState error={error} label="industry types" />
       </div>
     );
   }

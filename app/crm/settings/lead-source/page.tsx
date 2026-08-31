@@ -26,6 +26,7 @@ import {
   ConfirmDialog,
 } from "@/components/smart";
 import type { LeadSource } from "@/types/doctype-types";
+import { ListErrorState } from "@/components/ui/list-error-state";
 
 // Lead Source Row Component
 function LeadSourceRow({
@@ -121,7 +122,7 @@ export default function LeadSourcesPage() {
   if (error) {
     return (
       <div className="flex items-center justify-center h-64">
-        <p className="text-destructive">Failed to load lead sources</p>
+        <ListErrorState error={error} label="lead sources" />
       </div>
     );
   }

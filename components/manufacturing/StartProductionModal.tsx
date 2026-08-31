@@ -39,6 +39,7 @@ import {
   ArrowRight,
   Plus,
   ClipboardList,
+  ShoppingCart,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -59,6 +60,7 @@ import {
 import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
 import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
 import { resolveCompanyWarehouses } from "@/lib/settings/warehouses";
+import { binLevelsByItemWarehouse } from "@/lib/stock/bin-levels";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -180,33 +182,39 @@ export function StartProductionModal({
   // A submitted transfer that left the WO un-started is stale (old bug).
   const staleTransfer = existingSubmitted && woRows.length > 0 && !woStarted;
 
-  // 2O Part 5.1 — shortfall detection. We compare required qty to
-  // Bin actual_qty. For items without a snapshot, we mark them as
-  // "unverified" rather than guessing. The hook returns a list keyed
-  // by item_code.
-  const { data: bins = [] } = useFrappeList<{
+  const sourceWh = sourceWarehouse || implicitWarehouses?.stores || "";
+  const targetWh = wipWarehouse || implicitWarehouses?.wip || "";
+
+  // 2V P0-1 — Bin query now includes warehouse and is scoped to the source
+  // warehouse. The query is gated on `sourceWh` being resolved so we never
+  // query without a warehouse filter (which would collapse to an arbitrary
+  // warehouse's qty, causing false-positive shortfalls).
+  const { data: bins2 = [] } = useFrappeList<{
     item_code: string;
+    warehouse: string;
     actual_qty: number;
   }>(
     "Bin",
     {
-      fields: ["item_code", "actual_qty"],
+      fields: ["item_code", "warehouse", "actual_qty"],
+      filters: sourceWh
+        ? [["warehouse", "=", sourceWh]] as [string, string, unknown][]
+        : undefined,
       limit: 500,
     },
-    { enabled: open && requiredItems.length > 0 },
+    { enabled: open && requiredItems.length > 0 && !!sourceWh },
   );
-  const binByItem = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const b of bins) m.set(b.item_code, Number(b.actual_qty) || 0);
-    return m;
-  }, [bins]);
+  const binByItemWarehouse = useMemo(
+    () => binLevelsByItemWarehouse(bins2),
+    [bins2],
+  );
 
-  const sourceWh = sourceWarehouse || implicitWarehouses?.stores || "";
-  const targetWh = wipWarehouse || implicitWarehouses?.wip || "";
   const summaryLines = useMemo(() => {
     return requiredItems.map((it) => {
       const required = Number(it.required_qty) || 0;
-      const onHand = it.available_qty ?? binByItem.get(it.item_code) ?? null;
+      const wh = it.source_warehouse || sourceWh;
+      const key = wh ? `${it.item_code}::${wh}` : it.item_code;
+      const onHand = it.available_qty ?? binByItemWarehouse.get(key) ?? null;
       const shortfall = onHand === null ? null : Math.max(0, required - onHand);
       return {
         ...it,
@@ -216,7 +224,7 @@ export function StartProductionModal({
         short: shortfall !== null && shortfall > 0,
       };
     });
-  }, [requiredItems, binByItem]);
+  }, [requiredItems, binByItemWarehouse, sourceWh]);
 
   const hasShortfall = summaryLines.some((l) => l.short);
 
@@ -485,7 +493,7 @@ export function StartProductionModal({
             </ul>
           </div>
 
-          {/* Shortfall guidance */}
+          {/* Shortfall guidance — 2V P0-2: PO is the primary procurement action */}
           {hasShortfall && (
             <div className="rounded-xl border border-warning/30 bg-warning/5 p-3 text-xs">
               <p className="mb-2 flex items-center gap-1.5 font-semibold text-warning">
@@ -497,7 +505,34 @@ export function StartProductionModal({
               </p>
               <div className="flex flex-wrap gap-2">
                 <Button
+                  size="sm"
+                  className="rounded-full"
+                  onClick={() => {
+                    const shortItems = summaryLines
+                      .filter((l) => l.short)
+                      .map((l) => `${l.item_code}:${l.shortfall ?? 0}`)
+                      .join(",");
+                    router.push(
+                      `/buying/purchase-order/new?work_order=${encodeURIComponent(workOrderName)}&shortfall=${encodeURIComponent(shortItems)}`,
+                    );
+                    onOpenChange(false);
+                  }}
+                >
+                  <ShoppingCart className="mr-1.5 h-3.5 w-3.5" /> Create Purchase Order
+                </Button>
+                <Button
                   variant="outline"
+                  size="sm"
+                  className="rounded-full"
+                  onClick={() => {
+                    router.push(`/stock/stock-reconciliation/new?work_order=${encodeURIComponent(workOrderName)}`);
+                    onOpenChange(false);
+                  }}
+                >
+                  <ClipboardList className="mr-1.5 h-3.5 w-3.5" /> Stock Reconciliation
+                </Button>
+                <Button
+                  variant="ghost"
                   size="sm"
                   className="rounded-full"
                   onClick={() => {
@@ -511,18 +546,7 @@ export function StartProductionModal({
                     onOpenChange(false);
                   }}
                 >
-                  <Plus className="mr-1.5 h-3.5 w-3.5" /> Create Material Request
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="rounded-full"
-                  onClick={() => {
-                    router.push(`/stock/stock-reconciliation/new?work_order=${encodeURIComponent(workOrderName)}`);
-                    onOpenChange(false);
-                  }}
-                >
-                  <ClipboardList className="mr-1.5 h-3.5 w-3.5" /> Stock Reconciliation
+                  <Plus className="mr-1.5 h-3.5 w-3.5" /> Material Request
                 </Button>
               </div>
             </div>

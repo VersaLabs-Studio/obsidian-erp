@@ -70,48 +70,44 @@ function withProviders(node: React.ReactElement) {
 // =============================================================================
 
 describe("Part 1.1: use-flow-chain builds per-stage resolution plans", () => {
-  it("the file declares a buildStagePlans helper that uses findFlowLink for the direct / two-hop / header-link / none ladder", async () => {
+  // 2R Part 1 � the pairwise per-stage ladder (buildStagePlans + 16-slot
+  // useFrappeList storm) was REPLACED by a single server-side BFS call
+  // against `/api/flows/resolve`. These tests now assert the new shape.
+  it("the hook calls /api/flows/resolve and projects the response into the rail shape", async () => {
     const fs = await import("fs/promises");
     const content = await fs.readFile(
       "hooks/flows/use-flow-chain.ts",
       "utf-8",
     );
-    expect(content).toMatch(/function\s+buildStagePlans\s*\(/);
-    // The plan kinds are explicit (not a string-keyed dict):
-    expect(content).toMatch(/kind:\s*"direct"/);
-    expect(content).toMatch(/kind:\s*"two-hop"/);
-    expect(content).toMatch(/kind:\s*"header-link"/);
-    expect(content).toMatch(/kind:\s*"none"/);
+    expect(content).toMatch(/\/api\/flows\/resolve/);
+    expect(content).toMatch(/useQuery/);
+    expect(content).toMatch(/resolveFlowChain/);
+    const slotMatches = content.match(/useFrappeList<\\{ name:/g);
+    expect(slotMatches?.length ?? 0).toBeLessThan(2);
   });
 
-  it("MAX_STAGES is 8 (the longest registered flow has 8 stages) and the hook calls 8 primary + 8 secondary useFrappeList hooks", async () => {
+  it("the resolver lives in lib/flows/flow-graph.ts and exposes resolveFlowGraph with a batched getDoc", async () => {
     const fs = await import("fs/promises");
     const content = await fs.readFile(
-      "hooks/flows/use-flow-chain.ts",
+      "lib/flows/flow-graph.ts",
       "utf-8",
     );
-    expect(content).toMatch(/MAX_STAGES\s*=\s*8/);
-    // The hook hard-codes 8 primary slot calls and 8 secondary (hop) slot
-    // calls — Rules of Hooks requires the same number on every render.
-    const primaryMatches = content.match(/useFrappeList<\{ name: string; parent\?: string \}>/g);
-    expect(primaryMatches?.length).toBeGreaterThanOrEqual(16);
+    expect(content).toMatch(/export async function resolveFlowGraph/);
+    expect(content).toMatch(/MAX_FRONTIER_WAVES/);
+    expect(content).toMatch(/export function createBatchedGetDoc/);
   });
 
-  it("the two-hop resolution reads the intermediate's name from `q.data` (not from a mutated array)", async () => {
+  it("the BFS re-expands resolved docs in BOTH directions (no mutated cascade)", async () => {
     const fs = await import("fs/promises");
     const content = await fs.readFile(
-      "hooks/flows/use-flow-chain.ts",
+      "lib/flows/flow-graph.ts",
       "utf-8",
     );
-    // The `readIntermediateName` function closes over the *primary* query
-    // results and reads `primary[plan.intermediate].data` directly.
-    // This is the data-driven cascade that fixes the 2N defect.
-    expect(content).toMatch(/function\s+readIntermediateName\s*\(/);
-    expect(content).toMatch(/primary\[plan\.intermediate\]/);
-    // The legacy `useMemo` + in-place mutation pattern (the 2N bug)
-    // is GONE — the array is no longer mutated after the hooks run.
-    expect(content).not.toMatch(/resolvedByStage\[.+\]\s*=\s*.+/);
+    expect(content).toMatch(/nextFrontier/);
+    expect(content).toMatch(/getFlowLinksFrom/);
+    expect(content).not.toMatch(/resolvedByStage\[.+\]\\s*=\\s*.+/);
   });
+
 });
 
 // =============================================================================

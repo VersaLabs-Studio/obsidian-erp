@@ -31,6 +31,7 @@ import {
   StatusBadge,
 } from "@/components/smart";
 import { InfoCard, DataPoint } from "@/components/ui/info-card";
+import { ListErrorState } from "@/components/ui/list-error-state";
 
 interface PriceList {
   name: string;
@@ -65,11 +66,10 @@ export default function PriceListsPage() {
 
   if (error)
     return (
-      <div className="flex items-center justify-center p-20 bg-destructive/5 rounded-2xl border border-destructive/10">
-        <p className="text-destructive font-bold text-lg">
-          Failed to load price lists
-        </p>
-      </div>
+      <ListErrorState
+        error={error}
+        label="price lists"
+      />
     );
 
   const allLists = priceLists ?? [];
