@@ -9,6 +9,7 @@ import { useCallback, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Send,
   Play,
@@ -76,6 +77,14 @@ export default function WorkOrderDetailPage() {
   // 2Y-R3 — Create-Job-Card modal state (allows multiple JCs per WO).
   const [createJCOpen, setCreateJCOpen] = useState(false);
   const { resolution, showError, dismiss } = useGuidedError();
+  // 2Z-R8 — cache invalidation for Stop/Resume/Close (doctype-prefix drop so
+  // mounted full-doc queries repaint alongside this page's refetch).
+  const queryClient = useQueryClient();
+  const invalidateWoCaches = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["Work Order"], refetchType: "all" });
+    queryClient.invalidateQueries({ queryKey: ["Job Card"], refetchType: "all" });
+    queryClient.invalidateQueries({ queryKey: ["flows", "resolve"] });
+  }, [queryClient]);
 
   // 2Y-R3 — Employee name lookup so the JC list shows names, not IDs.
   // Frappe's Job Card `employee` child row may not carry `employee_name`
@@ -210,10 +219,12 @@ export default function WorkOrderDetailPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data?.success) {
-        throw new Error(data?.error || data?.details || "Failed to start Work Order");
+        throw new Error(data?.details || data?.error || "Failed to start Work Order");
       }
+      // 2Z-R8 — surface the server message (e.g. UOM auto-fix note) for
+      // parity with the cockpit's start toast.
       toast.success(`Work Order ${name} started`, {
-        description: "Production is now in progress.",
+        description: data?.message || "Production is now in progress.",
       });
       refetch();
     } catch (err) {
@@ -229,43 +240,56 @@ export default function WorkOrderDetailPage() {
     setFinishOpen(true);
   };
 
+  // 2Z-R8 — Stop/Resume/Close now go through the /status lifecycle route,
+  // which calls ERPNext's own whitelisted methods (stop_unstop /
+  // close_work_order — the desk buttons' exact path). The previous direct
+  // status PUTs were rejected on SUBMITTED Work Orders with
+  // UpdateAfterSubmitError 417, the same class of failure that broke cockpit
+  // Complete (2Y-R5). "Resumed" lets ERPNext re-derive the resting status.
+  const postStatusAction = useCallback(
+    async (
+      action: "stop" | "resume" | "close",
+      opts: { successMsg: string; after?: () => void },
+    ) => {
+      try {
+        const res = await fetch(
+          `/api/manufacturing/work-order/${encodeURIComponent(name)}/status`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action }),
+          },
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.success) {
+          throw new Error(
+            data?.details || data?.error || `Failed to ${action} Work Order`,
+          );
+        }
+        toast.success(opts.successMsg, {
+          description: data?.message,
+        });
+        await refetch();
+        invalidateWoCaches();
+        opts.after?.();
+      } catch (err) {
+        showError(resolveFrappeError(err, { doctype: "Work Order" }));
+      }
+    },
+    [name, refetch, invalidateWoCaches, showError],
+  );
+
   const handleStop = () => {
     setConfirmStop(false);
-    updateMutation.mutate(
-      { name, data: { status: "Stopped" } },
-      {
-        onSuccess: () => {
-          toast.success("Work Order stopped");
-          refetch();
-        },
-        onError: (err) =>
-          showError(resolveFrappeError(err, { doctype: "Work Order" })),
-      },
-    );
+    void postStatusAction("stop", { successMsg: "Work Order stopped" });
   };
 
   const handleResume = () => {
-    updateMutation.mutate(
-      { name, data: { status: "In Process" } },
-      {
-        onSuccess: () => {
-          toast.success("Work Order resumed");
-          refetch();
-        },
-      },
-    );
+    void postStatusAction("resume", { successMsg: "Work Order resumed" });
   };
 
   const handleClose = () => {
-    updateMutation.mutate(
-      { name, data: { status: "Closed" } },
-      {
-        onSuccess: () => {
-          toast.success("Work Order closed");
-          refetch();
-        },
-      },
-    );
+    void postStatusAction("close", { successMsg: "Work Order closed" });
   };
 
   const handleCancel = () => {
