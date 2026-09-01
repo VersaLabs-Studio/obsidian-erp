@@ -43,3 +43,6 @@ next-env.d.ts
 
 # generated doc exports (the markdown source is tracked, the PDF is not)
 docs/**/*.pdf
+
+# opencode/kilo tooling state (agent sessions, plans, skills)
+.kilo/
