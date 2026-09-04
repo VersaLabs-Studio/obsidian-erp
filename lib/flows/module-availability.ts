@@ -11,7 +11,12 @@ export const BUILT_MODULES = new Set<string>([
   // Phase 2a — Sales/Stock fulfillment
   "Delivery Note",
   "Stock Entry",
-  "Material Request",
+  // 4.1-C3 — Material Request DEACTIVATED system-wide per product decision:
+  // procurement starts directly from the Purchase Order. Kept out of
+  // BUILT_MODULES so every create-affordance / WhatsNext action gating on it
+  // fails closed with a "module not available" tooltip. The MR pages remain
+  // reachable by URL for admin/audit (Stock Entries precedent).
+  // "Material Request",
   // Phase 2b — Accounting suite
   "Sales Invoice",
   "Payment Entry",

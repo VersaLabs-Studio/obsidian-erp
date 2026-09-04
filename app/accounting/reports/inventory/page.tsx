@@ -130,13 +130,14 @@ export default function InventoryReportPage() {
               </p>
               <p className="text-xs text-muted-foreground mt-1">
                 These items need restocking.{" "}
+                {/* 4.1-C3 — Material Request deactivated; PO wizard instead. */}
                 <Button
                   variant="link"
                   size="sm"
                   className="h-auto p-0 text-xs"
-                  onClick={() => router.push("/stock/material-request/new?type=Purchase")}
+                  onClick={() => router.push("/buying/purchase-order/new")}
                 >
-                  Create Material Request <ArrowRight className="inline h-3 w-3 ml-1" />
+                  Create Purchase Order <ArrowRight className="inline h-3 w-3 ml-1" />
                 </Button>
               </p>
             </div>

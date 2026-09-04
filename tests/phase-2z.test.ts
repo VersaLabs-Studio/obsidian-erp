@@ -127,7 +127,8 @@ describe("2Z D3 UI: SI detail", () => {
 // =============================================================================
 
 describe("2Z guardrail: no /api/resource fetches in app/", () => {
-  it("no file under app/ fetches the Frappe /api/resource namespace", async () => {
+  // Repo-wide scan — needs a generous timeout under dev-server load.
+  it("no file under app/ fetches the Frappe /api/resource namespace", { timeout: 30000 }, async () => {
     const fs = await import("fs/promises");
     const path = await import("path");
     const offenders: string[] = [];

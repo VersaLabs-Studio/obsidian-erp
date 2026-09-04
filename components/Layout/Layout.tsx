@@ -109,11 +109,14 @@ const navigation = [
       { title: "Items", href: "/stock/item", icon: Box },
       { title: "Warehouses", href: "/stock/warehouse", icon: Warehouse },
       { title: "Delivery Notes", href: "/stock/delivery-note", icon: Truck },
-      {
-        title: "Material Requests",
-        href: "/stock/material-request",
-        icon: ShoppingCart,
-      },
+      // 4.1-C3 — Material Requests deactivated system-wide (procurement
+      // starts directly from the Purchase Order). Pages remain reachable
+      // by URL for admin/audit (Stock Entries precedent).
+      // {
+      //   title: "Material Requests",
+      //   href: "/stock/material-request",
+      //   icon: ShoppingCart,
+      // },
       // 2Y-R2 P5 — Stock Entry hidden from nav (valuation-only, no accounting UI).
       // Direct URL still works for admin/audit. The WO cockpit creates SEs
       // via the lifecycle hook, so operators never need to browse SEs manually.

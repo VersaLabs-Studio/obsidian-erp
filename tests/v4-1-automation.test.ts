@@ -212,6 +212,8 @@ describe("4.1 C1: stock create pages are born submitted", () => {
 // =============================================================================
 
 describe("4.1 detail pages: primary one-click action + advanced wizard path", () => {
+  // 4.1-C4 — primary labels are now conditional on the done-state (e.g.
+  // "Receive & Bill" ↔ "Receive & Bill more"), so the regexes accept both.
   const CASES: Array<{ page: string; primary: RegExp; advanced: RegExp }> = [
     {
       page: "app/accounting/purchase-invoice/[name]/page.tsx",
@@ -220,12 +222,12 @@ describe("4.1 detail pages: primary one-click action + advanced wizard path", ()
     },
     {
       page: "app/buying/purchase-order/[name]/page.tsx",
-      primary: /label:\s*"Receive & Bill"/,
-      advanced: /Receive only \(advanced\)/,
+      primary: /label:\s*(receivedAndBilled\s*\?\s*)?"Receive & Bill( more)?"/,
+      advanced: /label:\s*(fullyBilled\s*\?\s*)?"(Receive only|Receipt) \(advanced\)"/,
     },
     {
       page: "app/stock/purchase-receipt/[name]/page.tsx",
-      primary: /label:\s*"Bill"/,
+      primary: /label:\s*(fullyBilled\s*\?\s*)?"Bill( more \(advanced\))?"/,
       advanced: /Purchase Invoice \(advanced\)/,
     },
     {

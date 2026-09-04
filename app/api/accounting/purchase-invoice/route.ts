@@ -12,6 +12,9 @@ const { listHandler, createHandler } = createCrudHandlers("Purchase Invoice", {
       "posting_date",
       "due_date",
       "status",
+      // 4.1-C3 — required by detail-page gating (docstatus === 1 checks);
+      // the SI route needed this same whitelist entry (2Z-R7b).
+      "docstatus",
       "grand_total",
       "outstanding_amount",
       "currency",
