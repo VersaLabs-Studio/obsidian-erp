@@ -172,9 +172,11 @@ export default function StockBalancePage() {
   function handleReorder(bin: Bin) {
     const r = reorderIndex.get(`${bin.item_code}::${bin.warehouse}`);
     const qty = r?.qty ?? 1;
-    // 2P Part 2.7 — prefill the MR with the item + reorder qty.
+    // 4.1-C3 — reorder flows go straight to the Purchase Order wizard
+    // (Material Request deactivated system-wide); the wizard reads the
+    // ?item_code/qty/warehouse prefill params.
     router.push(
-      `/stock/material-request/new?item_code=${encodeURIComponent(bin.item_code)}&qty=${qty}&warehouse=${encodeURIComponent(bin.warehouse)}`,
+      `/buying/purchase-order/new?item_code=${encodeURIComponent(bin.item_code)}&qty=${qty}&warehouse=${encodeURIComponent(bin.warehouse)}`,
     );
   }
 
@@ -202,15 +204,17 @@ export default function StockBalancePage() {
             >
               <ClipboardList className="mr-1.5 h-4 w-4" /> Stock count
             </Button>
+            {/* 4.1-C3 — Material Request deactivated system-wide; reorder
+                flows go through the Purchase Order wizard instead. */}
             <Button
               className="rounded-full"
               onClick={() =>
                 router.push(
-                  "/stock/material-request/new?material_request_type=Purchase",
+                  "/buying/purchase-order/new",
                 )
               }
             >
-              <Plus className="mr-1.5 h-4 w-4" /> New Material Request
+              <Plus className="mr-1.5 h-4 w-4" /> New Purchase Order
             </Button>
           </div>
         }

@@ -88,27 +88,31 @@ export const quotationStepSchemas = {
 
 /**
  * Delivery Note step schemas
+ * 4.1-C2 — restored the canonical step1/step2/step3 keys. The 2Y-R6 commit
+ * had renamed them to items/header/review, which silently DISABLED the DN
+ * wizard's step gates (validateWizardStep("Delivery Note", "step1") fail-
+ * opened on the missing key) and broke the step-naming regression guards.
+ * Per-item warehouse stays OPTIONAL: header set_warehouse is propagated to
+ * each row (implicit backfill, 4.1 downscaling).
  */
 export const deliveryNoteStepSchemas = {
-  // These keys are deliberately named to avoid reserved-step naming.
-  items: z
-    .array(
-      z.object({
-        item_code: z.string().min(1, "Item code is required"),
-        qty: z.number().min(0.01, "Quantity must be greater than 0"),
-        // Per-item warehouse is OPTIONAL — header set_warehouse is
-        // propagated to each row on submit, so the wizard gate
-        // advances with only the header set.
-        warehouse: z.string().optional(),
-        rate: z.number().min(0).optional(),
-      })
-    )
-    .min(1, "At least one item is required"),
-  header: z.object({
+  step1: z.object({
     customer: z.string().min(1, "Customer is required"),
     posting_date: z.string().min(1, "Posting date is required"),
   }),
-  review: z.object({
+  step2: z.object({
+    items: z
+      .array(
+        z.object({
+          item_code: z.string().min(1, "Item code is required"),
+          qty: z.number().min(0.01, "Quantity must be greater than 0"),
+          warehouse: z.string().optional(),
+          rate: z.number().min(0).optional(),
+        })
+      )
+      .min(1, "At least one item is required"),
+  }),
+  step3: z.object({
     confirmed: z.boolean().optional(),
   }),
 };
@@ -452,17 +456,18 @@ export const purchaseReceiptStepSchemas = {
     supplier: z.string().min(1, "Supplier is required"),
     posting_date: z.string().min(1, "Posting date is required"),
   }),
-  // 2R Part 5 — step2 requires warehouse per item. ERPNext's Purchase
-  // Receipt Item table requires `warehouse` server-side; the wizard now
-  // enforces it client-side too so submit doesn't fail late.
+  // 4.1-C2 — per-item warehouse is OPTIONAL again. The 2R Part 5
+  // requirement regressed the 4.1 implicit behavior: the wizard's
+  // resolvePrefillWarehouses + server-side backfill fill row warehouses
+  // from the company defaults, so the gate must not hard-require them.
   step2: z.object({
     items: z
       .array(
         z.object({
           item_code: z.string().min(1, "Item code is required"),
           qty: z.number().min(0.01, "Quantity must be greater than 0"),
-          rate: z.number().min(0, "Rate must be non-negative"),
-          warehouse: z.string().min(1, "Warehouse is required"),
+          rate: z.number().min(0, "Rate must be non-negative").optional(),
+          warehouse: z.string().optional(),
         })
       )
       .min(1, "At least one item is required"),

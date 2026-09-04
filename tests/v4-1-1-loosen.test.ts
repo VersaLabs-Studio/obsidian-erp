@@ -232,7 +232,18 @@ describe("F1: Direct-fire happy-path, ConfirmDialog retains destruction", () => 
     it(`${path}: happy-path actions fire directly (no confirm gating)`, async () => {
       const content = await read(path);
       // After F1, Submit/Bill/Paid/Order/Fulfill calls should call handlers, not setConfirmX(true)
+      // 4.1-C3 — EXCEPTION: the Purchase Order page's Submit deliberately
+      // routes through a confirmation dialog (loading-modal parity with the
+      // SO cockpit, per product feedback). Approve/Reject no longer exist on
+      // that page (dead statuses removed).
       for (const label of actions) {
+        if (
+          path === "app/buying/purchase-order/[name]/page.tsx" &&
+          label === "Submit"
+        ) {
+          expect(content).toContain("setConfirmSubmit(true)");
+          continue;
+        }
         expect(content).not.toMatch(new RegExp(`setConfirm(${label})\\(true\\)`));
       }
       // But Cancel/Reject/Delete still gated
@@ -254,11 +265,16 @@ describe("G2: Relaxed create-form validators", () => {
 
   it("Delivery Note step2 warehouse is optional", async () => {
     const content = await read("lib/flows/flow-validation.ts");
-    // Delivery Note step2 items don't require warehouse
-    const dnMatch = content.match(/deliveryNoteStepSchemas([\s\S]*?)step2/);
+    // Capture the DN step2 BLOCK (schema name → the step2 object's closing
+    // brace at the next top-level "\n  },"), then assert warehouse sits in
+    // it as optional. 4.1-C2 — the schema keys are canonical step1/step2/
+    // step3 again, so anchor on "step2:" and scan its own body.
+    const dnMatch = content.match(
+      /deliveryNoteStepSchemas[\s\S]*?step2:\s*z\.object\(\{([\s\S]*?)\n  \}\),/,
+    );
     expect(dnMatch).not.toBeNull();
     const step2 = dnMatch![1];
-    expect(step2).toMatch(/warehouse.*optional/);
+    expect(step2).toMatch(/warehouse:\s*z\.string\(\)\.optional\(\)/);
   });
 
   it("Purchase Invoice credit_to is optional at wizard gate", async () => {

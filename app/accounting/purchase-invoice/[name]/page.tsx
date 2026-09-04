@@ -10,6 +10,7 @@ import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
 import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
 import {
@@ -66,6 +67,8 @@ export default function PurchaseInvoiceDetailPage() {
   const [payMode, setPayMode] = useState("Cash");
   const [paying, setPaying] = useState(false);
   const { resolution, showError, dismiss } = useGuidedError();
+  // 4.1-C2 — cache invalidation for the Mark-Paid action (2Z-R7 standard).
+  const queryClient = useQueryClient();
 
   const {
     data: invoice,
@@ -111,17 +114,37 @@ export default function PurchaseInvoiceDetailPage() {
     );
   };
 
-  const handleCancel = () => {
+  // 4.1-C3 — cascade cancel: submitted Payment Entries referencing this
+  // invoice are cancelled first, then the invoice (ERPNext blocked the bare
+  // cancel with "Cancel the linked document first").
+  const [cancelling, setCancelling] = useState(false);
+
+  const handleCancel = async () => {
     setConfirmCancel(false);
-    updateMutation.mutate(
-      { name, data: { docstatus: 2 } },
-      {
-        onSuccess: () =>
-          toast.success(`Purchase Invoice ${name} cancelled`),
-        onError: (err) =>
-          showError(resolveFrappeError(err, { doctype: "Purchase Invoice" })),
-      },
-    );
+    setCancelling(true);
+    try {
+      const res = await fetch(
+        `/api/accounting/purchase-invoice/${encodeURIComponent(name)}/cancel`,
+        { method: "POST" },
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        throw new Error(
+          data?.details || data?.error || "Failed to cancel Purchase Invoice",
+        );
+      }
+      toast.success(`Purchase Invoice ${name} cancelled`, {
+        description: data?.message,
+      });
+      await refetch();
+      queryClient.invalidateQueries({ queryKey: ["Purchase Invoice"], refetchType: "all" });
+      queryClient.invalidateQueries({ queryKey: ["Payment Entry"], refetchType: "all" });
+      queryClient.invalidateQueries({ queryKey: ["flows", "resolve"] });
+    } catch (err) {
+      showError(resolveFrappeError(err, { doctype: "Purchase Invoice" }));
+    } finally {
+      setCancelling(false);
+    }
   };
 
   // 4.1 A1 — one-click pay: build+submit a Payment Entry (Pay) via ERPNext's
@@ -145,6 +168,11 @@ export default function PurchaseInvoiceDetailPage() {
           description: data?.data?.name,
         });
         await refetch();
+        // 4.1-C2 — 2Z-R7 standard: the PI flips to Paid and the FlowRail's
+        // payment stage completes — drop those caches now.
+        queryClient.invalidateQueries({ queryKey: ["flows", "resolve"] });
+        queryClient.invalidateQueries({ queryKey: ["Purchase Invoice"], refetchType: "all" });
+        queryClient.invalidateQueries({ queryKey: ["Payment Entry"], refetchType: "all" });
       } else {
         toast.error(data?.details || data?.error || "Payment failed");
       }
@@ -261,8 +289,14 @@ export default function PurchaseInvoiceDetailPage() {
                   size="sm"
                   className="text-destructive hover:text-destructive"
                   onClick={() => setConfirmCancel(true)}
+                  disabled={cancelling}
                 >
-                  <Ban className="mr-1.5 h-4 w-4" /> Cancel
+                  {cancelling ? (
+                    <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Ban className="mr-1.5 h-4 w-4" />
+                  )}
+                  Cancel
                 </Button>
                 <Button
                   variant="outline"
@@ -420,10 +454,11 @@ export default function PurchaseInvoiceDetailPage() {
         open={confirmCancel}
         onOpenChange={setConfirmCancel}
         title="Cancel this Purchase Invoice?"
-        description="Cancelling reverses the accounting entries. Linked payments must be cancelled first."
+        description="Cancelling also cancels linked Payment Entries automatically (cascade) and reverses the accounting entries. This cannot be undone."
         confirmText="Cancel Invoice"
         variant="destructive"
         onConfirm={handleCancel}
+        loading={cancelling}
       />
       <ConfirmDialog
         open={confirmPaid}

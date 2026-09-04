@@ -5,10 +5,11 @@
 // Inbound goods from suppliers. Mirrors Delivery Note detail pattern.
 // Flow chain: upstream PO, downstream Purchase Invoice.
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
 import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
 import {
@@ -19,6 +20,9 @@ import {
   Loader2,
   Truck,
   Package,
+  PackageCheck,
+  Receipt,
+  Wallet,
 } from "lucide-react";
 
 import { PageHeader, LoadingState, ConfirmDialog } from "@/components/smart";
@@ -34,7 +38,7 @@ import { PrintShare } from "@/components/ui/print-share";
 import { PrintMenu } from "@/components/print/PrintMenu";
 import { useFlowChain } from "@/hooks/flows/use-flow-chain";
 import { useFrappeDoc, useFrappeList, useFrappeUpdate, useFrappeDelete } from "@/hooks/generic";
-import type { PurchaseReceipt } from "@/types/doctype-types";
+import type { PurchaseReceipt, PurchaseInvoice, PaymentEntry } from "@/types/doctype-types";
 
 const ETB = new Intl.NumberFormat("en-ET", { style: "currency", currency: "ETB" });
 
@@ -63,6 +67,8 @@ export default function PurchaseReceiptDetailPage() {
   const [confirmBill, setConfirmBill] = useState(false);
   const [billing, setBilling] = useState(false);
   const { resolution, showError, dismiss } = useGuidedError();
+  // 4.1-C2 — cache invalidation for the Bill chain (2Z-R7 standard).
+  const queryClient = useQueryClient();
 
   const { data: pr, isLoading, error, refetch } = useFrappeDoc<PurchaseReceipt>(
     "Purchase Receipt",
@@ -135,16 +141,38 @@ export default function PurchaseReceiptDetailPage() {
     }
   };
 
-  const handleCancel = () => {
+  // 4.1-C3 — cascade cancel: submitted Purchase Invoices raised from this
+  // receipt are cancelled first, then the receipt (ERPNext blocked the bare
+  // cancel with "Cancel the linked document first").
+  const [cancelling, setCancelling] = useState(false);
+
+  const handleCancel = async () => {
     setConfirmCancel(false);
-    updateMutation.mutate(
-      { name, data: { docstatus: 2 } },
-      {
-        onSuccess: () => toast.success(`Purchase Receipt ${name} cancelled`),
-        onError: (err) =>
-          showError(resolveFrappeError(err, { doctype: "Purchase Receipt" })),
-      },
-    );
+    setCancelling(true);
+    try {
+      const res = await fetch(
+        `/api/stock/purchase-receipt/${encodeURIComponent(name)}/cancel`,
+        { method: "POST" },
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        throw new Error(
+          data?.details || data?.error || "Failed to cancel Purchase Receipt",
+        );
+      }
+      toast.success(`Purchase Receipt ${name} cancelled`, {
+        description: data?.message,
+      });
+      await refetch();
+      queryClient.invalidateQueries({ queryKey: ["Purchase Receipt"], refetchType: "all" });
+      queryClient.invalidateQueries({ queryKey: ["Purchase Invoice"], refetchType: "all" });
+      queryClient.invalidateQueries({ queryKey: ["Payment Entry"], refetchType: "all" });
+      queryClient.invalidateQueries({ queryKey: ["flows", "resolve"] });
+    } catch (err) {
+      showError(resolveFrappeError(err, { doctype: "Purchase Receipt" }));
+    } finally {
+      setCancelling(false);
+    }
   };
 
   // 4.1 A3 — one-click bill: build+submit a Purchase Invoice from this receipt
@@ -164,6 +192,12 @@ export default function PurchaseReceiptDetailPage() {
           description: data?.data?.purchase_invoice,
         });
         refetch();
+        void refetchInvoices();
+        // 4.1-C2 — 2Z-R7 standard: the PR status advances (To Bill →
+        // Completed) and the FlowRail's billing stage activates.
+        queryClient.invalidateQueries({ queryKey: ["flows", "resolve"] });
+        queryClient.invalidateQueries({ queryKey: ["Purchase Receipt"], refetchType: "all" });
+        queryClient.invalidateQueries({ queryKey: ["Purchase Invoice"], refetchType: "all" });
       } else {
         toast.error(data?.details || data?.error || "Billing failed");
       }
@@ -173,6 +207,90 @@ export default function PurchaseReceiptDetailPage() {
       setBilling(false);
     }
   };
+
+  // 4.1-C3 — Quick "Mark Paid" for the vendor bill raised from this receipt
+  // (SO-cockpit Mark-Paid parity on the buying side).
+  const { data: linkedInvoices, refetch: refetchInvoices } = useFrappeList<PurchaseInvoice>(
+    "Purchase Invoice",
+    {
+      filters: [["Purchase Invoice Item", "purchase_receipt", "=", name]],
+      fields: ["name", "status", "docstatus", "grand_total", "outstanding_amount", "currency"],
+      orderBy: { field: "posting_date", order: "desc" },
+      limit: 20,
+    },
+    { enabled: isSubmitted },
+  );
+  const outstandingLinkedInvoices = useMemo(
+    () =>
+      (linkedInvoices ?? []).filter(
+        (inv) =>
+          inv.docstatus === 1 && Number(inv.outstanding_amount ?? 0) > 0.005,
+      ),
+    [linkedInvoices],
+  );
+  // 4.1-C4 — linked Payment Entries (PE references the PI, not the PR —
+  // resolve PI names first, same indirection as the SO cockpit / PO page).
+  const linkedPINames = useMemo(
+    () => (linkedInvoices ?? []).map((inv) => inv.name),
+    [linkedInvoices],
+  );
+  const { data: linkedPayments } = useFrappeList<PaymentEntry>(
+    "Payment Entry",
+    {
+      filters: [
+        ["Payment Entry Reference", "reference_doctype", "=", "Purchase Invoice"],
+        ["Payment Entry Reference", "reference_name", "in", linkedPINames.length ? linkedPINames : ["__none__"]],
+      ],
+      fields: ["name", "status", "docstatus", "posting_date", "payment_type", "mode_of_payment", "paid_amount"],
+      orderBy: { field: "posting_date", order: "desc" },
+      limit: 20,
+    },
+    { enabled: linkedPINames.length > 0 },
+  );
+
+  // 4.1-C4 — done-state: the receipt is fully billed (a submitted PI exists
+  // and nothing is outstanding) → "Bill" action disables with a ✓.
+  const hasSubmittedInvoice = (linkedInvoices ?? []).some(
+    (inv) => inv.docstatus === 1,
+  );
+  const fullyBilled = hasSubmittedInvoice && outstandingLinkedInvoices.length === 0;
+  const [payingInvoice, setPayingInvoice] = useState<string | null>(null);
+
+  const handleMarkPaid = useCallback(
+    async (invoiceName?: string) => {
+      const target = invoiceName ?? outstandingLinkedInvoices[0]?.name;
+      if (!target) {
+        toast.info("No outstanding vendor bills for this receipt.");
+        return;
+      }
+      setPayingInvoice(target);
+      try {
+        const res = await fetch("/api/accounting/payment/quick", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ invoice: target, doctype: "Purchase Invoice" }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.success) {
+          throw new Error(
+            data?.details || data?.error || "Failed to record payment",
+          );
+        }
+        toast.success(`Payment recorded against ${target}`, {
+          description: data?.message,
+        });
+        queryClient.invalidateQueries({ queryKey: ["Purchase Invoice"], refetchType: "all" });
+        queryClient.invalidateQueries({ queryKey: ["Payment Entry"], refetchType: "all" });
+        queryClient.invalidateQueries({ queryKey: ["Purchase Receipt"], refetchType: "all" });
+        queryClient.invalidateQueries({ queryKey: ["flows", "resolve"] });
+      } catch (err) {
+        showError(resolveFrappeError(err, { doctype: "Purchase Invoice" }));
+      } finally {
+        setPayingInvoice(null);
+      }
+    },
+    [outstandingLinkedInvoices, queryClient, showError],
+  );
 
   if (isLoading) return <LoadingState />;
   if (error || !pr) {
@@ -201,13 +319,17 @@ export default function PurchaseReceiptDetailPage() {
       isLoading: updateMutation.isPending,
     },
     isSubmitted && {
-      label: "Bill",
-      description: "Raise the vendor bill from this receipt in one click",
+      label: fullyBilled ? "Bill more (advanced)" : "Bill",
+      description: fullyBilled
+        ? "✓ Fully billed — advanced billing for extra quantities only"
+        : "Raise the vendor bill from this receipt in one click",
       onClick: handleBill,
-      isPrimary: true,
+      isPrimary: !fullyBilled,
       isLoading: billing,
-      disabled: !isModuleBuilt("Purchase Invoice"),
-      disabledReason: "Module not available",
+      disabled: fullyBilled || !isModuleBuilt("Purchase Invoice"),
+      disabledReason: fullyBilled
+        ? "Receipt fully billed"
+        : "Module not available",
     },
     isSubmitted && {
       label: "Purchase Invoice (advanced)",
@@ -216,6 +338,17 @@ export default function PurchaseReceiptDetailPage() {
       disabled: !isModuleBuilt("Purchase Invoice"),
       disabledReason: "Module not available",
     },
+    // 4.1-C3 — settle the vendor bill inline (SO-cockpit Mark-Paid parity).
+    // 4.1-C4 — hidden once fully paid.
+    isSubmitted &&
+      outstandingLinkedInvoices.length > 0 && {
+        label: "Mark Paid",
+        description: `Pay ${outstandingLinkedInvoices[0].name} (${Number(
+          outstandingLinkedInvoices[0].outstanding_amount ?? 0,
+        ).toFixed(2)}) in one click`,
+        onClick: () => void handleMarkPaid(),
+        isLoading: payingInvoice !== null,
+      },
   ].filter(Boolean) as React.ComponentProps<typeof WhatsNext>["actions"];
 
   return (
@@ -260,8 +393,14 @@ export default function PurchaseReceiptDetailPage() {
                   size="sm"
                   className="text-destructive hover:text-destructive"
                   onClick={() => setConfirmCancel(true)}
+                  disabled={cancelling}
                 >
-                  <Ban className="mr-1.5 h-4 w-4" /> Cancel
+                  {cancelling ? (
+                    <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Ban className="mr-1.5 h-4 w-4" />
+                  )}
+                  Cancel
                 </Button>
               </>
             )}
@@ -348,6 +487,123 @@ export default function PurchaseReceiptDetailPage() {
             </div>
           </InfoCard>
 
+          {/* 4.1-C4 — Billing & Payments panel (SO-cockpit parity): the
+              vendor bills raised from this receipt + payments against them,
+              with inline Mark Paid. */}
+          {isSubmitted && (
+            <InfoCard
+              title="Billing & Payments"
+              icon={<Receipt className="h-4 w-4" />}
+            >
+              <p className="mb-3 px-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                Vendor Bills
+              </p>
+              {linkedInvoices && linkedInvoices.length > 0 ? (
+                <div className="space-y-1.5">
+                  {linkedInvoices.map((inv) => {
+                    const invOutstanding = Number(inv.outstanding_amount ?? 0);
+                    const canPay =
+                      inv.docstatus === 1 && invOutstanding > 0.005;
+                    return (
+                      <div
+                        key={inv.name}
+                        className="flex items-center justify-between gap-2 rounded-xl border border-border/50 bg-secondary/10 px-3 py-2"
+                      >
+                        <div className="min-w-0">
+                          <Link
+                            href={`/accounting/purchase-invoice/${encodeURIComponent(inv.name)}`}
+                            className="block truncate text-sm font-medium text-primary hover:underline"
+                          >
+                            {inv.name}
+                          </Link>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {ETB.format(inv.grand_total ?? 0)}
+                            {invOutstanding ? (
+                              <span className="ml-1 text-amber-600 dark:text-amber-400">
+                                · {ETB.format(invOutstanding)} outstanding
+                              </span>
+                            ) : null}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          {canPay && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-2 text-xs"
+                              onClick={() => void handleMarkPaid(inv.name)}
+                              disabled={payingInvoice !== null}
+                            >
+                              {payingInvoice === inv.name ? (
+                                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                              ) : (
+                                <Wallet className="mr-1 h-3 w-3" />
+                              )}
+                              Mark Paid
+                            </Button>
+                          )}
+                          <StatusBadge status={inv.status ?? ""} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed border-border/50 px-3 py-4 text-center">
+                  <p className="text-xs text-muted-foreground">
+                    No vendor bills yet.
+                  </p>
+                  {/* 4.1-C5 — CTA: fire the same Bill mutation from the empty
+                      state, per product feedback. */}
+                  <Button
+                    size="sm"
+                    className="mt-2"
+                    onClick={handleBill}
+                    disabled={billing || fullyBilled}
+                  >
+                    {billing ? (
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <PackageCheck className="mr-1.5 h-3.5 w-3.5" />
+                    )}
+                    Bill this receipt
+                  </Button>
+                </div>
+              )}
+              <p className="mb-3 mt-5 px-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                Payments
+              </p>
+              {linkedPayments && linkedPayments.length > 0 ? (
+                <div className="space-y-1.5">
+                  {linkedPayments.map((pe) => (
+                    <div
+                      key={pe.name}
+                      className="flex items-center justify-between gap-2 rounded-xl border border-border/50 bg-secondary/10 px-3 py-2"
+                    >
+                      <div className="min-w-0">
+                        <Link
+                          href={`/accounting/payment-entry/${encodeURIComponent(pe.name)}`}
+                          className="block truncate text-sm font-medium text-primary hover:underline"
+                        >
+                          {pe.name}
+                        </Link>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {ETB.format(pe.paid_amount ?? 0)}
+                          {pe.mode_of_payment ? ` · ${pe.mode_of_payment}` : ""}
+                        </p>
+                      </div>
+                      <StatusBadge status={pe.status ?? ""} />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="rounded-xl border border-dashed border-border/50 px-3 py-3 text-center text-xs text-muted-foreground">
+                  No payments recorded against this receipt&apos;s bills yet.
+                </p>
+              )}
+            </InfoCard>
+          )}
+
           <InfoCard title="What's Next">
             <WhatsNext actions={whatsNext} />
           </InfoCard>
@@ -386,10 +642,11 @@ export default function PurchaseReceiptDetailPage() {
         open={confirmCancel}
         onOpenChange={setConfirmCancel}
         title="Cancel this Purchase Receipt?"
-        description="Cancelling reverses the accounting entries. This action cannot be undone."
-        confirmText="Cancel"
+        description="Cancelling also cancels linked Purchase Invoices automatically (cascade) and reverses the stock + accounting entries. This cannot be undone."
+        confirmText="Cancel Receipt"
         variant="destructive"
         onConfirm={handleCancel}
+        loading={cancelling}
       />
       <ConfirmDialog
         open={confirmDelete}

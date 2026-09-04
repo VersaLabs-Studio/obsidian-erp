@@ -411,11 +411,22 @@ export default function WorkOrderDetailPage() {
       isPrimary: true,
     },
     ["Not Started", "In Process"].includes(status) && {
+      // 4.1-C3 — Material Request deactivated; procurement goes straight to
+      // the PO wizard (which accepts ?shortfall= item pairs).
       label: "Request Materials",
-      description: "Create a Material Request for raw materials",
+      description: "Raise a Purchase Order for the raw materials",
       onClick: () =>
         router.push(
-          `/stock/material-request/new?work_order=${encodeURIComponent(name)}&type=Purchase`,
+          `/buying/purchase-order/new?shortfall=${encodeURIComponent(
+            (wo?.required_items ?? [])
+              .map((it) =>
+                typeof it === "object" && it && "item_code" in it
+                  ? String((it as { item_code?: string }).item_code ?? "")
+                  : "",
+              )
+              .filter(Boolean)
+              .join(","),
+          )}&work_order=${encodeURIComponent(name)}`,
         ),
     },
   ].filter(Boolean) as React.ComponentProps<typeof WhatsNext>["actions"];

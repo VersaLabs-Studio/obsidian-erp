@@ -164,7 +164,9 @@ describe("Module Availability — A2 fix", () => {
     expect(BUILT_MODULES.has("Sales Order")).toBe(true);
     expect(BUILT_MODULES.has("Delivery Note")).toBe(true);
     expect(BUILT_MODULES.has("Stock Entry")).toBe(true);
-    expect(BUILT_MODULES.has("Material Request")).toBe(true);
+    // 4.1-C3 — Material Request is deactivated system-wide (product
+    // decision: procurement starts directly from the Purchase Order).
+    expect(BUILT_MODULES.has("Material Request")).toBe(false);
     expect(BUILT_MODULES.has("Quotation")).toBe(true);
   });
 
