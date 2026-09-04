@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import { resolveFrappeError } from "@/lib/errors/frappe-error-resolver";
 import { GuidedErrorDialog, useGuidedError } from "@/components/errors/GuidedErrorDialog";
 import {
@@ -50,6 +51,8 @@ export default function MaterialRequestDetailPage() {
   const [confirmOrder, setConfirmOrder] = useState(false);
   const [ordering, setOrdering] = useState(false);
   const { resolution, showError, dismiss } = useGuidedError();
+  // 4.1-C2 — cache invalidation for the Order chain (2Z-R7 standard).
+  const queryClient = useQueryClient();
 
   const {
     data: mr,
@@ -122,6 +125,11 @@ export default function MaterialRequestDetailPage() {
           description: data?.data?.purchase_order,
         });
         refetch();
+        // 4.1-C2 — 2Z-R7 standard: the MR status advances (Ordered) and the
+        // FlowRail's purchasing stage activates — drop those caches now.
+        queryClient.invalidateQueries({ queryKey: ["flows", "resolve"] });
+        queryClient.invalidateQueries({ queryKey: ["Material Request"], refetchType: "all" });
+        queryClient.invalidateQueries({ queryKey: ["Purchase Order"], refetchType: "all" });
       } else {
         toast.error(data?.details || data?.error || "Ordering failed");
       }

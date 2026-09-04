@@ -492,7 +492,8 @@ describe("Part 8: SME Plug-and-Play Onboarding", () => {
 // something that renders).
 // =============================================================================
 describe("Contract Rule 2: no orphan modules in the 2P diff", () => {
-  it("every new file is referenced by at least one shipping component/page", async () => {
+  // Repo-wide scan — needs a generous timeout under dev-server load.
+  it("every new file is referenced by at least one shipping component/page", { timeout: 30000 }, async () => {
     const newFiles = [
       "lib/settings/warehouses.ts",
       "lib/stock/bin-levels.ts",

@@ -324,6 +324,41 @@ export default function NewPurchaseOrderPage() {
     getValues,
   ]);
 
+  // 4.1-C3 — reorder prefill (from Stock Health's Reorder button). When
+  // ?item_code=&qty=&warehouse= are provided, populate a single item row —
+  // the Material Request path this replaces was deactivated system-wide.
+  const reorderItemParam = searchParams.get("item_code");
+  const reorderQtyParam = searchParams.get("qty");
+  const reorderWarehouseParam = searchParams.get("warehouse");
+
+  useEffect(() => {
+    if (!reorderItemParam) return;
+    if (canonicalDraft || materialRequest || supplierQuotation || shortfallParam) return;
+
+    reset({
+      ...getValues(),
+      items: [
+        {
+          item_code: reorderItemParam,
+          item_name: "",
+          description: "",
+          qty: Math.max(1, Number(reorderQtyParam) || 1),
+          rate: 0,
+          amount: 0,
+          uom: "Nos",
+          warehouse: reorderWarehouseParam ?? "",
+        },
+      ],
+      schedule_date: "",
+    });
+    setAutoFilledFields(new Set(["items"]));
+
+    toast.success("Reorder item loaded", {
+      description: `${reorderItemParam} prefilled. Set a supplier to continue.`,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reorderItemParam, reorderQtyParam, reorderWarehouseParam]);
+
   const isAuto = useCallback(
     (field: string) => autoFilledFields.has(field),
     [autoFilledFields],
