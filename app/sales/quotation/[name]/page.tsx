@@ -7,6 +7,7 @@ import { useCallback, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Edit3,
   Send,
@@ -67,6 +68,8 @@ export default function QuotationDetailPage() {
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const { resolution, showError, dismiss } = useGuidedError();
+  // 5.1-A — cache invalidation for submit/cancel + the SO chain.
+  const queryClient = useQueryClient();
 
   const { data: quote, isLoading, error, refetch } = useFrappeDoc<Quotation>(
     "Quotation",
@@ -99,11 +102,15 @@ export default function QuotationDetailPage() {
   const handleSubmit = () => {
     setConfirmSubmit(false);
     updateMutation.mutate(
-      { name, data: { docstatus: 1, status: "Open" } },
+      // 5.1-A — write ONLY docstatus; ERPNext derives the status on submit
+      // (2Y-R5 lesson: hand-writing derived statuses invites mismatches).
+      { name, data: { docstatus: 1 } },
       {
         onSuccess: () => {
           toast.success(`Quotation ${name} submitted`);
           refetch();
+          queryClient.invalidateQueries({ queryKey: ["Quotation"], refetchType: "all" });
+          queryClient.invalidateQueries({ queryKey: ["flows", "resolve"] });
         },
         onError: (err) =>
           showError(resolveFrappeError(err, { doctype: "Quotation" })),
@@ -111,20 +118,80 @@ export default function QuotationDetailPage() {
     );
   };
 
-  const handleCancel = () => {
+  // 5.1-A3 — cascade cancel: submitted Sales Orders generated from this
+  // quotation are cancelled first (depth-first), then the quotation. The
+  // bare docstatus-2 PUT was rejected with LinkExistsError while a submitted
+  // SO linked it ("Cancel the linked document first" — F5 finding).
+  const [cancelling, setCancelling] = useState(false);
+
+  const handleCancel = async () => {
     setConfirmCancel(false);
-    updateMutation.mutate(
-      { name, data: { docstatus: 2, status: "Cancelled" } },
-      {
-        onSuccess: () => {
-          toast.success(`Quotation ${name} cancelled`);
-          refetch();
-        },
-        onError: (err) =>
-          showError(resolveFrappeError(err, { doctype: "Quotation" })),
+    setCancelling(true);
+    try {
+      const res = await fetch(
+        `/api/sales/quotation/${encodeURIComponent(name)}/cancel`,
+        { method: "POST" },
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        throw new Error(
+          data?.details || data?.error || "Failed to cancel Quotation",
+        );
       }
-    );
+      toast.success(`Quotation ${name} cancelled`, {
+        description: data?.message,
+      });
+      await refetch();
+      queryClient.invalidateQueries({ queryKey: ["Quotation"], refetchType: "all" });
+      queryClient.invalidateQueries({ queryKey: ["Sales Order"], refetchType: "all" });
+      queryClient.invalidateQueries({ queryKey: ["Delivery Note"], refetchType: "all" });
+      queryClient.invalidateQueries({ queryKey: ["Sales Invoice"], refetchType: "all" });
+      queryClient.invalidateQueries({ queryKey: ["Payment Entry"], refetchType: "all" });
+      queryClient.invalidateQueries({ queryKey: ["flows", "resolve"] });
+    } catch (err) {
+      showError(resolveFrappeError(err, { doctype: "Quotation" }));
+    } finally {
+      setCancelling(false);
+    }
   };
+
+  // 5.1-A — one-click Quotation → Sales Order via ERPNext's own
+  // make_sales_order mapper (the desk button's exact path). The wizard
+  // redirect stays as the advanced path.
+  const [creatingSO, setCreatingSO] = useState(false);
+  const handleCreateSO = useCallback(async () => {
+    setCreatingSO(true);
+    try {
+      const res = await fetch(
+        `/api/sales/quotation/${encodeURIComponent(name)}/order`,
+        { method: "POST" },
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        throw new Error(
+          data?.details || data?.error || "Failed to create Sales Order",
+        );
+      }
+      const soName: string | null = data?.data?.sales_order ?? null;
+      toast.success(`Sales Order ${soName} created`, {
+        description: `Generated from ${name} via ERPNext's own mapper.`,
+        action: soName
+          ? {
+              label: "View",
+              onClick: () =>
+                router.push(`/sales/sales-order/${encodeURIComponent(soName)}`),
+            }
+          : undefined,
+      });
+      await refetch();
+      queryClient.invalidateQueries({ queryKey: ["Sales Order"], refetchType: "all" });
+      queryClient.invalidateQueries({ queryKey: ["flows", "resolve"] });
+    } catch (err) {
+      showError(resolveFrappeError(err, { doctype: "Quotation" }));
+    } finally {
+      setCreatingSO(false);
+    }
+  }, [name, refetch, queryClient, router, showError]);
 
   const handleDelete = () => {
     setConfirmDelete(false);
@@ -163,22 +230,35 @@ export default function QuotationDetailPage() {
       isPrimary: true,
       isLoading: updateMutation.isPending,
     },
+    // 5.1-A — primary one-click conversion with done-state: once a linked SO
+    // exists, the action becomes secondary and the wizard link stays as the
+    // advanced path.
     isSubmitted && {
-      label: soName ? "View Sales Order" : "Create Sales Order",
+      label: soName ? "Sales Order created" : "Create Sales Order",
       description: soName
-        ? `Sales Order ${soName} linked`
-        : "Generate a Sales Order from this quotation",
+        ? `✓ Linked Sales Order ${soName} — wizard for an additional order`
+        : "Generate a Sales Order from this quotation in one click",
       onClick: () => {
         if (soName) {
           router.push(`/sales/sales-order/${encodeURIComponent(soName)}`);
         } else {
-          router.push(`/sales/sales-order/new?quotation=${encodeURIComponent(name)}`);
+          void handleCreateSO();
         }
       },
       isPrimary: !soName,
-      disabled: !isModuleBuilt("Sales Order"),
+      isLoading: creatingSO,
+      disabled: soName ? false : !isModuleBuilt("Sales Order"),
       disabledReason: "Sales Order module not available",
     },
+    isSubmitted &&
+      soName && {
+        label: "Create another Sales Order (advanced)",
+        description: "Wizard with manual review — partial or modified order",
+        onClick: () =>
+          router.push(`/sales/sales-order/new?quotation=${encodeURIComponent(name)}`),
+        disabled: !isModuleBuilt("Sales Order"),
+        disabledReason: "Sales Order module not available",
+      },
   ].filter(Boolean) as React.ComponentProps<typeof WhatsNext>["actions"];
 
   return (
@@ -227,8 +307,14 @@ export default function QuotationDetailPage() {
                 size="sm"
                 className="text-destructive hover:text-destructive"
                 onClick={() => setConfirmCancel(true)}
+                disabled={cancelling || updateMutation.isPending}
               >
-                <Ban className="mr-1.5 h-4 w-4" /> Cancel
+                {cancelling ? (
+                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                ) : (
+                  <Ban className="mr-1.5 h-4 w-4" />
+                )}
+                Cancel
               </Button>
             )}
           </div>
@@ -343,10 +429,11 @@ export default function QuotationDetailPage() {
         open={confirmCancel}
         onOpenChange={setConfirmCancel}
         title="Cancel this Quotation?"
-        description="Cancelling reverses the quotation. This cannot be undone."
-        confirmText="Cancel"
+        description="Cancelling also cancels linked Sales Orders automatically (cascade), then reverses the quotation. This cannot be undone."
+        confirmText="Cancel Quotation"
         variant="destructive"
         onConfirm={handleCancel}
+        loading={cancelling}
       />
       <ConfirmDialog
         open={confirmDelete}
