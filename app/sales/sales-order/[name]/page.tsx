@@ -414,9 +414,11 @@ export default function SalesOrderDetailPage() {
 
   const handleSubmit = () => {
     setConfirmSubmit(false);
-    // Target status per the Sales Order status machine (Workflow P3 §2.1).
+    // 5.1-A — write ONLY docstatus; ERPNext derives "To Deliver and Bill"
+    // on submit (2Y-R5 lesson: hand-writing derived statuses invites
+    // mismatches — same fix as the PO submit).
     updateMutation.mutate(
-      { name, data: { docstatus: 1, status: "To Deliver and Bill" } },
+      { name, data: { docstatus: 1 } },
       {
         onSuccess: () => toast.success(`Sales Order ${name} submitted`),
         onError: (err) =>
