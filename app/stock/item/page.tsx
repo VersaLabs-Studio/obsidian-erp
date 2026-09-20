@@ -6,8 +6,10 @@
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
-import { Plus, Box, MoreVertical, Pencil, Trash2, Eye, Package, ListFilter, ArrowUpDown } from "lucide-react";
+import { toast } from "sonner";
+import { Plus, Box, MoreVertical, Pencil, Trash2, Eye, Package, ListFilter, ArrowUpDown, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -150,6 +152,10 @@ export default function ItemsListPage() {
   const [typeFilter, setTypeFilter] = useState<"all" | "stock" | "service">("all");
   const [sortField, setSortField] = useState<"modified" | "item_code" | "item_name" | "creation">("modified");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  // 5.2-A — Quick Item: the 1-field fast path (route fills code/group/UOM).
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [quickName, setQuickName] = useState("");
+  const [quickBusy, setQuickBusy] = useState(false);
 
   // Item Group options for the filter dropdown.
   const { data: itemGroups } = useFrappeOptions("Item Group", {
@@ -221,6 +227,45 @@ export default function ItemsListPage() {
     await deleteMutation.mutateAsync(deleteTarget.name);
   };
 
+  // 5.2-A — name-only create via the Quick Item route; idempotent server-side
+  // (an existing code comes back reused, never duplicated).
+  const handleQuickCreate = async () => {
+    const name = quickName.trim();
+    if (!name || quickBusy) return;
+    setQuickBusy(true);
+    try {
+      const res = await fetch("/api/stock/item/quick", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ item_name: name }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.details || data?.error || "Quick item failed");
+      }
+      const createdName = String(data?.data?.name ?? name);
+      toast.success(
+        data?.data?.created === false
+          ? `Item ${createdName} already existed — reused.`
+          : (data?.message as string) ?? `Item ${createdName} created.`,
+        {
+          action: {
+            label: "Open",
+            onClick: () =>
+              router.push(`/stock/item/${encodeURIComponent(createdName)}`),
+          },
+        },
+      );
+      setQuickOpen(false);
+      setQuickName("");
+      refetch();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Quick item failed");
+    } finally {
+      setQuickBusy(false);
+    }
+  };
+
   if (isLoading) return <LoadingState type="cards" count={6} />;
 
   if (error) {
@@ -258,6 +303,35 @@ export default function ItemsListPage() {
         loading={deleteMutation.isPending}
       />
 
+      {/* 5.2-A — Quick Item dialog: one field, sensible server-side defaults. */}
+      <ConfirmDialog
+        open={quickOpen}
+        onOpenChange={setQuickOpen}
+        title="Quick Item"
+        description="Name only — the code copies the name, the group defaults to Products (Services become non-stock), and the unit defaults to Nos. Everything stays editable on the item."
+        confirmText="Create Item"
+        onConfirm={handleQuickCreate}
+        loading={quickBusy}
+      >
+        <div className="space-y-1.5 pt-1">
+          <label htmlFor="quick-item-name" className="text-sm font-medium">
+            Item name
+          </label>
+          <Input
+            id="quick-item-name"
+            value={quickName}
+            onChange={(e) => setQuickName(e.target.value)}
+            placeholder="e.g. Gloss Card 350gsm"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void handleQuickCreate();
+              }
+            }}
+          />
+        </div>
+      </ConfirmDialog>
+
       <PageHeader
         title="Inventory"
         subtitle={`${totalCount} item${totalCount !== 1 ? "s" : ""}`}
@@ -266,12 +340,22 @@ export default function ItemsListPage() {
         onSearchChange={setSearch}
         searchPlaceholder="Search items..."
         actions={
-          <Button
-            className="rounded-full px-6 shadow-lg shadow-primary/20"
-            onClick={() => router.push("/stock/item/new")}
-          >
-            <Plus className="h-4 w-4 mr-2" /> New Item
-          </Button>
+          <div className="flex items-center gap-2">
+            {/* 5.2-A — 1-field fast path next to the full wizard. */}
+            <Button
+              variant="outline"
+              className="rounded-full px-5"
+              onClick={() => setQuickOpen(true)}
+            >
+              <Zap className="h-4 w-4 mr-2" /> Quick Item
+            </Button>
+            <Button
+              className="rounded-full px-6 shadow-lg shadow-primary/20"
+              onClick={() => router.push("/stock/item/new")}
+            >
+              <Plus className="h-4 w-4 mr-2" /> New Item
+            </Button>
+          </div>
         }
       />
 

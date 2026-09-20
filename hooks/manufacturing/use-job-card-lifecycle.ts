@@ -30,6 +30,8 @@ export interface JobCardLifecycle {
   handleAssignEmployee: (jc: JobCard, employeeId: string, employeeName?: string) => void;
   handleStartJob: (jc: JobCard) => void;
   handleCompleteJob: (jc: JobCard) => void;
+  /** 5.2-A — one-click Start + Complete (the SME auto-run fast path). */
+  handleRunJob: (jc: JobCard) => void;
   handleAssignWorkstation: (jc: JobCard, workstation: string) => void;
 }
 
@@ -63,7 +65,7 @@ export function useJobCardLifecycle(
   // REST PUT (db.updateDoc) silently failed to update the existing child row,
   // so Complete returned 200 but the status stayed "Work In Progress".
   const lifecycle = useCallback(
-    async (jc: JobCard, action: "start" | "complete") => {
+    async (jc: JobCard, action: "start" | "complete" | "run") => {
       setActiveJc(jc.name);
       try {
         const res = await fetch(
@@ -169,6 +171,13 @@ export function useJobCardLifecycle(
     [lifecycle],
   );
 
+  // 5.2-A — Run Job: one action does Start + Complete server-side (and the
+  // route still auto-completes the parent WO when this was the last open JC).
+  const handleRunJob = useCallback(
+    (jc: JobCard) => lifecycle(jc, "run"),
+    [lifecycle],
+  );
+
   const handleAssignWorkstation = useCallback(
     (jc: JobCard, workstation: string) => {
       if (!workstation) return;
@@ -197,6 +206,7 @@ export function useJobCardLifecycle(
     handleAssignEmployee,
     handleStartJob,
     handleCompleteJob,
+    handleRunJob,
     handleAssignWorkstation,
   };
 }

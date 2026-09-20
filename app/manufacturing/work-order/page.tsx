@@ -68,6 +68,7 @@ function WorkOrderCard({
   onStart,
   onFinish,
   isSelected,
+  actionBusy,
 }: {
   wo: WorkOrder;
   index: number;
@@ -78,6 +79,8 @@ function WorkOrderCard({
   onStart?: (wo: WorkOrder) => void;
   onFinish?: (wo: WorkOrder) => void;
   isSelected?: boolean;
+  /** "start" | "finish" while this card's inline action is in flight. */
+  actionBusy?: "start" | "finish" | null;
 }) {
   const displayStatus = getDisplayStatus(wo);
   const isDraft = wo.docstatus === 0;
@@ -257,35 +260,51 @@ function WorkOrderCard({
           </DropdownMenu>
         </div>
 
-        {/* E3 — Card footer: Start / Finish quick actions */}
-        <div className="pt-3 border-t border-border/30 flex items-center gap-2 px-5 pb-4">
-          {displayStatus === "Not Started" && onStart && (
-            <Button
-              size="sm"
-              variant="outline"
-              className={cn("h-8 text-xs flex-1", "border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10 dark:text-emerald-400")}
-              onClick={(e) => {
-                e.stopPropagation();
-                onStart(wo);
-              }}
-            >
-              <Play className="mr-1.5 h-3 w-3" /> Start
-            </Button>
-          )}
-          {displayStatus === "In Process" && onFinish && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 text-xs flex-1 border-blue-500/30 text-blue-600 hover:bg-blue-500/10 dark:text-blue-400"
-              onClick={(e) => {
-                e.stopPropagation();
-                onFinish(wo);
-              }}
-            >
-              <CheckCircle2 className="mr-1.5 h-3 w-3" /> Finish
-            </Button>
-          )}
-        </div>
+        {/* E3/5.2-A — Card footer: Start / Finish quick actions. Finish runs
+            the same canonical /complete route as the detail page (ERPNext
+            Manufacture SE → WO "Completed"), not a redirect nag. */}
+        {(displayStatus === "Not Started" || displayStatus === "In Process") && (
+          <div className="pt-3 border-t border-border/30 flex items-center gap-2 px-5 pb-4">
+            {displayStatus === "Not Started" && onStart && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!!actionBusy}
+                className={cn("h-8 text-xs flex-1", "border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10 dark:text-emerald-400")}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onStart(wo);
+                }}
+              >
+                {actionBusy === "start" ? (
+                  <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                ) : (
+                  <Play className="mr-1.5 h-3 w-3" />
+                )}
+                {actionBusy === "start" ? "Starting…" : "Start"}
+              </Button>
+            )}
+            {displayStatus === "In Process" && onFinish && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!!actionBusy}
+                className="h-8 text-xs flex-1 border-blue-500/30 text-blue-600 hover:bg-blue-500/10 dark:text-blue-400"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onFinish(wo);
+                }}
+              >
+                {actionBusy === "finish" ? (
+                  <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="mr-1.5 h-3 w-3" />
+                )}
+                {actionBusy === "finish" ? "Finishing…" : "Finish"}
+              </Button>
+            )}
+          </div>
+        )}
       </div>
     </motion.div>
   );
@@ -298,8 +317,12 @@ export default function WorkOrderListPage() {
   const [deleteTarget, setDeleteTarget] = useState<WorkOrder | null>(null);
   // E3 — Bulk selection for Start Selected / Finish Selected operations.
   const [selectedWos, setSelectedWos] = useState<Set<string>>(new Set());
-  const [bulkStarting, setBulkStarting] = useState(false);
-  const [bulkFinishing, setBulkFinishing] = useState(false);
+  const [bulkRunning, setBulkRunning] = useState<"start" | "finish" | null>(null);
+  // 5.2-A — the WO currently running an inline card action (button spinner).
+  const [woAction, setWoAction] = useState<{
+    name: string;
+    action: "start" | "finish";
+  } | null>(null);
 
   const {
     data: workOrders,
@@ -379,63 +402,98 @@ export default function WorkOrderListPage() {
     });
   }, []);
 
-  // E3 — Bulk start all selected WOs via /start API
-  const handleBulkStartAll = useCallback(async () => {
-    setBulkStarting(true);
-    try {
-      const items = workOrders?.filter((w) => selectedWos.has(w.name)) ?? [];
-      for (const wo of items) {
-        try {
-          const res = await fetch(`/api/manufacturing/work-order/${encodeURIComponent(wo.name)}/start`, {
-            method: "POST",
-          });
-          if (res.ok) {
-            toast.success(`Work Order ${wo.name} started`, {
-              description: "Production is now in progress.",
-            });
-          } else {
-            const data = await res.json().catch(() => ({}));
-            toast.error(`Failed to start ${wo.name}: ${data?.error || "Unknown error"}`);
-          }
-        } catch {
-          toast.error(`Failed to start ${wo.name}`);
+  // 5.2-A — one action runner for BOTH the inline card buttons and the bulk
+  // bar. Start = /start (canonical material-transfer SE); Finish = /complete
+  // (ERPNext Manufacture SE → WO Completed) — the same routes the detail page
+  // and SO cockpit use, so the list page never "redirects to do it properly".
+  const runWoAction = useCallback(
+    async (wo: WorkOrder, action: "start" | "finish") => {
+      const endpoint = action === "start" ? "start" : "complete";
+      setWoAction({ name: wo.name, action });
+      try {
+        const res = await fetch(
+          `/api/manufacturing/work-order/${encodeURIComponent(wo.name)}/${endpoint}`,
+          { method: "POST" },
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.success) {
+          throw new Error(
+            data?.details || data?.error || `Failed to ${action} ${wo.name}`,
+          );
         }
+        toast.success(
+          action === "start"
+            ? `Work Order ${wo.name} started`
+            : `Work Order ${wo.name} finished`,
+          {
+            description:
+              action === "start"
+                ? "Production is now in progress."
+                : (data?.message as string | undefined) ??
+                  "Finished goods declared.",
+          },
+        );
+        return true;
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : `Failed to ${action} ${wo.name}`);
+        return false;
+      } finally {
+        setWoAction(null);
+        refetch();
       }
-      setSelectedWos(new Set());
-      refetch();
-    } finally {
-      setBulkStarting(false);
-    }
-  }, [selectedWos, workOrders, refetch]);
+    },
+    [refetch],
+  );
 
-  // E3 — Inline start on individual card
-  const handleCardStart = useCallback((wo: WorkOrder) => {
-    setSelectedWos((prev) => {
-      const next = new Set(prev);
-      next.add(wo.name);
-      return next;
-    });
-    handleToggleSelect(wo);
-    // Trigger direct start
-    fetch(`/api/manufacturing/work-order/${encodeURIComponent(wo.name)}/start`, {
-      method: "POST",
-    })
-      .then((res) => {
-        if (res.ok) {
-          toast.success(`Work Order ${wo.name} started`);
-        } else {
-          toast.error(`Failed to start ${wo.name}`);
+  // E3/5.2-A — inline Start / Finish on a card. Direct fire only — the
+  // previous add-then-toggle selection dance just flickered the checkbox.
+  const handleCardStart = useCallback(
+    (wo: WorkOrder) => {
+      void runWoAction(wo, "start");
+    },
+    [runWoAction],
+  );
+
+  const handleCardFinish = useCallback(
+    (wo: WorkOrder) => {
+      void runWoAction(wo, "finish");
+    },
+    [runWoAction],
+  );
+
+  // 5.2-A — bulk run: skips ineligible rows by live status (start needs
+  // "Not Started", finish needs "In Process"), fires sequentially.
+  const handleBulkRun = useCallback(
+    async (action: "start" | "finish") => {
+      const wanted = action === "start" ? "Not Started" : "In Process";
+      const items =
+        workOrders?.filter(
+          (w) => selectedWos.has(w.name) && getDisplayStatus(w) === wanted,
+        ) ?? [];
+      if (items.length === 0) {
+        toast.info(
+          `Nothing in the selection is "${wanted}" — those work orders are skipped.`,
+        );
+        return;
+      }
+      setBulkRunning(action);
+      try {
+        let ok = 0;
+        for (const wo of items) {
+          if (await runWoAction(wo, action)) ok += 1;
         }
-      })
-      .catch(() => toast.error(`Failed to start ${wo.name}`))
-      .finally(() => refetch());
-  }, [refetch]);
-
-  const handleCardFinish = useCallback((wo: WorkOrder) => {
-    toast.info(`Mark ${wo.name} as finished from its detail page`, {
-      duration: 3000,
-    });
-  }, []);
+        if (items.length > 1) {
+          toast.success(
+            `${ok}/${items.length} selected work order${items.length === 1 ? "" : "s"} ${action === "start" ? "started" : "finished"}`,
+          );
+        }
+        setSelectedWos(new Set());
+      } finally {
+        setBulkRunning(null);
+      }
+    },
+    [workOrders, selectedWos, runWoAction],
+  );
 
   if (isLoading) return <LoadingState type="cards" count={6} />;
 
@@ -540,6 +598,7 @@ export default function WorkOrderListPage() {
               onStart={handleCardStart}
               onFinish={handleCardFinish}
               isSelected={selectedWos.has(wo.name)}
+              actionBusy={woAction?.name === wo.name ? woAction.action : null}
             />
           ))}
         </div>
@@ -556,7 +615,7 @@ export default function WorkOrderListPage() {
         loading={deleteMutation.isPending}
       />
 
-      {/* E3 — Bulk Start Selected bar */}
+      {/* E3/5.2-A — Bulk Start / Finish Selected bar */}
       {selectedWos.size > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -570,11 +629,11 @@ export default function WorkOrderListPage() {
             <Button
               size="sm"
               variant="default"
-              onClick={handleBulkStartAll}
-              disabled={bulkStarting}
+              onClick={() => handleBulkRun("start")}
+              disabled={bulkRunning !== null}
               className="rounded-full shadow-lg shadow-emerald-500/20"
             >
-              {bulkStarting ? (
+              {bulkRunning === "start" ? (
                 <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
               ) : (
                 <Play className="mr-1.5 h-4 w-4" />
@@ -583,9 +642,24 @@ export default function WorkOrderListPage() {
             </Button>
             <Button
               size="sm"
+              variant="default"
+              onClick={() => handleBulkRun("finish")}
+              disabled={bulkRunning !== null}
+              className="rounded-full shadow-lg shadow-blue-500/20"
+            >
+              {bulkRunning === "finish" ? (
+                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="mr-1.5 h-4 w-4" />
+              )}
+              Finish Selected
+            </Button>
+            <Button
+              size="sm"
               variant="ghost"
               onClick={() => setSelectedWos(new Set())}
               className="rounded-full"
+              disabled={bulkRunning !== null}
             >
               Clear
             </Button>

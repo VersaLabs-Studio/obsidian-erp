@@ -185,13 +185,17 @@ describe("E3: WO card + bulk operations", () => {
     expect(content).toContain('onStart && ');
   });
 
-  it("Bulk selection state + Start Selected bar exist", async () => {
+  it("Bulk selection state + Start/Finish Selected bar exist", async () => {
     const content = await read(
       "app/manufacturing/work-order/page.tsx",
     );
     expect(content).toContain("selectedWos");
-    expect(content).toContain("handleBulkStartAll");
+    // 5.2-A — handleBulkStartAll generalized to handleBulkRun("start" |
+    // "finish"); the card Finish is now a real /complete call, not a stub.
+    expect(content).toContain("handleBulkRun");
     expect(content).toContain("Start Selected");
+    expect(content).toContain("Finish Selected");
+    expect(content).toContain("/complete");
   });
 });
 

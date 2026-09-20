@@ -16,6 +16,7 @@ import {
   Wrench,
   Loader2,
   Users,
+  Zap,
 } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -94,12 +95,15 @@ export default function JobCardDetailPage() {
   const status = jc?.status || "Open";
   const [busy, setBusy] = useState(false);
 
-  // 2X P0-B — Job Card lifecycle (Start/Complete) now goes through the server
+  // 2X P0-B — Job Card lifecycle (Start/Complete/Run) goes through the server
   // lifecycle route which fetches the FRESH doc and closes the open time_log
   // by name via frappe.client.set. The previous REST PUT silently failed to
   // update the existing child row, so Complete returned 200 but the status
   // stayed "Work In Progress".
-  const handleStart = async () => {
+  // 5.2-A — `run` = one-click Start + Complete (the SME auto-run fast path);
+  // the route also fires the 2Y-R6 WO auto-completion when this was the last
+  // open JC, so the same toast surfacing applies.
+  const runLifecycle = async (action: "start" | "complete" | "run") => {
     if (!jc) return;
     setBusy(true);
     try {
@@ -108,39 +112,22 @@ export default function JobCardDetailPage() {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "start" }),
+          body: JSON.stringify({ action }),
         },
       );
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data?.success) {
-        throw new Error(data?.details || data?.error || "Failed to start Job Card");
+        throw new Error(
+          data?.details || data?.error || `Failed to ${action} Job Card`,
+        );
       }
-      toast.success("Job Card started");
-      await refetch();
-    } catch (err) {
-      showError(resolveFrappeError(err, { doctype: "Job Card" }));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleComplete = async () => {
-    if (!jc) return;
-    setBusy(true);
-    try {
-      const res = await fetch(
-        `/api/manufacturing/job-card/${encodeURIComponent(name)}/lifecycle`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "complete" }),
-        },
+      toast.success(
+        action === "start"
+          ? "Job Card started"
+          : action === "run"
+            ? "Job Card run — started and completed"
+            : "Job Card completed",
       );
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data?.success) {
-        throw new Error(data?.details || data?.error || "Failed to complete Job Card");
-      }
-      toast.success("Job Card completed");
       // 2Y-R6 — surface the WO auto-completion triggered by this route.
       if (data?.workOrderAutoCompleted?.workOrder) {
         toast.success(
@@ -159,6 +146,10 @@ export default function JobCardDetailPage() {
       setBusy(false);
     }
   };
+
+  const handleStart = () => runLifecycle("start");
+  const handleComplete = () => runLifecycle("complete");
+  const handleRun = () => runLifecycle("run");
 
   // Employee assignment — 2Y-R6b: goes through the server lifecycle route
   // (action "assign_employee"), NOT the generic REST PUT. On SUBMITTED Job
@@ -226,11 +217,19 @@ export default function JobCardDetailPage() {
   }, [jc]);
 
   const whatsNext = [
+    // 5.2-A — Run Job is the primary Open action; Start remains for operators
+    // who want the Work In Progress interval recorded.
+    status === "Open" && {
+      label: "Run Job",
+      description: "One click — starts and completes this job card",
+      onClick: handleRun,
+      isPrimary: true,
+      isLoading: busy,
+    },
     status === "Open" && {
       label: "Start Job",
-      description: "Begin working on this job card",
+      description: "Track this job as in-progress instead of running it",
       onClick: handleStart,
-      isPrimary: true,
       isLoading: busy,
     },
     status === "Work In Progress" && {
@@ -320,14 +319,27 @@ export default function JobCardDetailPage() {
               <PrintMenu doctype="Job Card" doc={jc as unknown as Record<string, unknown>} />
               <PrintShare doctype="Job Card" name={name} showPrint={false} />
               {status === "Open" && (
-                <Button size="sm" onClick={handleStart} disabled={busy}>
-                  {busy ? (
-                    <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                  ) : (
+                <>
+                  {/* 5.2-A — Run Job: one click, started AND completed (the
+                      SME fast path). Start stays for real time-tracking. */}
+                  <Button size="sm" onClick={handleRun} disabled={busy}>
+                    {busy ? (
+                      <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Zap className="mr-1.5 h-4 w-4" />
+                    )}
+                    Run Job
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={handleStart}
+                    disabled={busy}
+                  >
                     <Play className="mr-1.5 h-4 w-4" />
-                  )}
-                  Start Job
-                </Button>
+                    Start
+                  </Button>
+                </>
               )}
               {status === "Work In Progress" && (
                 <Button size="sm" onClick={handleComplete} disabled={busy}>
