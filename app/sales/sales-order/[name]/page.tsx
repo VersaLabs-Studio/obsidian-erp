@@ -26,6 +26,7 @@ import {
   UserPlus,
   ExternalLink,
   Play,
+  Zap,
   Square,
   Cog,
   Truck,
@@ -1479,20 +1480,38 @@ function JobCardCard({
           />
           <StatusBadge status={jcStatus} />
           {isOpen && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="border-amber-500/50 text-amber-600 hover:bg-amber-500/10 dark:text-amber-400"
-              onClick={() => lifecycle.handleStartJob(doc)}
-              disabled={busy || isLoading}
-            >
-              {busy ? (
-                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Play className="mr-1.5 h-3.5 w-3.5" />
-              )}
-              Start
-            </Button>
+            <>
+              {/* 5.2-A — Run: one click = Start + Complete (the SME auto-run
+                  fast path, parent-WO auto-completion included). Start stays
+                  for real time-tracking. */}
+              <Button
+                size="sm"
+                className="text-emerald-600 hover:bg-emerald-500/10 dark:text-emerald-400"
+                onClick={() => lifecycle.handleRunJob(doc)}
+                disabled={busy || isLoading}
+              >
+                {busy ? (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Zap className="mr-1.5 h-3.5 w-3.5" />
+                )}
+                Run
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-amber-500/50 text-amber-600 hover:bg-amber-500/10 dark:text-amber-400"
+                onClick={() => lifecycle.handleStartJob(doc)}
+                disabled={busy || isLoading}
+              >
+                {busy ? (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Play className="mr-1.5 h-3.5 w-3.5" />
+                )}
+                Start
+              </Button>
+            </>
           )}
           {isInProgress && (
             <Button

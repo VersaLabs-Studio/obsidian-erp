@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -29,6 +29,7 @@ import { PrintShare } from "@/components/ui/print-share";
 import { PrintMenu } from "@/components/print/PrintMenu";
 import { useFlowChain } from "@/hooks/flows/use-flow-chain";
 import { useFrappeDoc, useFrappeUpdate } from "@/hooks/generic";
+import { usePaymentDefaults } from "@/lib/accounting/payment-defaults";
 import type { SalesInvoice } from "@/types/doctype-types";
 import { cn } from "@/lib/utils";
 
@@ -57,7 +58,10 @@ export default function SalesInvoiceDetailPage() {
   // 2Z D3 — one-click "Mark as Paid" (server-side get_payment_entry + submit).
   const [confirmPaid, setConfirmPaid] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [payMode, setPayMode] = useState("Cash");
+  // 5.2-A — D1 wiring: the mode pre-fills from the configured default
+  // (Accounting Settings → Payment Defaults), falling back to Cash server-side.
+  const { data: paymentDefaults } = usePaymentDefaults();
+  const [payMode, setPayMode] = useState("");
   const [paying, setPaying] = useState(false);
   const { resolution, showError, dismiss } = useGuidedError();
 
@@ -71,6 +75,13 @@ export default function SalesInvoiceDetailPage() {
   // run a per-page back-link query (the old `useFrappeList("Payment Entry
   // Reference", …)` hit the routeless child doctype → 404 and was unused).
   const { result: chain, isLoading: chainLoading } = useFlowChain("Sales Invoice", name);
+
+  // 5.2-A — hydrate the Mark-as-Paid mode from the configured default once.
+  useEffect(() => {
+    if (paymentDefaults?.defaultModeOfPayment) {
+      setPayMode((prev) => prev || paymentDefaults.defaultModeOfPayment);
+    }
+  }, [paymentDefaults]);
 
   const updateMutation = useFrappeUpdate<SalesInvoice>("Sales Invoice", {
     showToast: false,
@@ -119,7 +130,7 @@ export default function SalesInvoiceDetailPage() {
       const data = await res.json().catch(() => ({}));
       if (res.ok && data?.success) {
         toast.success(`Invoice paid — Payment Entry ${data?.data?.name ?? ""}`, {
-          description: data?.message ?? `Recorded via ${payMode}.`,
+          description: data?.message ?? `Recorded via ${payMode || "Cash"}.`,
         });
         setConfirmPaid(false);
         refetch();
@@ -453,8 +464,8 @@ export default function SalesInvoiceDetailPage() {
           <FrappeSelect
             doctype="Mode of Payment"
             value={payMode}
-            onChange={(val) => setPayMode(val || "Cash")}
-            placeholder="Cash"
+            onChange={(val) => setPayMode(val || "")}
+            placeholder={paymentDefaults?.defaultModeOfPayment || "Cash"}
           />
         </div>
       </ConfirmDialog>

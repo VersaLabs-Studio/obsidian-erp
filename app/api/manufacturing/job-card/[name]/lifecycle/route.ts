@@ -1,5 +1,5 @@
 // app/api/manufacturing/job-card/[name]/lifecycle/route.ts
-// Obsidian ERP v4.2.1 — Job Card lifecycle (Start / Complete) server route.
+// Obsidian ERP v4.2.1 — Job Card lifecycle (Start / Complete / Run) server route.
 //
 // WHY this route exists: the client previously drove Start/Complete through the
 // generic REST PUT (`db.updateDoc` → `PUT /api/resource/Job Card/{name}`).
@@ -18,6 +18,11 @@
 // preserving its real `name`, saves via REST PUT, then SUBMITS the Job Card
 // (docstatus 0 → 1) so the controller derives "Completed". One fix point
 // serves both the SO cockpit and the JC detail page.
+//
+// 5.2-A — `run` (Job Card auto-run): the SME one-click. Start (if not yet
+// started) + Complete in a single action, then the same 2Y-R6 auto-complete
+// of the parent WO. The operator assigns an employee, clicks Run Job once,
+// and the whole shop-floor lifecycle for that JC is done.
 
 import { NextRequest, NextResponse } from "next/server";
 import { frappeClient } from "@/lib/frappe-client";
@@ -28,7 +33,7 @@ import type { JobCard } from "@/types/doctype-types";
 export const dynamic = "force-dynamic";
 
 interface LifecycleBody {
-  action: "start" | "complete" | "assign_employee";
+  action: "start" | "complete" | "run" | "assign_employee";
   /** Required for action = "assign_employee". */
   employeeId?: string;
   /** Optional display name captured from the selector label. */
@@ -58,7 +63,7 @@ export async function POST(
   const { name } = await params;
   const docName = decodeURIComponent(name);
 
-  let action: "start" | "complete" | "assign_employee";
+  let action: "start" | "complete" | "run" | "assign_employee";
   let employeeId: string | undefined;
   let employeeName: string | undefined;
   try {
@@ -72,13 +77,18 @@ export async function POST(
         success: false,
         error: "Bad Request",
         details:
-          "Body must be JSON with { action: 'start' | 'complete' | 'assign_employee', employeeId? }.",
+          "Body must be JSON with { action: 'start' | 'complete' | 'run' | 'assign_employee', employeeId? }.",
       },
       { status: 400 },
     );
   }
 
-  if (action !== "start" && action !== "complete" && action !== "assign_employee") {
+  if (
+    action !== "start" &&
+    action !== "complete" &&
+    action !== "run" &&
+    action !== "assign_employee"
+  ) {
     return NextResponse.json(
       {
         success: false,
@@ -116,6 +126,14 @@ export async function POST(
     }
 
     const now = new Date().toISOString().slice(0, 19).replace("T", " ");
+    // 5.2-A — the closed log appended directly for a run/complete-on-unstarted
+    // JC spans one minute: some ERPNext builds reject a Job Card Time Log
+    // whose from_time equals to_time, and the live E2E for `run` hits this
+    // path on every Open JC.
+    const startedAt = new Date(Date.now() - 60_000)
+      .toISOString()
+      .slice(0, 19)
+      .replace("T", " ");
     const forQty = Number(doc.for_quantity ?? 0);
     const existingLogs = Array.isArray(doc.time_logs) ? doc.time_logs : [];
 
@@ -175,18 +193,33 @@ export async function POST(
     let time_logs: unknown[];
     let total_completed_qty: number | undefined;
 
+    // 5.2-A — `run` is the SME one-click Start + Complete. It shares Start's
+    // employee precondition, then falls into the Complete path below (which
+    // already self-heals the "no open log" case by appending a closed time
+    // log and submitting). Idempotent when already submitted.
+    if (action === "run" && Number(doc.docstatus ?? 0) === 1) {
+      return NextResponse.json({
+        success: true,
+        data: doc,
+        message: `Job Card ${docName} is already completed.`,
+      });
+    }
+    if ((action === "start" || action === "run") && !assignedEmployeeId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "ValidationError",
+          details:
+            action === "run"
+              ? "Assign an employee before running this Job Card."
+              : "Assign an employee before starting this Job Card.",
+          statusCode: 412,
+        },
+        { status: 412 },
+      );
+    }
+
     if (action === "start") {
-      if (!assignedEmployeeId) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "ValidationError",
-            details: "Assign an employee before starting this Job Card.",
-            statusCode: 412,
-          },
-          { status: 412 },
-        );
-      }
       // Append a new OPEN time_log (no to_time). set_status() derives the
       // status to "Work In Progress" automatically.
       time_logs = [
@@ -228,7 +261,7 @@ export async function POST(
           })),
           {
             employee: assignedEmployeeId,
-            from_time: now,
+            from_time: startedAt,
             to_time: now,
             completed_qty: forQty,
           },
@@ -255,7 +288,7 @@ export async function POST(
     // submit via frappe.client.submit (db.submit normalizes errors). If it is
     // already submitted (docstatus 1), it is already completed — no-op.
     result = saved as unknown as JobCard;
-    if (action === "complete") {
+    if (action === "complete" || action === "run") {
       const docstatus = Number(saved.docstatus ?? 0);
       if (docstatus === 0) {
         await client.db.submit(saved);
@@ -277,7 +310,7 @@ export async function POST(
     } | null = null;
     let autoCompleteError: string | null = null;
 
-    if (action === "complete" && doc.work_order) {
+    if ((action === "complete" || action === "run") && doc.work_order) {
       try {
         const woName = String(doc.work_order);
         const wo = await client.db.getDoc<{
@@ -317,7 +350,13 @@ export async function POST(
       ...(workOrderAutoCompleted ? { workOrderAutoCompleted } : {}),
       ...(autoCompleteError ? { autoCompleteError } : {}),
       message:
-        `Job Card ${docName} ${action === "start" ? "started" : "completed"}` +
+        `Job Card ${docName} ${
+          action === "start"
+            ? "started"
+            : action === "run"
+              ? "run — started and completed"
+              : "completed"
+        }` +
         (workOrderAutoCompleted
           ? ` — Work Order ${workOrderAutoCompleted.workOrder} auto-completed`
           : ""),
