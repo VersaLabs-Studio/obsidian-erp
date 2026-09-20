@@ -25,6 +25,7 @@ import {
   DollarSign,
   ClipboardList,
   ArrowRightLeft,
+  Zap,
 } from "lucide-react";
 
 import { PageHeader, LoadingState, ConfirmDialog, EmptyState } from "@/components/smart";
@@ -429,6 +430,20 @@ export default function WorkOrderDetailPage() {
           )}&work_order=${encodeURIComponent(name)}`,
         ),
     },
+    // 5.2-A — SE→DN chaining, minimal honest scope: once the WO is Completed
+    // the finished goods ARE in stock, and the canonical one-click
+    // Deliver & Invoice lives on the SO cockpit — so the WO hands off there
+    // (for its linked order) instead of duplicating the chain path here.
+    status === "Completed" &&
+      wo.sales_order && {
+        label: "Deliver & Invoice",
+        description: `Finished goods are in stock — deliver against ${wo.sales_order} from the order cockpit`,
+        onClick: () =>
+          router.push(
+            `/sales/sales-order/${encodeURIComponent(String(wo.sales_order))}`,
+          ),
+        isPrimary: true,
+      },
   ].filter(Boolean) as React.ComponentProps<typeof WhatsNext>["actions"];
 
   const activityItems = [
@@ -1026,16 +1041,29 @@ function JobCardTableRow({
       </td>
       <td className="px-3 py-2.5 text-right">
         {isOpen && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 text-[10px]"
-            onClick={() => lifecycle.handleStartJob(doc)}
-            disabled={busy || isLoading}
-          >
-            {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3 mr-1" />}
-            Start
-          </Button>
+          <div className="flex items-center justify-end gap-1">
+            {/* 5.2-A — Run: one click = Start + Complete (the SME auto-run
+                fast path). Start remains for real time-tracking. */}
+            <Button
+              size="sm"
+              className="h-7 text-[10px]"
+              onClick={() => lifecycle.handleRunJob(doc)}
+              disabled={busy || isLoading}
+            >
+              {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3 mr-1" />}
+              Run
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-[10px]"
+              onClick={() => lifecycle.handleStartJob(doc)}
+              disabled={busy || isLoading}
+            >
+              {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3 mr-1" />}
+              Start
+            </Button>
+          </div>
         )}
         {isInProgress && (
           <Button

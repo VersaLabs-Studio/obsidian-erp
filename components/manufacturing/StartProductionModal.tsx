@@ -117,6 +117,8 @@ export function StartProductionModal({
   const router = useRouter();
   const { resolution, showError, dismiss } = useGuidedError();
   const [isCreating, setIsCreating] = useState(false);
+  // 5.2-A — shortfall auto-PO: one click = one submitted PO per supplier.
+  const [ordering, setOrdering] = useState(false);
   // 2P Part 2.4 — implicit-warehouse resolution. If the WO has blank
   // `source_warehouse` / `wip_warehouse`, fall back to the active
   // company's canonical Stores / WIP (via lib/settings/warehouses.ts).
@@ -302,6 +304,60 @@ export function StartProductionModal({
       );
     }
     return (json.data?.name as string) ?? "";
+  };
+
+  // 5.2-A — one-click shortfall purchase order. The route groups the short
+  // lines by each item's default supplier and submits ONE PO per supplier;
+  // items with no default supplier come back as a plain-language error
+  // pointing at the wizard (the advanced path below).
+  const shortLines = summaryLines.filter((l) => l.short);
+  const handleAutoOrder = async () => {
+    if (ordering || shortLines.length === 0) return;
+    setOrdering(true);
+    try {
+      const res = await fetch("/api/buying/purchase-order/shortfall", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          work_order: workOrderName,
+          items: shortLines.map((l) => ({
+            item_code: l.item_code,
+            qty: l.shortfall ?? 0,
+          })),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        throw new Error(
+          data?.details || data?.error || "Couldn't order the shortfall",
+        );
+      }
+      const pos: string[] = Array.isArray(data?.data?.purchase_orders)
+        ? (data.data.purchase_orders as string[])
+        : [];
+      toast.success(
+        (data?.message as string) ??
+          "Purchase order(s) created and submitted.",
+        pos[0]
+          ? {
+              action: {
+                label: "View PO",
+                onClick: () =>
+                  router.push(
+                    `/buying/purchase-order/${encodeURIComponent(pos[0])}`,
+                  ),
+              },
+            }
+          : undefined,
+      );
+      onOpenChange(false);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Couldn't order the shortfall",
+      );
+    } finally {
+      setOrdering(false);
+    }
   };
 
   const handleConfirm = async () => {
@@ -493,7 +549,10 @@ export function StartProductionModal({
             </ul>
           </div>
 
-          {/* Shortfall guidance — 2V P0-2: PO is the primary procurement action */}
+          {/* Shortfall guidance — 5.2-A: auto-PO is the primary procurement
+              action (one submitted PO per default supplier, server-side).
+              The 3-step wizard remains as the advanced path; the old Material
+              Request deep-link is gone (MR is deactivated system-wide). */}
           {hasShortfall && (
             <div className="rounded-xl border border-warning/30 bg-warning/5 p-3 text-xs">
               <p className="mb-2 flex items-center gap-1.5 font-semibold text-warning">
@@ -501,10 +560,25 @@ export function StartProductionModal({
               </p>
               <p className="mb-3 text-muted-foreground">
                 One or more required materials aren&apos;t on hand in the source
-                warehouse. Resolve the shortfall first:
+                warehouse. Order them from each item&apos;s default supplier, or
+                resolve manually:
               </p>
               <div className="flex flex-wrap gap-2">
                 <Button
+                  size="sm"
+                  className="rounded-full"
+                  onClick={handleAutoOrder}
+                  disabled={ordering || isCreating}
+                >
+                  {ordering ? (
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <ShoppingCart className="mr-1.5 h-3.5 w-3.5" />
+                  )}
+                  {ordering ? "Ordering…" : "Order Shortfall (auto)"}
+                </Button>
+                <Button
+                  variant="outline"
                   size="sm"
                   className="rounded-full"
                   onClick={() => {
@@ -518,10 +592,10 @@ export function StartProductionModal({
                     onOpenChange(false);
                   }}
                 >
-                  <ShoppingCart className="mr-1.5 h-3.5 w-3.5" /> Create Purchase Order
+                  <ClipboardList className="mr-1.5 h-3.5 w-3.5" /> PO wizard (advanced)
                 </Button>
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
                   className="rounded-full"
                   onClick={() => {
@@ -530,23 +604,6 @@ export function StartProductionModal({
                   }}
                 >
                   <ClipboardList className="mr-1.5 h-3.5 w-3.5" /> Stock Reconciliation
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="rounded-full"
-                  onClick={() => {
-                    const shortItems = summaryLines
-                      .filter((l) => l.short)
-                      .map((l) => `${l.item_code}:${l.shortfall ?? 0}`)
-                      .join(",");
-                    router.push(
-                      `/stock/material-request/new?work_order=${encodeURIComponent(workOrderName)}&shortfall=${encodeURIComponent(shortItems)}`,
-                    );
-                    onOpenChange(false);
-                  }}
-                >
-                  <Plus className="mr-1.5 h-3.5 w-3.5" /> Material Request
                 </Button>
               </div>
             </div>

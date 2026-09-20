@@ -8,6 +8,7 @@ import {
   Settings,
   ArrowUpRight,
   Coins,
+  CreditCard,
   ListOrdered,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,13 @@ const settingsItems = [
     description: "Manage multiple price lists for buying and selling.",
     icon: ListOrdered,
     href: "/accounting/settings/price-list",
+  },
+  {
+    title: "Payment Defaults",
+    description:
+      "Set the default Mode of Payment pre-filled in one-click Mark as Paid.",
+    icon: CreditCard,
+    href: "/accounting/settings/payment-defaults",
   },
 ];
 

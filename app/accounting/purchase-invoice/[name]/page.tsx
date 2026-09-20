@@ -6,7 +6,7 @@
 // Upstream: Purchase Order / Purchase Receipt. Downstream: Payment Entry.
 // OKLCH semantic tokens only. StatusBadge for status display.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -37,6 +37,7 @@ import { ActivityTimeline } from "@/components/smart/ActivityTimeline";
 import { CrossFlowActionsMenu } from "@/components/cross-flow/CrossFlowActionsMenu";
 import { useFlowChain } from "@/hooks/flows/use-flow-chain";
 import { useFrappeDoc, useFrappeUpdate } from "@/hooks/generic";
+import { usePaymentDefaults } from "@/lib/accounting/payment-defaults";
 import type { PurchaseInvoice } from "@/types/doctype-types";
 
 const ETB = new Intl.NumberFormat("en-ET", {
@@ -64,7 +65,10 @@ export default function PurchaseInvoiceDetailPage() {
   // 4.1 A1 — one-click "Mark as Paid" (vendor bill → Payment Entry, Pay).
   const [confirmPaid, setConfirmPaid] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [payMode, setPayMode] = useState("Cash");
+  // 5.2-A — D1 wiring: pre-fill the mode from the configured default
+  // (Accounting Settings → Payment Defaults); Cash only as the last resort.
+  const { data: paymentDefaults } = usePaymentDefaults();
+  const [payMode, setPayMode] = useState("");
   const [paying, setPaying] = useState(false);
   const { resolution, showError, dismiss } = useGuidedError();
   // 4.1-C2 — cache invalidation for the Mark-Paid action (2Z-R7 standard).
@@ -91,6 +95,13 @@ export default function PurchaseInvoiceDetailPage() {
   // { filters: [["reference_name", …]] })` filtered the PARENT by a CHILD
   // field → 417 "Field not permitted in query: reference_name", and was unused.
   const { result: chain, isLoading: chainLoading } = useFlowChain("Purchase Invoice", name);
+
+  // 5.2-A — hydrate the Mark-as-Paid mode from the configured default once.
+  useEffect(() => {
+    if (paymentDefaults?.defaultModeOfPayment) {
+      setPayMode((prev) => prev || paymentDefaults.defaultModeOfPayment);
+    }
+  }, [paymentDefaults]);
 
   // -- Status actions --------------------------------------------------------
   const updateMutation = useFrappeUpdate<PurchaseInvoice>(
@@ -164,7 +175,7 @@ export default function PurchaseInvoiceDetailPage() {
       });
       const data = await res.json();
       if (res.ok && data?.success) {
-        toast.success(`Payment recorded (${payMode})`, {
+        toast.success(`Payment recorded (${payMode || "Cash"})`, {
           description: data?.data?.name,
         });
         await refetch();
@@ -476,7 +487,8 @@ export default function PurchaseInvoiceDetailPage() {
           <FrappeSelect
             doctype="Mode of Payment"
             value={payMode}
-            onChange={(val) => setPayMode(val || "Cash")}
+            onChange={(val) => setPayMode(val || "")}
+            placeholder={paymentDefaults?.defaultModeOfPayment || "Cash"}
           />
         </div>
       </ConfirmDialog>
